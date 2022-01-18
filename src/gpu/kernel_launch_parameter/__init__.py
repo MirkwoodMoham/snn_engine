@@ -1,0 +1,1 @@
+from .kernel_launch_parameter import DeviceProperties
