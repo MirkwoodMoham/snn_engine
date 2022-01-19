@@ -4,7 +4,7 @@ import numpy as np
 from vispy.app import Timer
 import sys
 
-from network import SpikingNeuronNetwork, DefaultNetworkConfig
+from network import SpikingNeuronNetwork, NetworkConfig
 from ui import EngineWindow, BackendApp
 from simulation import vbodata2host
 
@@ -16,9 +16,9 @@ class EngineConfig:
     T: int = 2000  # Max simulation duration
 
     @dataclass
-    class NetworkConfig(DefaultNetworkConfig):
-        N: int = 20
-        shape: tuple = (1, 1, 1)
+    class NetworkConfig(NetworkConfig):
+        N: int = 2000
+        N_pos_shape: tuple = (1, 1, 1)
 
 
 class Engine:

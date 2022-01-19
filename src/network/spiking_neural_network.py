@@ -1,19 +1,20 @@
-# from dataclasses import dataclass
-from enum import Enum, unique
-import numba.cuda
 import numpy as np
-import pycuda.autoinit
-import pycuda.driver
-from pycuda.gl import RegisteredBuffer, RegisteredMapping
 import torch
-from typing import Optional
+from typing import Dict, Optional
 from vispy.scene import visuals
 
-from .utils import (
-    DefaultNetworkConfig,
-    ExternalMemory
+from .gpu_array import (
+    GPUArrayConfig,
+    RegisteredGPUArray
 )
-from .rendering import (
+from .network_config import (
+    NetworkConfig
+)
+from .network_structures import (
+    NeuronTypes,
+    NeuronTypeGroup
+)
+from .rendered_objects import (
     NetworkScatterPlot,
     RenderedObject,
     SelectorBox,
@@ -22,213 +23,62 @@ from .rendering import (
 
 from gpu import func2, snn_engine_gpu
 
-@unique
-class NeuronTypes(Enum):
-    INHIBITORY = 0
-    EXCITATORY = 1
 
-
-class NeuronTypeGroup:
-
-    """
-    Index-container for type-neuron-groups.
-    """
+class NetworkDataShapes:
 
     # noinspection PyPep8Naming
-    def __init__(self, ID, start_idx, end_idx, S, neuron_type, group_dct, verbose=True):
-
-        if (ID in group_dct) or ((len(group_dct) > 0) and (ID < max(group_dct))):
-            raise AssertionError
-
-        self.id = ID
-        self.type = neuron_type if isinstance(neuron_type, NeuronTypes) else NeuronTypes(neuron_type)
-        self.start_idx = start_idx  # index of the first neuron of this group
-        self.end_idx = end_idx  # index of the last neuron of this group
-        self.S = S
-
-        group_dct[ID] = self
-        NeuronTypeGroup._last_instance = self
-
-        if verbose is True:
-            print('NEW:', self)
-
-    @property
-    def size(self):
-        return self.end_idx - self.start_idx + 1
-
-    def __len__(self):
-        return self.size
-
-    def __str__(self):
-        return f'NeuronTypeGroup(id={self.id}, type={self.type.name}, [{self.start_idx}, {self.end_idx}])'
-
-    # noinspection PyPep8Naming
-    @classmethod
-    def from_count(cls, ID, nN, S, neuron_type, group_dct):
-        last_group = group_dct[max(group_dct)] if len(group_dct) > 0 else None
-        if last_group is None:
-            start_idx = 0
-            end_idx = nN - 1
-        else:
-            start_idx = last_group.end_idx + 1
-            end_idx = last_group.end_idx + nN
-        return NeuronTypeGroup(ID, start_idx, end_idx, S=S, neuron_type=neuron_type, group_dct=group_dct)
-
-
-class NetworkCPUArrays:
-    # noinspection PyPep8Naming
-    def __init__(self, config, T, n_N_states):
-        # NEURONS (inhibitory + excitatory)
-        self.N_pos = None  # initialized on the GPU
-        N = config.N
-        S = config.S
-        D = config.D
-        G = config.G
+    def __init__(self, N, S, D, G, T, n_N_states, config):
+        self.N_pos = (N, config.N_pos_n_cols)
+        self.N_rep = (N, S)
+        self.N_G = (N, config.N_G_n_cols)
 
         # Network Representation
-        self.N_rep = np.zeros((N, S), dtype=np.float32)
-        self.N_weights = np.zeros((N, S), dtype=np.float32)
-        self.N_delays = np.zeros((D + 1, N), dtype=np.int32)
-
-        self.N_fired = np.zeros(N, dtype=np.int32)
-        self.firing_times = np.zeros((15, N), dtype=np.float32)
-        self.firing_idcs = np.zeros((15, N), dtype=np.int32)
-        self.firing_counts = np.zeros(2 * T, dtype=np.int32)
+        self.N_rep = (N, S)  # float
+        self.N_weights = self.N_rep  # np.float32
+        self.N_delays = (D + 1, N)  # int
+        self.N_fired = (1, N)  # int
+        self.firing_times = (15, N)  # float
+        self.firing_idcs = self.firing_times  # dtype=np.int32
+        self.firing_counts = 2 * T  # dtype=np.int32
 
         # pt, u, v, a, b, c, d, I
-        self.N_states = np.zeros((n_N_states, N), dtype=np.float32)
-        self.N_stpd = np.zeros((N, S * 2), dtype=np.float32)
+        self.N_states = (n_N_states, N)  # dtype=np.float32
+        self.N_stpd = (N, S * 2)  # dtype=np.float32
 
         # GROUPS (location-based)
 
         # position of each location group
-        self.G_pos = np.zeros((G, 3), dtype=np.int32)
+        self.G_pos = (G, 3)  # dtype=np.int32
         # delay between groups (as a distance matrix)
-        self.G_delay_distance = np.zeros((G, G), dtype=np.int32)
         # number of groups per delays
-        self.G_delay_counts = np.zeros((G, D + 1), dtype=np.int32)
-        # [0, 1]: inhibitory count, excitatory count,
-        # [2 * D]: number of neurons per delay (post_synaptic type: inhibitory, excitatory)
-        self.G_neuron_counts = np.zeros((2 + 2 * D, G), dtype=np.int32)
-        self.G_neuron_typed_ccount = np.zeros((1, 2 * G + 1), dtype=np.int32)
+        self.G_delay_counts = (G, D + 1)  # dtype=np.int32
+        self.G_neuron_counts = (2 + 2 * D, G)  # dtype=np.int32
+        # self.G_neuron_typed_ccount = (1, 2 * G + 1)  # dtype=np.int32
 
+        syn_count_shape = (2 * (D + 1), G)
         # expected cumulative sum of synapses per source types and delay (sources types: inhibitory or excitatory)
-        self.G_exp_syn_ccount_per_src_type_and_delay = np.zeros((2 * (D + 1), G), dtype=np.int32)
+        self.G_exp_syn_ccount_per_src_type_and_delay = syn_count_shape  # dtype=np.int32
 
         # expected cumulative sum of excitatory synapses per delay and per sink type
         # (sink types: inhibitory, excitatory)
-        self.G_exp_exc_syn_ccount_per_snk_type_and_delay = np.zeros((2 * (D + 1), G), dtype=np.int32)
+        self.G_exp_exc_syn_ccount_per_snk_type_and_delay = syn_count_shape  # dtype=np.int32
 
-        self.G_conn_probs = np.zeros((2 * G, D), dtype=np.float32)
-        self.local_autapse_idcs = np.zeros((3 * D, G), dtype=np.int32)
+        self.G_conn_probs = (2 * G, D)  # dtype=np.float32
+        self.local_autapse_idcs = (3 * D, G)  # dtype=np.int32
 
-        self.G_props = np.zeros((10, G), dtype=np.int32)  # selected_p, thalamic input (on/off), ...
-
-
-class GPUArrayConfig:
-
-    def __init__(self, shape=None, strides=None, dtype=None, stream=0, device: torch.device = None):
-
-        self.shape: Optional[tuple] = shape
-        self.strides:  tuple = strides
-        self.dtype: np.dtype = dtype
-
-        self.stream: int = stream
-
-        self.device: torch.device = device
-
-    @classmethod
-    def from_cpu_array(cls, cpu_array, dev: torch.device = None, stream=0):
-        shape: tuple = cpu_array.shape
-        strides:  tuple = cpu_array.strides
-        dtype: np.dtype = cpu_array.dtype
-        return GPUArrayConfig(shape=shape, strides=strides, dtype=dtype, stream=stream, device=dev)
+        self.G_props = (config.n_group_properties, G)  # dtype=np.int32;  selected_p, thalamic input (on/off), ...
 
 
-class RegisteredGPUArray:
-
-    def __init__(self,
-                 gpu_data: ExternalMemory = None,
-                 reg: RegisteredBuffer = None,
-                 mapping: RegisteredMapping = None,
-                 ptr: int = None,
-                 config: GPUArrayConfig = None):
-
-        self.reg: RegisteredBuffer = reg
-        self.mapping: RegisteredMapping = mapping
-        self.ptr: int = ptr
-        self.conf: GPUArrayConfig = config
-
-        self.gpu_data: ExternalMemory = gpu_data
-        self.device_array = self._numba_device_array()
-        self._tensor = None
-
-    def __call__(self, *args, **kwargs):
-        return self.tensor
-
-    def _numba_device_array(self):
-        # noinspection PyUnresolvedReferences
-        return numba.cuda.cudadrv.devicearray.DeviceNDArray(
-            shape=self.conf.shape,
-            strides=self.conf.strides,
-            dtype=self.conf.dtype,
-            stream=self.conf.stream,
-            gpu_data=self.gpu_data)
-
-    def copy_to_host(self):
-        return self.device_array.copy_to_host()
-
-    @property
-    def ctype_ptr(self):
-        return self.gpu_data.device_ctypes_pointer
-
-    @property
-    def size(self):
-        # noinspection PyProtectedMember
-        return self.gpu_data._cuda_memsize_
-
-    # noinspection PyArgumentList
-    @classmethod
-    def from_vbo(cls, vbo, config: GPUArrayConfig = None, cpu_array: np.array = None):
-
-        if config is not None:
-            assert cpu_array is None
-        else:
-            config = GPUArrayConfig.from_cpu_array(cpu_array)
-
-        reg = RegisteredBuffer(vbo)
-        mapping: RegisteredMapping = reg.map(None)
-        ptr, size = mapping.device_ptr_and_size()
-        gpu_data = ExternalMemory(ptr, size)
-        mapping.unmap()
-
-        return RegisteredGPUArray(gpu_data=gpu_data, reg=reg, mapping=mapping, ptr=ptr, config=config)
-
-    def map(self):
-        self.reg.map(None)
-
-    def unmap(self):
-        # noinspection PyArgumentList
-        self.mapping.unmap()
-
-    @property
-    def tensor(self):
-        self.map()
-        if self._tensor is None:
-            self._tensor = torch.as_tensor(self.device_array, device=self.conf.device)
-        return self._tensor
-
-
+# noinspection PyPep8Naming
 class NetworkGPUArrays:
 
-    # noinspection PyPep8Naming,SpellCheckingInspection
     def __init__(self,
-                 config: DefaultNetworkConfig,
+                 config: NetworkConfig,
                  pos_vbo: int,
                  type_group_dct: dict,
                  device: int,
-                 G_shape: tuple,
-                 ):
+                 n_N_states: int,
+                 T: int):
 
         self.device = torch.device(device)
         # nbcuda.select_device(device)
@@ -238,46 +88,82 @@ class NetworkGPUArrays:
         D = config.D
         G = config.G
 
-        nf32 = dict(dtype=np.float32, device=self.device)
-        ti32 = dict(dtype=torch.int32, device=self.device)
+        sh = NetworkDataShapes(N=N, S=S, D=D, G=G, T=T, n_N_states=n_N_states, config=config)
 
-        scatter_plot_layout = GPUArrayConfig(shape=(N, 13), strides=(13 * 4, 4), **nf32)
-        self.N_pos = RegisteredGPUArray.from_vbo(pos_vbo, config=scatter_plot_layout)
+        def t_i_zeros(shape):
+            return torch.zeros(shape, dtype=torch.int32, device=self.device)
+
+        self.nf32 = dict(dtype=np.float32, device=self.device)
+
+        self.N_pos = self._set_N_pos(shape=sh.N_pos, vbo=pos_vbo, type_group_dct=type_group_dct)
+        self.N_G = t_i_zeros(sh.N_G)
+        t_neurons_ids = torch.arange(self.N_G.shape[0], device='cuda')  # Neuron Id
+        for g in type_group_dct.values():
+            self.N_G[g.start_idx:g.end_idx + 1, config.N_G_neuron_type_col] = g.type.value  # Set Neuron Type
+
+        # rows[0, 1]: inhibitory count, excitatory count,
+        # rows[2 * D]: number of neurons per delay (post_synaptic type: inhibitory, excitatory)
+        self.G_neuron_counts = t_i_zeros(sh.G_neuron_counts)
+        snn_engine_gpu.set_G_info(N, G,
+                                  N_pos_dp=self.N_pos.data_ptr(),
+                                  N_pos_shape=config.N_pos_shape,
+                                  N_G_dp=self.N_G.data_ptr(),
+                                  N_G_n_cols=config.N_G_n_cols,
+                                  N_G_neuron_type_col=config.N_G_neuron_type_col,
+                                  N_G_group_id_col=config.N_G_group_id_col,
+                                  G_shape=config.G_shape,
+                                  G_neuron_counts_dp=self.G_neuron_counts.data_ptr())
+
+        self.validate_N_G(config=config)
+        print(self.N_G)
+        self.G_neuron_typed_ccount = self.G_neuron_counts[:2, :].ravel().cumsum(0)
+
+        self.G_pos = self._set_G_pos(G=G, shape=sh.G_pos, N_pos_shape=config.N_pos_shape, G_shape=config.G_shape)
+        G_pos_distance = torch.cdist(self.G_pos, self.G_pos)
+        self.G_delay_distance = ((D - 1) * G_pos_distance / G_pos_distance.max()).round()
+        print()
+
+    def _set_N_pos(self, shape, vbo, type_group_dct):
+
+        N_pos = RegisteredGPUArray.from_vbo(
+            vbo, config=GPUArrayConfig(shape=shape, strides=(shape[1] * 4, 4), **self.nf32))
+
         for g in type_group_dct.values():
             if g.type.value == NeuronTypes.INHIBITORY.value:
                 orange = torch.Tensor([1, .5, .2])
-                self.N_pos.tensor[g.start_idx:g.end_idx + 1, 7:10] = orange  # Inhibitory Neurons -> Orange
+                N_pos.tensor[g.start_idx:g.end_idx + 1, 7:10] = orange  # Inhibitory Neurons -> Orange
+        return N_pos
 
-        self.N_G = torch.zeros([N, 3], **ti32)
-        self.N_G[:, 0] = torch.arange(self.N_G.shape[0])  # Neuron Id
-        for g in type_group_dct.values():
-            self.N_G[g.start_idx:g.end_idx + 1, 1] = g.type.value  # Neuron Type
+    def _set_G_pos(self, G, shape, N_pos_shape, G_shape):
+        groups = torch.arange(G, device=self.device)
+        z = (groups / (G_shape[1] * G_shape[2])).floor()
+        r = groups - z * (G_shape[1] * G_shape[2])
+        y = (r / G_shape[1]).floor()
+        x = r - y * G_shape[1]
 
-        self.G_neuron_counts = torch.zeros([2 + 2 * D, G], **ti32)
+        gpos = torch.zeros(shape, dtype=torch.float32, device=self.device)
 
-        ngp = self.N_G.data_ptr()
-        npp = self.N_pos.ptr
+        gpos[:, 0] = x * (N_pos_shape[0] / G_shape[0])
+        gpos[:, 1] = y * (N_pos_shape[1] / G_shape[1])
+        gpos[:, 2] = z * (N_pos_shape[2] / G_shape[2])
 
-        print(ngp)
-        print(npp)
-        print('\n')
-        snn_engine_gpu.init_pos_gpu(N, G, npp, ngp, G_shape)
-        print('\n')
-        print(self.N_G)
+        return gpos
 
-        print()
-        # self.N_G = torch.zeros((2, N), device=f'gpu:{self.device}', dtype=np.float32)
-        # self.
-        # print(config.pos)
-        # cpu_arrays.N_pos = pos.copy_to_host()
-        # print(cpu_arrays.N_pos)
-        # print(self.N_pos)
+
+    def validate_N_G(self, config: NetworkConfig):
+        cond0 = (self.N_G[:-1, config.N_G_neuron_type_col]
+                 .masked_select(self.N_G[:, config.N_G_neuron_type_col].diff() < 0).size(dim=0) > 0)
+        cond1 = (self.N_G[:-1, config.N_G_group_id_col]
+                 .masked_select(self.N_G[:, config.N_G_group_id_col].diff() < 0).size(dim=0) != 1)
+        if cond0 or cond1:
+            print(self.N_G)
+            raise AssertionError
 
 
 class SpikingNeuronNetwork:
 
     # noinspection PyPep8Naming
-    def __init__(self, config: DefaultNetworkConfig = DefaultNetworkConfig(), T: int = 2000):
+    def __init__(self, config: NetworkConfig = NetworkConfig(), T: int = 2000):
 
         RenderedObject._grid_unit_shape = config.grid_unit_shape
 
@@ -290,26 +176,39 @@ class SpikingNeuronNetwork:
         self.n_N_states = 8
 
         self.config = config
-        self._CPU = None
+
+        self.type_group_dct: Dict[int, NeuronTypeGroup] = {}
+        n_inhN = int(.2 * self.N)
+        self.add_type_group(ID=0, count=n_inhN, neuron_type=NeuronTypes.INHIBITORY)
+        self.add_type_group(ID=1, count=self.N - n_inhN, neuron_type=NeuronTypes.EXCITATORY)
+        self.sort_pos_by_type()
+        print('\n', self.config.pos[self.type_group_dct[0].start_idx:self.type_group_dct[0].end_idx+1], '\n')
+        print(self.config.pos[self.type_group_dct[1].start_idx:self.type_group_dct[1].end_idx+1], '\n')
         self._scatter_plot = NetworkScatterPlot(self.config)
-        print(self.config.pos)
+
         self.GPU: Optional[NetworkGPUArrays] = None
 
         self._outer_grid = None
         self._selector_box = None
         print()
-        self.type_group_dct = {}
-        n_inhN = int(.2 * self.N)
-        NeuronTypeGroup.from_count(0, n_inhN, self.S, NeuronTypes.INHIBITORY, group_dct=self.type_group_dct)
-        NeuronTypeGroup.from_count(1, self.N - n_inhN, self.S, NeuronTypes.EXCITATORY, group_dct=self.type_group_dct)
+
+
         print()
 
     # noinspection PyPep8Naming
+    # @property
+    # def CPU(self):
+    #     if not self._CPU:
+    #         self._CPU = NetworkCPUArrays(self.config, T=self.T, n_N_states=self.n_N_states)
+    #     return self._CPU
+
     @property
-    def CPU(self):
-        if not self._CPU:
-            self._CPU = NetworkCPUArrays(self.config, T=self.T, n_N_states=self.n_N_states)
-        return self._CPU
+    def type_groups(self):
+        return self.type_group_dct.values()
+
+    # noinspection PyPep8Naming
+    def add_type_group(self, ID, count, neuron_type):
+        NeuronTypeGroup.from_count(ID, count, self.S, neuron_type, self.type_group_dct)
 
     @property
     def scatter_plot(self) -> NetworkScatterPlot:
@@ -318,7 +217,7 @@ class SpikingNeuronNetwork:
     @property
     def outer_grid(self) -> visuals.Box:
         if self._outer_grid is None:
-            self._outer_grid: visuals.Box = default_box(shape=self.config.shape,
+            self._outer_grid: visuals.Box = default_box(shape=self.config.N_pos_shape,
                                                         scale=[.99, .99, .99],
                                                         segments=self.config.G_shape)
             # self._outer_grid.set_gl_state('translucent', blend=True, depth_test=True)
@@ -339,6 +238,20 @@ class SpikingNeuronNetwork:
             config=self.config,
             pos_vbo=self._scatter_plot.vbo,
             type_group_dct=self.type_group_dct,
-            G_shape=self.config.G_shape,
-            device=device
+            device=device,
+            n_N_states=self.n_N_states,
+            T=self.T
         )
+
+    def sort_pos_by_type(self):
+        """
+        Sort neuron positions w.r.t. location-based groups and
+        neuron types
+        """
+        for g in self.type_group_dct.values():
+            pr = np.floor(self.config.pos[g.start_idx: g.end_idx + 1] * self.config.G_shape)
+            p0 = pr[:, 0].argsort(kind='stable')
+            p1 = pr[p0][:, 1].argsort(kind='stable')
+            self.config.pos[g.start_idx: g.end_idx + 1] = (
+                self.config.pos[g.start_idx: g.end_idx + 1]
+                [p0][p1][pr[p0][p1][:, 2].argsort(kind='stable')])
