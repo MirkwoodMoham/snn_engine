@@ -1,7 +1,7 @@
 import ctypes
 from numba import cuda as nbcuda
 import numpy as np
-from gpu import snn_engine_gpu
+from gpu import snn_construction_gpu
 from pycuda import autoinit, gl as pycudagl
 
 
@@ -25,15 +25,16 @@ def vbodata2host(v):
     map3: pycudagl.RegisteredMapping = reg3.map(None)
     ptr, size = map3.device_ptr_and_size()
     map3.unmap()
-    # p = snn_engine_gpu.CudaGLResource()
+    # p = snn_construction_gpu.CudaGLResource()
     source_ptr = ExternalMemory(ptr, size)
     nbcuda.select_device(0)
     print(v)
-    snn_engine_gpu.pyadd(3, ptr, ptr)
-    device_array = nbcuda.cudadrv.devicearray.DeviceNDArray(shape=(10, 13), strides=(13 * 4, 4), dtype=np.float32,
-                                                            stream=0, gpu_data=source_ptr)
-    host_array = device_array.copy_to_host()
-    print(host_array)
-    print('done')
+    raise NotImplementedError
+    # snn_construction_gpu.pyadd(3, ptr, ptr)
+    # device_array = nbcuda.cudadrv.devicearray.DeviceNDArray(shape=(10, 13), strides=(13 * 4, 4), dtype=np.float32,
+    #                                                         stream=0, gpu_data=source_ptr)
+    # host_array = device_array.copy_to_host()
+    # print(host_array)
+    # print('done')
 
 

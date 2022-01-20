@@ -17,7 +17,7 @@ class EngineConfig:
 
     @dataclass
     class NetworkConfig(NetworkConfig):
-        N: int = 2000
+        N: int = 20
         N_pos_shape: tuple = (1, 1, 1)
 
 
