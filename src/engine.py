@@ -14,10 +14,11 @@ class EngineConfig:
     device: int = 0
 
     T: int = 2000  # Max simulation duration
+    max_batch_size_mb: int = 3000
 
     @dataclass
     class NetworkConfig(NetworkConfig):
-        N: int = 20
+        N: int = 4 * 10 ** 1
         N_pos_shape: tuple = (1, 1, 1)
 
 
@@ -28,7 +29,11 @@ class Engine:
         numba.cuda.select_device(EngineConfig.device)
 
         self.app = BackendApp()
-        self.network = SpikingNeuronNetwork(EngineConfig.NetworkConfig(), T=EngineConfig.T)
+        self.network = SpikingNeuronNetwork(
+            config=EngineConfig.NetworkConfig(),
+            max_batch_size_mb=EngineConfig.max_batch_size_mb,
+            T=EngineConfig.T,
+        )
 
         self.window = EngineWindow(name="SNN Engine",
                                    app=self.app.vs,

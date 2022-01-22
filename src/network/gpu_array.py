@@ -7,6 +7,55 @@ import torch
 from typing import Optional
 
 
+def shape_size(shape, unit=None):
+    if not unit:
+        return np.array(shape).cumprod()[-1]
+    elif isinstance(unit, int):
+        return shape_size(shape) / unit
+    elif unit == 'mb':
+        return shape_size(shape, pow(10, 6))
+
+
+def reshape_wrt_size(shape, max_size_mb, n_bytes=4):
+
+    if ((len(shape) != 2)
+            or (not isinstance(shape[0], int))
+            or (not isinstance(shape[1], int))):
+        raise TypeError
+
+    max_size = np.ceil((max_size_mb * pow(10, 6)) / n_bytes)
+    shape_size_ = shape_size(shape)
+
+    if shape_size_ > max_size:
+        max_square_length = np.sqrt(max_size)
+        new_shape = np.array([max_square_length, max_square_length])
+
+        for i in range(len(shape)):
+            if shape[i] < new_shape[i]:
+                new_shape[i] = shape[i]
+                if i < (len(shape) - 1):
+                    new_shape[i + 1] += (new_shape[i + 1] - new_shape[i])
+
+        sqrt_new_shape = tuple(np.sqrt(new_shape))
+
+        for i in range(len(shape)):
+            while ((((shape[i] % (new_shape[i] - sqrt_new_shape[i])) - (shape[i] % new_shape[i])) > 0)
+                   and ((shape[i] % new_shape[i]) > 0)):
+                """
+                Goal: find a better x such that batch sizes become closer to each other.
+                As long a reducing x by sqrt(x) does not result in int(old_x/x) increasing, reduce x by sqrt(x). 
+                """
+                new_shape[i] -= sqrt_new_shape[i]
+
+        new_shape_size = np.array(new_shape).cumprod()[-1]
+
+        if not new_shape_size < max_size:
+            raise ValueError
+
+        return tuple(new_shape)
+    return shape
+
+
 class ExternalMemory(object):
     """
     Provide an externally managed memory.

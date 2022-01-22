@@ -21,7 +21,8 @@ namespace py = pybind11;
 void fill_N_G_group_id_and_G_neuron_count_per_type_python(
     const int N, 
     const int G, 
-    long N_pos_dp,
+    const long N_pos_dp,
+    const py::tuple& N_pos_shape,
     long N_G_dp,
     const py::tuple& G_shape,
     long G_neuron_counts_dp,
@@ -30,7 +31,7 @@ void fill_N_G_group_id_and_G_neuron_count_per_type_python(
 	const int N_G_neuron_type_col,
 	const int N_G_group_id_col
 ){
-    float* N_pos = reinterpret_cast<float*> (N_pos_dp);
+    const float* N_pos = reinterpret_cast<float*> (N_pos_dp);
 	int* N_G = reinterpret_cast<int*> (N_G_dp);
 	int* G_neuron_counts = reinterpret_cast<int*> (G_neuron_counts_dp);
 
@@ -38,6 +39,7 @@ void fill_N_G_group_id_and_G_neuron_count_per_type_python(
         N, 
         G, 
         N_pos, 
+        N_pos_shape[0].cast<int>(), N_pos_shape[1].cast<int>(), N_pos_shape[2].cast<int>(),
         N_G, 
         G_neuron_counts,
         G_shape[0].cast<int>(), G_shape[1].cast<int>(), G_shape[2].cast<int>(),
@@ -49,29 +51,90 @@ void fill_N_G_group_id_and_G_neuron_count_per_type_python(
 }
 
 
-void fill_G_neuron_count_per_delay_and_G_synapse_count_per_delay_python(
+void fill_G_neuron_count_per_delay_python(
 	const int S,
-	const int G,
 	const int D,
+	const int G,
 	const long G_delay_distance_dp,
-	long G_conn_probs_dp,
-	long G_neuron_counts_dp,
-    long G_synapse_count_per_delay_dp
+	long G_neuron_counts_dp
 ){
     
     const int* G_delay_distance = reinterpret_cast<int*> (G_delay_distance_dp);
-	float* G_conn_probs = reinterpret_cast<float*> (G_conn_probs_dp);
 	int* G_neuron_counts = reinterpret_cast<int*> (G_neuron_counts_dp);
-	int* G_synapse_count_per_delay = reinterpret_cast<int*> (G_synapse_count_per_delay_dp);
 
-    fill_G_neuron_count_per_delay_and_G_synapse_count_per_delay(
+    fill_G_neuron_count_per_delay(
         S,
-        G,
         D,
+        G,
         G_delay_distance,
-        G_conn_probs,
+        G_neuron_counts
+    );
+}
+
+
+
+void fill_G_exp_ccsyn_per_src_type_and_delay_python(
+	const int S,
+	const int D,
+	const int G,
+    const long G_neuron_counts_dp,
+    long G_conn_probs_dp,
+	long G_exp_ccsyn_per_src_type_and_delay_dp
+){
+    
+	const int* G_neuron_counts = reinterpret_cast<int*> (G_neuron_counts_dp);
+	float* G_conn_probs = reinterpret_cast<float*> (G_conn_probs_dp);
+	int* G_exp_ccsyn_per_src_type_and_delay = reinterpret_cast<int*> (G_exp_ccsyn_per_src_type_and_delay_dp);
+
+    fill_G_exp_ccsyn_per_src_type_and_delay(
+        S,
+        D,
+        G,
         G_neuron_counts,
-        G_synapse_count_per_delay
+        G_conn_probs,
+        G_exp_ccsyn_per_src_type_and_delay
+    );
+}
+
+void fill_N_rep_python(
+	const int N,
+	const int S,
+	const int D,
+	const int G,
+	const long N_G_dp,
+	const long cc_src_dp,
+	const long cc_snk_dp,
+	const long G_rep_dp,
+	const long G_neuron_counts_dp,
+	const long G_delay_counts_dp,
+	long autapse_indices_dp,
+	long relative_autapse_indices_dp,
+	long N_rep_dp,
+	bool verbose = 0
+)
+{
+    const int* N_G = reinterpret_cast<int*> (N_G_dp);
+    const int* cc_src = reinterpret_cast<int*> (cc_src_dp);
+    const int* cc_snk = reinterpret_cast<int*> (cc_snk_dp);
+    const int* G_rep = reinterpret_cast<int*> (G_rep_dp);
+    const int* G_neuron_counts = reinterpret_cast<int*> (G_neuron_counts_dp);
+    const int* G_delay_counts = reinterpret_cast<int*> (G_delay_counts_dp);
+    int* autapse_indices = reinterpret_cast<int*> (autapse_indices_dp);
+    int* relative_autapse_indices = reinterpret_cast<int*> (relative_autapse_indices_dp);
+    int* N_rep = reinterpret_cast<int*> (N_rep_dp);
+
+    fill_N_rep(
+        N, 
+        S, 
+        D, 
+        G,
+        N_G,
+        cc_src, cc_snk,
+        G_rep, G_neuron_counts, G_delay_counts,
+        autapse_indices, 
+        relative_autapse_indices,
+        N_rep,
+        verbose
     );
 }
 
@@ -85,6 +148,7 @@ PYBIND11_MODULE(snn_construction_gpu, m)
           py::arg("N"),
           py::arg("G"),
           py::arg("N_pos"),
+          py::arg("N_pos_shape"),
           py::arg("N_G"),
           py::arg("G_shape"),
           py::arg("G_neuron_counts"),
@@ -94,16 +158,42 @@ PYBIND11_MODULE(snn_construction_gpu, m)
           py::arg("N_G_group_id_col") = 1
     );
     
-    m.def("fill_G_neuron_count_per_delay_and_G_synapse_count_per_delay_python", 
-          &fill_G_neuron_count_per_delay_and_G_synapse_count_per_delay_python, 
+    m.def("fill_G_neuron_count_per_delay", 
+          &fill_G_neuron_count_per_delay_python, 
           py::arg("S"),
-          py::arg("G"),
           py::arg("D"),
+          py::arg("G"),
           py::arg("G_delay_distance"),
-          py::arg("G_conn_probs"),
-          py::arg("G_neuron_counts"),
-          py::arg("G_synapse_count_per_delay") 
+          py::arg("G_neuron_counts")
     );
+
+    m.def("fill_G_exp_ccsyn_per_src_type_and_delay", 
+          &fill_G_exp_ccsyn_per_src_type_and_delay_python, 
+          py::arg("S"),
+          py::arg("D"),
+          py::arg("G"),
+          py::arg("G_neuron_counts"),
+          py::arg("G_conn_probs"),
+          py::arg("G_exp_ccsyn_per_src_type_and_delay")
+    );
+
+    m.def("fill_N_rep", 
+          &fill_N_rep_python, 
+          py::arg("N"),
+          py::arg("S"),
+          py::arg("D"),
+          py::arg("G"),
+          py::arg("N_G_dp"),
+          py::arg("cc_src_dp"),
+          py::arg("cc_snk_dp"),
+          py::arg("G_rep_dp"),
+          py::arg("G_neuron_counts_dp"),
+          py::arg("G_delay_counts_dp"),
+          py::arg("autapse_indices_dp"),
+          py::arg("relative_autapse_indices_dp"),
+          py::arg("N_rep_dp"),
+          py::arg("verbose")
+);
 
     // m.def("pyadd", &pyadd, "A function which adds two numbers");
     // m.def("pyadd_occupancy", &pyadd_occupancy);

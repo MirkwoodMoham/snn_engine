@@ -7,7 +7,8 @@
 void fill_N_G_group_id_and_G_neuron_count_per_type(
     int N, 
     int G, 
-    float* N_pos,
+    const float* N_pos,
+    int N_pos_shape_x, int N_pos_shape_y, int N_pos_shape_z,
     int* N_G,
     int* G_neuron_counts,
     int G_shape_x, int G_shape_y, int G_shape_z,
@@ -18,12 +19,49 @@ void fill_N_G_group_id_and_G_neuron_count_per_type(
 );
 
 
-void fill_G_neuron_count_per_delay_and_G_synapse_count_per_delay(
-	const int S,
-	const int G,
-	const int D,
+void fill_G_neuron_count_per_delay(
+	int S,
+	int D,
+	int G,
 	const int* G_delay_distance,
+	int* G_neuron_counts
+);
+
+
+void fill_G_exp_ccsyn_per_src_type_and_delay(
+	int S,
+	int D,
+	int G,
+	const int* G_neuron_counts,
 	float* G_conn_probs,
-	int* G_neuron_counts,
-	int* G_synapse_count_per_delay
+    int* G_exp_ccsyn_per_src_type_and_delay,
+	bool verbose = 0
+);
+
+
+void fill_N_rep(
+    int N,
+    int S,
+    int D,
+    int G,
+    const float* G_conn_probs,
+    const int* G_exp_ccsyn_per_src_type_and_delay,
+	bool verbose = 0
+);
+
+void fill_N_rep(
+	int N,
+	int S,
+	int D,
+	int G,
+	const int* N_G,
+	const int* cc_src,
+	const int* cc_snk,
+	const int* G_rep,
+	const int* G_neuron_counts,
+	const int* G_delay_counts,
+	int* autapse_indices,
+	int* relative_autapse_indices,
+	int* N_rep,
+	bool verbose
 );

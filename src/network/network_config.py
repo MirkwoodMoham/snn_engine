@@ -42,9 +42,9 @@ class NetworkConfig:
         if self.S is None:
             self.S = int(min(1000, max(np.sqrt(self.N), 2)))
         if self.D is None:
-            self.D = int(max(np.log10(self.N) * (1 + np.sqrt(np.log10(self.N))), 2))
+            self.D = min(int(max(np.log10(self.N) * (1 + np.sqrt(np.log10(self.N))), 2)), 20)
 
-        assert self.N >= 20
+        # assert self.N >= 20
         assert isinstance(self.N, int)
         assert self.S <= 1000
         assert isinstance(self.S, int)
@@ -60,12 +60,14 @@ class NetworkConfig:
         assert self.N_pos_n_cols == 13  # enforced by the vispy scatterplot memory layout
 
         if self.pos is None:
-            self.pos = (np.random.rand(self.N, 3) * np.array(self.N_pos_shape)).astype(np.float32)
-
+            self.pos = (np.random.rand(self.N, 3).astype(np.float32) * np.array(self.N_pos_shape, dtype=np.float32))
+            self.pos[self.pos == max(self.N_pos_shape)] = self.pos[self.pos == max(self.N_pos_shape)] * 0.999999
         # noinspection PyPep8Naming
         G_shape_list = []
         for s in self.N_pos_shape:
-            G_shape_list.append(int(int(max(self.D / np.sqrt(3), 2)) * (s / max(self.N_pos_shape))))
+            f = max(self.N_pos_shape) / min(self.N_pos_shape)
+            G_shape_list.append(
+                int(int(max(self.D / (np.sqrt(3) * f), 2)) * (s / min(self.N_pos_shape))))
 
         self.G_shape = tuple(G_shape_list)
         self.G = self.G_shape[0] * self.G_shape[1] * self.G_shape[2]
@@ -75,7 +77,9 @@ class NetworkConfig:
         assert all([isinstance(s, int)
                     and (s / min_g_shape == int(s / min_g_shape)) for s in self.G_shape])
 
-        self.grid_pos = np.floor(self.pos * min_g_shape).astype(int)
+        self.grid_pos = (np.floor((self.pos
+                                   / np.array(self.N_pos_shape, dtype=np.float32))
+                                  * np.array(min_g_shape, dtype=np.float32)).astype(int))
         self.grid_unit_shape = (self.N_pos_shape[0] / self.G_shape[0],
                                 self.N_pos_shape[1] / self.G_shape[1],
                                 self.N_pos_shape[2] / self.G_shape[2])
