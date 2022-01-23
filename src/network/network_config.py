@@ -28,7 +28,10 @@ class NetworkConfig:
     n_group_properties: int = 10
 
     def __str__(self):
-        m0 = f'NetworkConfig:\n\tN={self.N}, \n\tS={self.S}, \n\tD={self.D}, \n\tG={self.G},'
+        m0 = f'\n  +-----------------+' \
+             f'\n  |  NetworkConfig  |' \
+             f'\n  +-----------------+' \
+             f'\n\tN={self.N}, \n\tS={self.S}, \n\tD={self.D}, \n\tG={self.G},'
         m1 = f'\n\tN_pos_shape={self.N_pos_shape},'
         m2 = f'\n\tG_shape={self.G_shape}\n'
         return m0 + m1 + m2
@@ -45,6 +48,7 @@ class NetworkConfig:
             self.D = min(int(max(np.log10(self.N) * (1 + np.sqrt(np.log10(self.N))), 2)), 20)
 
         # assert self.N >= 20
+        assert self.N <= 2 * 10 ** 6
         assert isinstance(self.N, int)
         assert self.S <= 1000
         assert isinstance(self.S, int)

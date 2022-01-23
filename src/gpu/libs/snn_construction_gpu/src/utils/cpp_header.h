@@ -1,9 +1,13 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <memory>
+#include <random>
 #include <string>
 #include <sstream>
+#include <vector>
 
 typedef unsigned int uint;
 

@@ -590,7 +590,423 @@ void fill_G_exp_ccsyn_per_src_type_and_delay(
 	);
 	
 	cudaDeviceSynchronize();
-	printf("\n");
+	printf("\n\n");
+}
+
+
+__device__ int relative_typed_delay_rep_index(
+	const int N_autapse_idx,
+	const int G_rep_idx0,
+	const int G_rep_idx1,
+	const int g_N_count,
+	const int* G_rep,
+	const int n_groups,
+	const int* cc_snk,
+	bool verbose
+
+)
+{
+	if (g_N_count == 0)
+	{
+		return -1;
+	}
+
+	int G_rep_idx = G_rep_idx0;
+	int g = G_rep[G_rep_idx];
+	int Ng_start = cc_snk[g];
+	const int Ng_last = cc_snk[G_rep[G_rep_idx1] +1];
+
+	
+	if ((N_autapse_idx < Ng_start) || (N_autapse_idx >= Ng_last))
+	{
+		return -1;
+		if (verbose)
+		{
+			printf(
+			"(search, not in range) g=(%d), n=%d, G_rep[%d: %d], Ng_start=%d, Ng_last=%d\n", 
+			g, N_autapse_idx, G_rep_idx0, G_rep_idx1, Ng_start, Ng_last);
+		}
+	}
+
+	int result = N_autapse_idx;
+	result -= Ng_start;
+	int Ng_next = cc_snk[g + 1];
+
+	if (verbose)
+	{
+		printf("(search) g=(%d), n=%d, Ng_start=%d, Ng_next=%d\n", g, N_autapse_idx, Ng_start, Ng_next);
+	}
+	//if (bprint)
+	//{
+	//	printf("\n  search (%d) g_start_col %d, n_g_search %d, g=%d",
+	//		N_autapse_idx, g_search_start_col, n_g_search, g );
+	//	printf("\n  (%d)  [%d], src_loc %d, g = %d [%d, %d]... %d]",
+	//		N_autapse_idx, result, src_loc, g, start_col_next_group, end_col_next_group, last_col);
+	//}
+	
+	bool found = (N_autapse_idx >= Ng_start) && (N_autapse_idx < Ng_next);
+
+	int Ng_prev = Ng_next;
+	
+	while ((!found) && (G_rep_idx < G_rep_idx1))
+	{
+		G_rep_idx++;
+		
+		g = G_rep[G_rep_idx];
+		Ng_start = cc_snk[g];
+		Ng_next = cc_snk[g + 1];
+
+		result -= (Ng_start - Ng_prev);
+
+		found = (N_autapse_idx >= Ng_start) && (N_autapse_idx < Ng_next);
+		if (verbose)
+		{
+			printf("(search, found=%d) g=(%d), n=%d, Ng_start=%d, Ng_next=%d\n", found, g, N_autapse_idx, Ng_start, Ng_next);
+		}
+	}
+	return result * found + (-1) * (!found);
+}
+
+
+__global__ void fill_relative_autapse_indices_(
+	const int D,
+	const int G,
+	const int* cc_src,
+	const int* cc_snk,
+	const int* G_rep,
+	const int* G_delay_counts,
+	int* G_autapse_indices,
+	int* G_relative_autapse_indices,
+	bool verbose = 0,
+	int print_group = 1
+)
+{
+	const int g = blockIdx.x * blockDim.x + threadIdx.x;  // NOLINT(bugprone-narrowing-conversions, cppcoreguidelines-narrowing-conversions)
+	
+	if (g < G)
+	{
+		
+		const int N_autapse_idx = cc_src[g];
+		const int g_N_count = cc_src[g + 1] - N_autapse_idx;
+	
+		for (int d=0; d < D; d++)
+		{
+			const int g_rep_col0 = G_delay_counts[g * (D + 1) + d];
+			const int g_rep_col1 = G_delay_counts[g * (D + 1) + d+1]-1;
+			const int G_rep_idx0 = g * G + g_rep_col0;
+			const int G_rep_idx1 = g * G + g_rep_col1;
+			const int n_groups = g_rep_col1 - g_rep_col0 +1;
+
+			if (verbose && (g == print_group))
+			{
+				printf("g=(%d), n=%d, d=%d, g_rep_cols=[%d, %d], idcs=[%d,%d], groups=[%d, ...,%d]\n", 
+					g, N_autapse_idx, d, 
+					g_rep_col0, g_rep_col1,
+					G_rep_idx0, G_rep_idx1,
+					G_rep[G_rep_idx0], G_rep[G_rep_idx1]);
+			}
+
+			const int relative_autapse_index = relative_typed_delay_rep_index(
+				N_autapse_idx,
+				G_rep_idx0,
+				G_rep_idx1,
+				g_N_count,
+				G_rep,
+				n_groups,
+				cc_snk,
+				verbose && (g == print_group)
+			);
+
+			G_relative_autapse_indices[g + d * G] = relative_autapse_index;
+
+			if (relative_autapse_index != -1){
+				G_autapse_indices[g + d * G] = N_autapse_idx;
+			} else {
+				G_autapse_indices[g + d * G] = -1;
+			}
+
+			if (verbose && (g == print_group))
+			{
+				printf("g=(%d), n=%d, d=%d, N=%d, rN=%d\n", 
+					g, N_autapse_idx, d, 
+					G_autapse_indices[g + d * G],
+					relative_autapse_index);
+			}
+
+			//if (bprint)
+			//{
+			//	printf("\nres: %d << %d, g = %d, d = %d\n---------\n", relative_self_index[g + d * G], self_index[g + d * G],g,d);
+			//}
+
+		}
+	}
+}
+
+__forceinline__ __device__ int random_uniform_int(curandState *local_state, const float min, const float max)
+{
+	return __float2int_rd(fminf(min + curand_uniform(local_state) * (max-min +1.f), max));
+}
+
+__global__ void k_set_locally_indexed_connections(
+	const int N,
+	const int S,
+	const int D,
+	const int G,
+	curandState* state,
+	const int* N_G,
+	const int* cc_src,
+	int* N_delays,
+	const int* cc_syn,
+	const int* G_neuron_counts,
+	const int* G_relative_autapse_indices,
+	const int gc_location0,
+	const int gc_location1,
+	const int gc_conn_shape0,
+	const int gc_conn_shape1,
+	bool b_autapses,
+	const float init_weight,
+	float* weights,
+	int* sort_keys,
+	int* network_rep
+)
+{
+	extern __shared__ int sh_delays[];
+	int* max_delay_counts = &sh_delays[(D+1) * blockDim.x];
+
+	const int n = starting_row + blockIdx.x * blockDim.x + threadIdx.x;
+	
+	if (n < starting_row + n_rows)
+	{
+		curandState local_state = state[n];
+		
+		const int src_loc = neuron_groups[N + n];
+		int syn_count_idx = threadIdx.x;
+		const int row_start_idx = n * S;
+
+		sh_delays[syn_count_idx] = 0;
+		delays[n] = 0;
+
+		for (int d=1; d<D+1; d++)
+		{
+			//int start_rep_col = synapse_count_per_delay[src_loc + (d-1) * G];
+			int end_rep_col = synapse_count_per_delay[src_loc + d * G];
+			
+			sh_delays[syn_count_idx + d* blockDim.x] = end_rep_col + starting_write_col;
+
+			max_delay_counts[syn_count_idx + (d-1)* blockDim.x] = G_neuron_counts[src_loc + (d-1) * G];
+
+			delays[n + d * N] += end_rep_col;
+		}
+
+		int delay = 0;
+		syn_count_idx = threadIdx.x;
+
+		int sort_key = row_start_idx + starting_write_col + __float2int_rn(fmaxf(0.f, (D - S) * n));
+		int delay_start_rep_col = sh_delays[syn_count_idx];
+		int delay_end_rep_col = sh_delays[syn_count_idx + blockDim.x];
+		
+
+
+		float offset_max = 0.f;
+		float offset_min = 0.f;
+
+		int min = 0;
+		int max = max_delay_counts[syn_count_idx] - 1;
+		float fmax_idx = __int2float_rn(max);
+			
+		float frange = 0.f;
+		int n_rep_cols = (delay_end_rep_col)-delay_start_rep_col;
+		if (n_rep_cols > 1)
+		{
+			frange = (fmax_idx+1.f) / __int2float_rn(n_rep_cols);
+		}
+		
+
+		//float fmin;
+		float fmax;
+
+		const float fmin_range = 2.f; // guaranties to find an alternative to autapse
+
+		
+		if ((frange> fmin_range ))
+		{
+			offset_min = 0.f;
+			fmax = frange -1.f;
+			offset_max = fmax_idx - roundf(fmax);
+		}
+		
+		//int n_range_cols = max - min;
+		
+		int self_sink;
+		if (!allow_self_connection)
+			self_sink = local_autapse_indices[src_loc + delay * G] + (n - typed_cumulative_count_src[src_loc]);
+		
+		int i = 0;
+
+		//bool bprint = (n==25) || (n==0);
+		//bool bprint = false;
+		
+		for (int write_col = starting_write_col; write_col < n_write_cols+starting_write_col; write_col++)
+		{
+			const int write_idx = row_start_idx + write_col;
+
+			while ((write_col == delay_end_rep_col) && (delay < D+1))
+			{
+				
+				syn_count_idx += blockDim.x;
+				delay_start_rep_col = sh_delays[syn_count_idx];
+				delay_end_rep_col = sh_delays[syn_count_idx + blockDim.x];
+				delay++;
+
+				n_rep_cols = delay_end_rep_col-delay_start_rep_col;
+
+				if (n_rep_cols >0)
+				{
+					offset_max = 0.f;
+					offset_min = 0.f;
+					min = 0;
+					max = max_delay_counts[syn_count_idx] - 1;
+					fmax_idx = __int2float_rn(max);
+
+					sort_key = write_idx;
+					i = 0;
+				
+					//if (delay >= D + 1)
+					//{
+					//	printf("\n Warning (k_set_locally_indexed_connections): Loop limit exceeded!");
+					//}
+					
+					frange = (fmax_idx + 1) / __int2float_rn(n_rep_cols);
+					if (frange > fmin_range)
+					{	
+						offset_min = 0.f;
+						fmax = frange-1.f;
+						offset_max = fmax_idx - roundf(fmax);
+					}
+				}
+				
+			}
+
+			//if (bprint)
+			//{
+			//	printf("\n\n start (%d, %d) [%d,%d] (d: %d) range (%f, %f) [%f] max: %f", n, write_col, delay_start_rep_col, delay_end_rep_col, delay, offset_min, fmax_idx - offset_max, frange, fmax_idx);
+			//}
+
+			int new_sink = random_uniform_int(&local_state, offset_min, fmax_idx - offset_max);
+			while ((!allow_self_connection) && (delay == 0) && (new_sink==self_sink) && (i<50))
+			{
+				new_sink = random_uniform_int(&local_state, offset_min, fmax_idx - offset_max);
+				i++;
+				if (i >= 50)
+				{
+					printf("\n (%d, %d) Warning (k_set_locally_indexed_connections, self_sink: max_count %f): Loop limit exceeded!", n, write_col, fmax_idx);
+					printf("\n (%d, %d) Warning [...,%d] (d: %d) new_sink %d, self_sink %d, idx %d", n, write_col, delay_end_rep_col, delay, new_sink, self_sink, write_idx);
+				}
+			}
+			
+			if (!(frange > fmin_range))
+			{
+				int k = 0;
+				
+				bool duplicated = true;
+				while (duplicated && (k<50))
+				{
+					if ((k==45))
+					{
+						printf("\n (%d, %d) Warning (duplicated): Loop limit exceeded!", n, write_col);
+						printf("\n (%d, %d) [%d,%d] (d: %d) new_sink %d range (%f, %f) [%f]  max: %f",
+							       n, write_col, delay_start_rep_col, delay_end_rep_col, delay, new_sink, offset_min, fmax_idx - offset_max, frange, fmax_idx);
+					}
+					duplicated = false;
+					int j = row_start_idx + delay_start_rep_col;
+					i = delay_start_rep_col;
+					while ((!duplicated) && (i < write_col))
+					{
+						duplicated = (network_rep[j] == new_sink);
+						if ((k >= 45))
+						{
+							printf("\nn = (%d, %d) (%d, %d, %d) %d <%d> %d", n, write_col, i, j, k, network_rep[j], duplicated , new_sink);
+						}
+						i++;
+						j++;
+					}
+					if (duplicated)
+					{
+						new_sink = random_uniform_int(&local_state, offset_min, fmax_idx - offset_max);
+						i = 0;
+						while ((!allow_self_connection) && (delay == 0) && (new_sink == self_sink) && (i < 50))
+						{
+							
+							new_sink = random_uniform_int(&local_state, offset_min, fmax_idx - offset_max);
+							i++;
+							if (i >= 50)
+							{
+								printf("\n (%d, %d) Warning (2) (k_set_locally_indexed_connections, self_sink: max_count %f): Loop limit exceeded!", n, write_col, fmax_idx);
+								printf("\n (%d, %d) Warning (2) [...,%d] (d: %d) new_sink %d, self_sink %d", n, write_col, delay_end_rep_col, delay, new_sink, self_sink);
+							}
+						}
+					}
+					k++;
+				}
+			}
+
+			//if (bprint)
+			//{
+			//	printf("\n end (%d, %d) [%d,%d] (d: %d) new_sink %d range (%f, %f) [%f]  max: %f ", 
+			//       n, write_col, delay_start_rep_col, delay_end_rep_col, delay, new_sink, offset_min, fmax_idx - offset_max, frange, fmax_idx);
+			//}
+
+			if (new_sink > max)
+			{
+				printf("\n Warning (%d, %d) (k_set_locally_indexed_connections): Max index exceeded! [%d,%d] (d: %d) new_sink %d range (%f, %f) [%f]  max: %f / %d",
+					n, write_col, delay_start_rep_col, delay_end_rep_col, delay, new_sink, offset_min, fmax_idx - offset_max, frange, fmax_idx, max);
+			}
+
+
+			if (frange > fmin_range)
+			{
+				offset_min = roundf(fmax) + 1.f;
+
+				fmax += frange;
+
+				offset_max = fmax_idx - roundf(fmax);
+			}
+			else
+			{
+				if (new_sink == max)
+				{
+					max--;
+					offset_max += 1.f;
+
+				}
+				if (new_sink == min)
+				{
+					min++;
+					offset_min += 1.f;
+				}
+			}
+
+			//if (limit_exceeded==true && (limit_exceeded2 == false))
+			//{
+			//	limit_exceeded2 = true;
+			//	write_col -= (delay_end_rep_col - delay_start_rep_col);
+			//	bprint = true;
+			//}
+
+
+
+			//delay_rep[write_idx] = delay;
+			//snk_type_rep[write_idx] = snk_type;
+			//network_rep5[write_idx] = self_sink * (delay == 0) - (delay != 0);
+			
+			sort_keys[write_idx] = sort_key;
+			network_rep[write_idx] = new_sink;
+			syn_info[write_idx] = init_weight;
+		
+		}
+		
+		state[n] = local_state;
+	}
 }
 
 void fill_N_rep(
@@ -598,17 +1014,62 @@ void fill_N_rep(
 	const int S,
 	const int D,
 	const int G,
+	curandState* curand_states,
+	const int n_curand_states,
 	const int* N_G,
 	const int* cc_src,
 	const int* cc_snk,
 	const int* G_rep,
 	const int* G_neuron_counts,
-	const int* G_delay_counts,
-	int* autapse_indices,
-	int* relative_autapse_indices,
+	const int* G_group_delay_counts,
+	int* G_autapse_indices,
+	int* G_relative_autapse_indices,
+	const int gc_location0,
+	const int gc_location1,
+	const int gc_conn_shape0,
+	const int gc_conn_shape1,
 	int* N_rep,
 	bool verbose
 )
 {
-	printf("\n -++++++++++++++++++++++++++++++++++++++++++++++++++++");
+	printf("\nConnecting: ((%d, %d), (%d, %d))", gc_location0, gc_location1, gc_conn_shape0, gc_conn_shape1);
+	cudaDeviceSynchronize();
+	LaunchParameters launch(G, (void *)fill_relative_autapse_indices_); 
+	fill_relative_autapse_indices_ KERNEL_ARGS2(launch.grid3, launch.block3)(
+		D,
+		G,
+		cc_src,
+		cc_snk,
+		G_rep,
+		G_group_delay_counts,
+		G_autapse_indices,
+		G_relative_autapse_indices,
+		false);
+	cudaDeviceSynchronize();
+
+	LaunchParameters l(gc_conn_shape0, (void*)k_set_locally_indexed_connections);
+	cudaDeviceSynchronize();
+	
+	k_set_locally_indexed_connections KERNEL_ARGS3(l.grid3, l.block3, l.block3.x* ((1 + 3 * D)) * sizeof(int))(
+		N,
+		S,
+		D,
+		G,
+		curand_states,
+		N_G,
+		cc_src,
+		N_delays,
+		cc_syn,
+		G_neuron_counts,
+		G_relative_autapse_indices,
+		gc_location0,
+		gc_location1,
+		gc_conn_shape0,
+		gc_conn_shape1,
+		group_conn.src_type != group_conn.snk_type
+		group_conn.initial_weight,
+		weights,
+		sort_keys,
+		N_rep
+	  );
 }

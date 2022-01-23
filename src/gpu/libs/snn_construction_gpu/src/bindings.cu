@@ -3,7 +3,6 @@
 #include <pybind11/include/pybind11/stl.h>
 
 #include <example/snn_engine_gpu.cuh>
-#include <utils/launch_parameters.cuh>
 #include <snn_construction.cuh>
 
 
@@ -96,19 +95,45 @@ void fill_G_exp_ccsyn_per_src_type_and_delay_python(
     );
 }
 
+struct CuRandStatesPointer
+{
+    std::shared_ptr<CuRandStates> ptr_;
+    
+    CuRandStatesPointer(    
+        const int n_curand_states,
+        bool verbose = true
+    ){
+        ptr_ = std::make_shared<CuRandStates>(n_curand_states, verbose);
+        //print_random_numbers2(ptr_);
+    }
+
+    int n_states(){
+        return ptr_->n_states;
+    }
+
+    std::shared_ptr<CuRandStates> ptr(){
+        return ptr_;
+    }
+};
+
+
+
 void fill_N_rep_python(
 	const int N,
 	const int S,
 	const int D,
 	const int G,
+    std::shared_ptr<CuRandStates> curand_states,
 	const long N_G_dp,
 	const long cc_src_dp,
 	const long cc_snk_dp,
 	const long G_rep_dp,
 	const long G_neuron_counts_dp,
-	const long G_delay_counts_dp,
-	long autapse_indices_dp,
-	long relative_autapse_indices_dp,
+	const long G_group_delay_counts_dp,
+	long G_autapse_indices_dp,
+	long G_relative_autapse_indices_dp,
+    const py::tuple& gc_location,
+    const py::tuple& gc_conn_shape,
 	long N_rep_dp,
 	bool verbose = 0
 )
@@ -118,9 +143,9 @@ void fill_N_rep_python(
     const int* cc_snk = reinterpret_cast<int*> (cc_snk_dp);
     const int* G_rep = reinterpret_cast<int*> (G_rep_dp);
     const int* G_neuron_counts = reinterpret_cast<int*> (G_neuron_counts_dp);
-    const int* G_delay_counts = reinterpret_cast<int*> (G_delay_counts_dp);
-    int* autapse_indices = reinterpret_cast<int*> (autapse_indices_dp);
-    int* relative_autapse_indices = reinterpret_cast<int*> (relative_autapse_indices_dp);
+    const int* G_group_delay_counts = reinterpret_cast<int*> (G_group_delay_counts_dp);
+    int* G_autapse_indices = reinterpret_cast<int*> (G_autapse_indices_dp);
+    int* G_relative_autapse_indices = reinterpret_cast<int*> (G_relative_autapse_indices_dp);
     int* N_rep = reinterpret_cast<int*> (N_rep_dp);
 
     fill_N_rep(
@@ -128,17 +153,22 @@ void fill_N_rep_python(
         S, 
         D, 
         G,
+        curand_states->states,
+        curand_states->n_states,
         N_G,
-        cc_src, cc_snk,
-        G_rep, G_neuron_counts, G_delay_counts,
-        autapse_indices, 
-        relative_autapse_indices,
+        cc_src, 
+        cc_snk,
+        G_rep, 
+        G_neuron_counts, 
+        G_group_delay_counts,
+        G_autapse_indices, 
+        G_relative_autapse_indices,
+        gc_location[0].cast<int>(), gc_location[1].cast<int>(),
+        gc_conn_shape[0].cast<int>(), gc_conn_shape[1].cast<int>(),
         N_rep,
         verbose
     );
 }
-
-
 
 
 PYBIND11_MODULE(snn_construction_gpu, m)
@@ -183,17 +213,50 @@ PYBIND11_MODULE(snn_construction_gpu, m)
           py::arg("S"),
           py::arg("D"),
           py::arg("G"),
-          py::arg("N_G_dp"),
-          py::arg("cc_src_dp"),
-          py::arg("cc_snk_dp"),
-          py::arg("G_rep_dp"),
-          py::arg("G_neuron_counts_dp"),
-          py::arg("G_delay_counts_dp"),
-          py::arg("autapse_indices_dp"),
-          py::arg("relative_autapse_indices_dp"),
-          py::arg("N_rep_dp"),
-          py::arg("verbose")
-);
+          py::arg("curand_states"),
+          py::arg("N_G"),
+          py::arg("cc_src"),
+          py::arg("cc_snk"),
+          py::arg("G_rep"),
+          py::arg("G_neuron_counts"),
+          py::arg("G_group_delay_counts"),
+          py::arg("G_autapse_indices"),
+          py::arg("G_relative_autapse_indices"),
+          py::arg("gc_location"),
+          py::arg("gc_conn_shape"),
+          py::arg("N_rep"),
+          py::arg("verbose") = false);
+
+
+    py::class_<CuRandStates, std::shared_ptr<CuRandStates>>(m, "CuRandStates_") //, py::dynamic_attr())
+    .def(py::init<int>())
+    .def_readonly("n_states", &CuRandStates::n_states)
+    .def_readonly("states", &CuRandStates::states)
+    // .def("get_ptr", &CuRandStates::get_ptr)
+    // .def_readonly("p", &CuRandStates::p)
+    .def("__repr__",
+        [](const CuRandStates &cs) {
+            return "CuRandStates_(" + std::to_string(cs.n_states) + ")";
+        }
+    );
+
+    py::class_<CuRandStatesPointer>(m, "CuRandStates") //, py::dynamic_attr())
+    .def(py::init<int>())
+    .def_property_readonly("n_states", &CuRandStatesPointer::n_states)
+    // .def_readonly("states", &CuRandStatesPointer::states)
+    // .def("get_ptr", &CuRandStatesPointer::get_ptr)
+    .def("ptr", &CuRandStatesPointer::ptr)
+    .def("__repr__",
+        [](const CuRandStatesPointer &cs) {
+            return "CuRandStates(" + std::to_string(cs.ptr_->n_states) + ")";
+        }
+    );
+
+    m.def("print_random_numbers", 
+          &print_random_numbers);
+
+    m.def("print_random_numbers2", 
+          &print_random_numbers2);
 
     // m.def("pyadd", &pyadd, "A function which adds two numbers");
     // m.def("pyadd_occupancy", &pyadd_occupancy);

@@ -96,7 +96,7 @@ class NetworkDataShapes:
         self.G_exp_exc_ccsyn_per_snk_type_and_delay = syn_count_shape  # dtype=np.int32
 
         self.G_conn_probs = (n_neuron_types * G, D)  # dtype=np.float32
-        self.local_autapse_idcs = (3 * D, G)  # dtype=np.int32
+        # self.relative_autapse_idcs = (3 * D, G)  # dtype=np.int32
 
         self.G_props = (config.n_group_properties, G)  # dtype=np.int32;  selected_p, thalamic input (on/off), ...
 
@@ -111,16 +111,21 @@ class NetworkGPUArrays:
                  type_group_conn_dct: dict,
                  device: int,
                  n_N_states: int,
-                 T: int,
-                 max_batch_size_mb: int):
+                 T: int):
 
         self.device = torch.device(device)
+        print()
         # nbcuda.select_device(device)
 
         N = config.N
         S = config.S
         D = config.D
         G = config.G
+
+        self.last_allocated_memory = 0
+        self.bprint_allocated_memory = N > 1000
+
+        self.curand_states = self._set_curand_states(N)
 
         self._type_groups: list[NeuronTypeGroup] = list(type_group_dct.values())
 
@@ -136,25 +141,12 @@ class NetworkGPUArrays:
         # rows[0, 1]: inhibitory count, excitatory count,
         # rows[2 * D]: number of neurons per delay (post_synaptic type: inhibitory, excitatory)
         self.G_neuron_counts = self.t_i_zeros(sh.G_neuron_counts)
-        snn_construction_gpu.fill_N_G_group_id_and_G_neuron_count_per_type(
-            N, G,
-            N_pos=self.N_pos.data_ptr(),
-            N_pos_shape=config.N_pos_shape,
-            N_G=self.N_G.data_ptr(),
-            N_G_n_cols=config.N_G_n_cols,
-            N_G_neuron_type_col=config.N_G_neuron_type_col,
-            N_G_group_id_col=config.N_G_group_id_col,
-            G_shape=config.G_shape,
-            G_neuron_counts=self.G_neuron_counts.data_ptr())
+        self.fill_N_G_group_id_and_G_neuron_count_per_type(config)
 
-        self.G_neuron_typed_ccount = self.t_i_zeros((2, G))
-        self.G_neuron_typed_ccount[0, :] = self.G_neuron_counts[0, :].ravel().cumsum(dim=0)
-        self.G_neuron_typed_ccount[1, :] = self.G_neuron_counts[1, :].ravel().cumsum(dim=0)
+        self.G_neuron_typed_ccount = self.t_i_zeros((2 * G + 1))
+        self.G_neuron_typed_ccount[1:] = self.G_neuron_counts[: 2, :].ravel().cumsum(dim=0)
 
-        self.G_pos = self._set_G_pos(G=G,
-                                     shape=sh.G_pos,
-                                     N_pos_shape=config.N_pos_shape,
-                                     G_shape=config.G_shape)
+        self.G_pos = self._set_G_pos(config=config, shape=sh.G_pos)
 
         self.validate_N_G(config=config)
 
@@ -165,10 +157,9 @@ class NetworkGPUArrays:
         for d in range(D):
             self.G_group_delay_counts[:, d + 1] = (self.G_group_delay_counts[:, d]
                                                    + self.G_delay_distance.eq(d).sum(dim=1))
-        self.G_group_delay_counts[:, 0] = torch.arange(G, device=self.device)
+        # self.G_group_delay_counts[:, 0] = torch.arange(G, device=self.device)
 
-        self.G_rep = torch.sort(self.G_delay_distance, dim=1, stable=True).indices
-
+        self.G_rep = torch.sort(self.G_delay_distance, dim=1, stable=True).indices.int()
         snn_construction_gpu.fill_G_neuron_count_per_delay(
             S=S, D=D, G=G,
             G_delay_distance=self.G_delay_distance.data_ptr(),
@@ -180,72 +171,35 @@ class NetworkGPUArrays:
         self.G_exp_ccsyn_per_src_type_and_delay = self.t_i_zeros(sh.G_exp_ccsyn_per_src_type_and_delay)
         self.G_exp_exc_ccsyn_per_snk_type_and_delay = self.t_i_zeros(sh.G_exp_exc_ccsyn_per_snk_type_and_delay)
         self._fill_syn_counts(S=S, D=D, G=G, type_group_conn_dct=type_group_conn_dct)
-
-        # start = time.process_time()
-        # # your code here
-        # self.N_rep = torch.multinomial(self.t_f_zeros((N, N)) + 1, N)
-        # print('GPU', time.process_time() - start)
-        # start = time.process_time()
-        # # your code here
-        # self.N_rep = torch.multinomial(torch.zeros((N, N), dtype=torch.float32) + 1, N)
-        # print('CPU:', time.process_time() - start)
-
+        torch.cuda.empty_cache()
+        self.print_allocated_memory('syn_counts')
         self.N_rep = self._set_N_rep(sh.N_rep, N, S, D, G, type_group_conn_dct)
+        self.print_allocated_memory('N_rep')
 
         print()
 
-    def t_i_zeros(self, shape):
+    def t_i_zeros(self, shape) -> torch.Tensor:
         return torch.zeros(shape, dtype=torch.int32, device=self.device)
 
-    def t_f_zeros(self, shape):
+    def t_f_zeros(self, shape) -> torch.Tensor:
         return torch.zeros(shape, dtype=torch.float32, device=self.device)
 
-    def _set_N_rep(
-            self,
-            N_rep_shape,
-            N, S, D, G,
-            type_group_conn_dct: dict[tuple[int, int], NeuronTypeGroupConnection]):
+    def fill_N_G_group_id_and_G_neuron_count_per_type(self, config):
+        snn_construction_gpu.fill_N_G_group_id_and_G_neuron_count_per_type(
+            N=config.N, G=config.G,
+            N_pos=self.N_pos.data_ptr(),
+            N_pos_shape=config.N_pos_shape,
+            N_G=self.N_G.data_ptr(),
+            N_G_n_cols=config.N_G_n_cols,
+            N_G_neuron_type_col=config.N_G_neuron_type_col,
+            N_G_group_id_col=config.N_G_group_id_col,
+            G_shape=config.G_shape,
+            G_neuron_counts=self.G_neuron_counts.data_ptr())
 
-        n_rep = self.t_i_zeros(N_rep_shape)
-
-        for gc in type_group_conn_dct.values():
-            cn_row = gc.src_type_value - 1
-            ct_row = (gc.snk_type_value - 1) * D + 2
-            slice_ = self.G_neuron_counts[cn_row, :]
-            counts = torch.repeat_interleave(self.G_neuron_counts[ct_row: ct_row+D, :].T,
-                                             slice_, dim=0)
-
-            if (gc.src.ntype == NeuronTypes.INHIBITORY) and (gc.snk.ntype == NeuronTypes.EXCITATORY):
-                ccsyn = self.G_exp_ccsyn_per_src_type_and_delay[0: D + 1, :]
-            elif (gc.src.ntype == NeuronTypes.EXCITATORY) and (gc.snk.ntype == NeuronTypes.INHIBITORY):
-                ccsyn = self.G_exp_exc_ccsyn_per_snk_type_and_delay[0: D + 1, :]
-            elif (gc.src.ntype == NeuronTypes.EXCITATORY) and (gc.snk.ntype == NeuronTypes.EXCITATORY):
-                ccsyn = self.G_exp_exc_ccsyn_per_snk_type_and_delay[D + 1: 2 * (D + 1), :]
-            else:
-                raise ValueError
-
-            autapse_indices = self.t_i_zeros((D, G))
-            sort_keys = self.t_i_zeros(N_rep_shape)
-
-            ccsyn = (torch.repeat_interleave(ccsyn.T, slice_, dim=0).diff(dim=1))
-
-            # n_rep[
-            #     gc.N_rep_loc[0]: gc.conn_shape[0],
-            #     gc.N_rep_loc[1]: gc.conn_shape[1]
-            # ] = (torch.arange(D, device=self.device)
-            #      .unsqueeze(0)
-            #      .repeat_interleave(gc.conn_shape[0], dim=0)
-            #      .repeat_interleave(ccsyn, dim=1)
-            #      )
-
-            for d in range(D):
-                pass
-
-            print(counts, '\n')
-            print(ccsyn, '\n')
-            print()
-
-        return 0
+    def _set_curand_states(self, N):
+        cu = snn_construction_gpu.CuRandStates(N).ptr()
+        self.print_allocated_memory('curand_states')
+        return cu
 
     def _set_N_pos(self, shape, vbo):
 
@@ -259,20 +213,84 @@ class NetworkGPUArrays:
                 N_pos.tensor[g.start_idx:g.end_idx + 1, 7:10] = orange  # Inhibitory Neurons -> Orange
         return N_pos
 
-    def _set_G_pos(self, G, shape, N_pos_shape, G_shape):
-        groups = torch.arange(G, device=self.device)
-        z = (groups / (G_shape[0] * G_shape[1])).floor()
-        r = groups - z * (G_shape[0] * G_shape[1])
-        y = (r / G_shape[0]).floor()
-        x = r - y * G_shape[0]
+    def _set_G_pos(self, config, shape):
+        groups = torch.arange(config.G, device=self.device)
+        z = (groups / (config.G_shape[0] * config.G_shape[1])).floor()
+        r = groups - z * (config.G_shape[0] * config.G_shape[1])
+        y = (r / config.G_shape[0]).floor()
+        x = r - y * config.G_shape[0]
 
         gpos = torch.zeros(shape, dtype=torch.float32, device=self.device)
 
-        gpos[:, 0] = x * (N_pos_shape[0] / G_shape[0])
-        gpos[:, 1] = y * (N_pos_shape[1] / G_shape[1])
-        gpos[:, 2] = z * (N_pos_shape[2] / G_shape[2])
+        gpos[:, 0] = x * (config.N_pos_shape[0] / config.G_shape[0])
+        gpos[:, 1] = y * (config.N_pos_shape[1] / config.G_shape[1])
+        gpos[:, 2] = z * (config.N_pos_shape[2] / config.G_shape[2])
 
         return gpos
+
+    def _set_N_rep(self, N_rep_shape, N, S, D, G,
+                   type_group_conn_dct: dict[tuple[int, int], NeuronTypeGroupConnection]):
+
+        n_rep = self.t_i_zeros(N_rep_shape)
+        self.print_allocated_memory('n_rep')
+        sort_keys = self.t_i_zeros(N_rep_shape)
+        self.print_allocated_memory('sort_keys')
+
+        for gc in type_group_conn_dct.values():
+            cn_row = gc.src_type_value - 1
+            ct_row = (gc.snk_type_value - 1) * D + 2
+            slice_ = self.G_neuron_counts[cn_row, :]
+            counts = torch.repeat_interleave(self.G_neuron_counts[ct_row: ct_row+D, :].T, slice_, dim=0)
+
+            if (gc.src.ntype == NeuronTypes.INHIBITORY) and (gc.snk.ntype == NeuronTypes.EXCITATORY):
+                ccsyn = self.G_exp_ccsyn_per_src_type_and_delay[0: D + 1, :]
+            elif (gc.src.ntype == NeuronTypes.EXCITATORY) and (gc.snk.ntype == NeuronTypes.INHIBITORY):
+                ccsyn = self.G_exp_exc_ccsyn_per_snk_type_and_delay[0: D + 1, :]
+            elif (gc.src.ntype == NeuronTypes.EXCITATORY) and (gc.snk.ntype == NeuronTypes.EXCITATORY):
+                ccsyn = self.G_exp_exc_ccsyn_per_snk_type_and_delay[D + 1: 2 * (D + 1), :]
+            else:
+                raise ValueError
+
+            ccsyn = (torch.repeat_interleave(ccsyn.T, slice_, dim=0).diff(dim=1))
+
+            ccn_idx_src = G * (gc.src_type_value - 1)
+            ccn_idx_snk = G * (gc.snk_type_value - 1)
+
+            G_autapse_indices = self.t_i_zeros((D, G))
+            G_relative_autapse_indices = self.t_i_zeros((D, G))
+
+            # gc_rep = torch.randint(0, 2, gc.conn_shape, device=self.device, dtype=torch.int32)
+            # gc_sort_keys = self.t_i_zeros(gc.conn_shape)
+
+            snn_construction_gpu.fill_N_rep(
+                N=N, S=S, D=D, G=G,
+                curand_states=self.curand_states,
+                N_G=self.N_G.data_ptr(),
+                cc_src=self.G_neuron_typed_ccount[ccn_idx_src: ccn_idx_src + G + 1].data_ptr(),
+                cc_snk=self.G_neuron_typed_ccount[ccn_idx_snk: ccn_idx_snk + G + 1].data_ptr(),
+                G_rep=self.G_rep.data_ptr(),
+                G_neuron_counts=self.G_neuron_counts.data_ptr(),
+                G_group_delay_counts=self.G_group_delay_counts.data_ptr(),
+                G_autapse_indices=G_autapse_indices.data_ptr(),
+                G_relative_autapse_indices=G_relative_autapse_indices.data_ptr(),
+                gc_location=gc.location,
+                gc_conn_shape=gc.conn_shape,
+                N_rep=n_rep.data_ptr(),
+                verbose=True)
+
+            if G_autapse_indices[1:, :].sum() != -(G_autapse_indices.shape[0] - 1) * G_autapse_indices.shape[1]:
+                raise AssertionError
+
+            if (G_relative_autapse_indices[1:, :].sum()
+                    != -(G_relative_autapse_indices.shape[0] - 1) * G_relative_autapse_indices.shape[1]):
+                raise AssertionError
+
+            # print(G_relative_autapse_indices)
+            self.print_allocated_memory(f'{gc.id}')
+            # print()
+        del sort_keys
+        torch.cuda.empty_cache()
+        return n_rep
 
     def _fill_syn_counts(self, S, D, G, type_group_conn_dct: dict[tuple[int, int], NeuronTypeGroupConnection]):
         snn_construction_gpu.fill_G_exp_ccsyn_per_src_type_and_delay(
@@ -385,6 +403,22 @@ class NetworkGPUArrays:
     def to_dataframe(tensor: torch.Tensor):
         return pd.DataFrame(tensor.cpu().numpy())
 
+    def print_allocated_memory(self, naming='', f=10**9):
+        if self.bprint_allocated_memory:
+            last = self.last_allocated_memory
+            self.last_allocated_memory = now = torch.cuda.memory_allocated(0) / f
+            diff = np.round((self.last_allocated_memory - last), 3)
+            unit = 'GB'
+            unit2 = 'GB'
+            if self.last_allocated_memory < 0.1:
+                now = now * 10 ** 3
+                unit = 'MB'
+            if diff < 0.1:
+                diff = np.round((self.last_allocated_memory - last) * 10 ** 3, 1)
+                unit2 = 'MB'
+            now = np.round(now, 1)
+            print(f"memory_allocated({naming}) = {now}{unit} ({'+' if diff >= 0 else ''}{diff}{unit2})")
+
 
 class SpikingNeuronNetwork:
     # noinspection PyPep8Naming
@@ -476,8 +510,7 @@ class SpikingNeuronNetwork:
             type_group_conn_dct=self.type_group_conn_dict,
             device=device,
             n_N_states=self.n_N_states,
-            T=self.T,
-            max_batch_size_mb=self.max_batch_size_mb
+            T=self.T
         )
 
     def sort_pos(self):
@@ -497,4 +530,5 @@ class SpikingNeuronNetwork:
             self.config.pos[g.start_idx: g.end_idx + 1] = self.config.pos[g.start_idx: g.end_idx + 1][p0][p1][p2]
             if self.N <= 100:
                 print('\n', self.config.pos[g.start_idx:g.end_idx+1])
-        print('\n')
+        if self.N <= 100:
+            print()

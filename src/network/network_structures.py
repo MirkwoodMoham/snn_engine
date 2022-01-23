@@ -146,7 +146,7 @@ class NeuronTypeGroupConnection(NetworkStructure):
 
     # noinspection PyPep8Naming
     @property
-    def N_rep_loc(self):
+    def location(self):
         return self._row, self._col
 
     # noinspection PyPep8Naming,PyProtectedMember

@@ -41,6 +41,7 @@ cuda_add_library(
     ./src/snn_construction.cu
     ./src/example/snn_engine_gpu.cu
     ./src/utils/launch_parameters.cu
+    ./src/utils/curand_states.cu
 )
 
 target_link_libraries(

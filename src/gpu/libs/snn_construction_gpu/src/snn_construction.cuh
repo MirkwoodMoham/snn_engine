@@ -1,7 +1,6 @@
 #pragma once
 
 #include <utils/cuda_header.h>
-#include <utils/launch_parameters.cuh>
 
 
 void fill_N_G_group_id_and_G_neuron_count_per_type(
@@ -54,14 +53,20 @@ void fill_N_rep(
 	int S,
 	int D,
 	int G,
+	curandState* curand_states,
+	const int n_curand_states,
 	const int* N_G,
 	const int* cc_src,
 	const int* cc_snk,
 	const int* G_rep,
 	const int* G_neuron_counts,
-	const int* G_delay_counts,
-	int* autapse_indices,
-	int* relative_autapse_indices,
+	const int* G_group_delay_counts,
+	int* G_autapse_indices,
+	int* G_relative_autapse_indices,
+	int gc_location0,
+	int gc_location1,
+	int gc_conn_shape0,
+	int gc_conn_shape1,
 	int* N_rep,
 	bool verbose
 );
