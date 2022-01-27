@@ -744,268 +744,229 @@ __global__ void fill_relative_autapse_indices_(
 
 __forceinline__ __device__ int random_uniform_int(curandState *local_state, const float min, const float max)
 {
-	return __float2int_rd(fminf(min + curand_uniform(local_state) * (max-min +1.f), max));
+	return __float2int_rd(fminf(min + curand_uniform(local_state) * (max - min + 1.f), max));
 }
+
+__device__ int random_uniform_int_with_exclusion(
+	curandState *local_state, 
+	const float minf, 
+	const float maxf,
+	const float maxf0,
+	const bool exclude,
+	const int autapse_idx,
+	const int n, 
+	const int s
+){
+	int new_sink = __float2int_rd(fminf(minf + curand_uniform(local_state) * (maxf - minf + 1.f), maxf));
+	int i = 0;
+	if (exclude){
+		while ((new_sink==autapse_idx) && (i<50))
+		{
+			new_sink = __float2int_rd(fminf(minf + curand_uniform(local_state) * (maxf - minf + 1.f), maxf));
+			i++;
+		}
+
+		if (i < 50){ return new_sink; } else { 
+			printf("\n Loop-Warning [autapse_2](%d, %d) range=[%f, %f] -> [%f, %f], autapse_idx=%d, sink=%d", 
+				   n, s, 0.f, maxf0, minf, maxf, autapse_idx, new_sink); 
+		}
+	}
+}
+
+
+__device__ void print_array(int* arr, int r, int c){
+	
+	printf("\n\n");
+	for (int j=0; j < r; j++)
+	{
+		for (int i=0; i < c; i++)
+		{
+			printf("%d ", arr[i + j * c]);
+		}
+		printf("\n");
+	}	
+}
+
+
+__device__ bool duplicated_int(
+	const int min_hit, const int max_hit,
+	const int row_idx0,
+	const int n, const int s, 
+	const float maxf0, const float minf, const float maxf, 
+	const int delay_col0, const int delay_col1, const int autapse_idx, const int new_sink,
+	int* N_rep,
+	const int k
+){
+	int i = delay_col0;
+
+	if ((k==45)){
+		printf("\n Loop-Warning [duplicated](%d, %d) range=[%f, %f] -> [%f, %f], delay_cols=[%d,%d], autapse_idx=%d, sink=%d", 
+			n, s, 0.f, maxf0, minf, maxf, delay_col0, delay_col1, autapse_idx, new_sink);}
+	
+	// check if the drawn integer has alredy been set
+
+	if ((min_hit < new_sink) && (new_sink < max_hit)) {
+		while (i < s) {
+			if (N_rep[row_idx0 + i] == new_sink) { 
+				if ((k >= 45)){
+					printf("\nLoop-Warning [duplicated (%d)](%d, %d), col0=%d, write_idx=%d, k=%d) rep=%d sink=%d", 
+					true, n, s, i, row_idx0 + i, k, N_rep[row_idx0 + i], new_sink);}
+				return true; }
+			i++;
+		}
+	} else if ((new_sink == min_hit) || (new_sink == max_hit)){ 
+		if ((k >= 45)){
+			printf("\nLoop-Warning [duplicated (%d) hit](%d, %d), col0=%d, write_idx=%d, k=%d) rep=%d sink=%d", 
+			true, n, s, i, row_idx0 + i, k, N_rep[row_idx0 + i], new_sink);}
+		return true; }
+	return false;
+}
+
 
 __global__ void k_set_locally_indexed_connections(
 	const int N,
 	const int S,
 	const int D,
 	const int G,
-	curandState* state,
+	curandState* curand_states,
 	const int* N_G,
 	const int* cc_src,
-	int* N_delays,
-	const int* cc_syn,
 	const int* G_neuron_counts,
 	const int* G_relative_autapse_indices,
+	bool has_autapses,
 	const int gc_location0,
 	const int gc_location1,
 	const int gc_conn_shape0,
 	const int gc_conn_shape1,
-	bool b_autapses,
-	const float init_weight,
-	float* weights,
+	//const float init_weight,
+	//float* weights,
+	int* N_delays,
+	const int* cc_syn,
 	int* sort_keys,
-	int* network_rep
+	int* N_rep,
+	bool verbose
 )
 {
 	extern __shared__ int sh_delays[];
-	int* max_delay_counts = &sh_delays[(D+1) * blockDim.x];
+	int* n_targets = &sh_delays[(D+1) * blockDim.x];
 
-	const int n = starting_row + blockIdx.x * blockDim.x + threadIdx.x;
+	const int n = gc_location0 + blockIdx.x * blockDim.x + threadIdx.x;
 	
-	if (n < starting_row + n_rows)
+	if (n < gc_location0 + gc_conn_shape0)
 	{
-		curandState local_state = state[n];
+		curandState local_state = curand_states[n];
 		
-		const int src_loc = neuron_groups[N + n];
-		int syn_count_idx = threadIdx.x;
-		const int row_start_idx = n * S;
+		const int src_loc = N_G[n * 2 + 1];
+		int tdx = threadIdx.x;
+		const int row_idx0 = n * S;
 
-		sh_delays[syn_count_idx] = 0;
-		delays[n] = 0;
+		sh_delays[tdx] = 0;
+		N_delays[n] = 0;
+
+		// if (n == gc_location0){print_array(sh_delays, 2 * D + 1, blockDim.x);}
 
 		for (int d=1; d<D+1; d++)
 		{
-			//int start_rep_col = synapse_count_per_delay[src_loc + (d-1) * G];
-			int end_rep_col = synapse_count_per_delay[src_loc + d * G];
+			int end_rep_col = cc_syn[src_loc + d * G];
 			
-			sh_delays[syn_count_idx + d* blockDim.x] = end_rep_col + starting_write_col;
-
-			max_delay_counts[syn_count_idx + (d-1)* blockDim.x] = G_neuron_counts[src_loc + (d-1) * G];
-
-			delays[n + d * N] += end_rep_col;
+			sh_delays[tdx + d * blockDim.x] = gc_location1 + end_rep_col;
+			n_targets[tdx + (d-1)* blockDim.x] = G_neuron_counts[src_loc + (d-1) * G];
+			
+			N_delays[n + d * N] += end_rep_col;
+			
 		}
 
+		if ((verbose) && (n == gc_location0)){ print_array(sh_delays, 2 * D + 1, blockDim.x); }
+
+		int sort_key = row_idx0; // + gc_location1 + max(0, (D - S) * n);
+		
+		// [delay_col0, delay_col1]: column-interval in which to write sink neurons
 		int delay = 0;
-		syn_count_idx = threadIdx.x;
-
-		int sort_key = row_start_idx + starting_write_col + __float2int_rn(fmaxf(0.f, (D - S) * n));
-		int delay_start_rep_col = sh_delays[syn_count_idx];
-		int delay_end_rep_col = sh_delays[syn_count_idx + blockDim.x];
+		int delay_col0 = sh_delays[tdx];
+		int delay_col1 = sh_delays[tdx + blockDim.x];
+		int n_rep_cols = delay_col1 - delay_col0;
 		
-
-
-		float offset_max = 0.f;
-		float offset_min = 0.f;
-
+		// [min, max]: interval from which to draw an integer ('sink'-neuron)
 		int min = 0;
-		int max = max_delay_counts[syn_count_idx] - 1;
-		float fmax_idx = __int2float_rn(max);
-			
-		float frange = 0.f;
-		int n_rep_cols = (delay_end_rep_col)-delay_start_rep_col;
-		if (n_rep_cols > 1)
-		{
-			frange = (fmax_idx+1.f) / __int2float_rn(n_rep_cols);
+		int max = n_targets[tdx] - 1;
+		float maxf = __int2float_rn(max);
+		float minf = 0.f;
+		float maxf0 = maxf;
+		
+		int autapse_idx = -1;
+		if (has_autapses){ 
+			autapse_idx = G_relative_autapse_indices[src_loc + delay * G] + (n - cc_src[src_loc]); 
 		}
-		
+		int new_sink;
 
-		//float fmin;
-		float fmax;
-
-		const float fmin_range = 2.f; // guaranties to find an alternative to autapse
-
-		
-		if ((frange> fmin_range ))
-		{
-			offset_min = 0.f;
-			fmax = frange -1.f;
-			offset_max = fmax_idx - roundf(fmax);
-		}
-		
-		//int n_range_cols = max - min;
-		
-		int self_sink;
-		if (!allow_self_connection)
-			self_sink = local_autapse_indices[src_loc + delay * G] + (n - typed_cumulative_count_src[src_loc]);
-		
-		int i = 0;
-
-		//bool bprint = (n==25) || (n==0);
-		//bool bprint = false;
-		
-		for (int write_col = starting_write_col; write_col < n_write_cols+starting_write_col; write_col++)
-		{
-			const int write_idx = row_start_idx + write_col;
-
-			while ((write_col == delay_end_rep_col) && (delay < D+1))
-			{
+		int min_hit = -1;
+		int max_hit = gc_location1 + gc_conn_shape1;
 				
-				syn_count_idx += blockDim.x;
-				delay_start_rep_col = sh_delays[syn_count_idx];
-				delay_end_rep_col = sh_delays[syn_count_idx + blockDim.x];
-				delay++;
+		// fill N_rep[n, s] for in [gc_location1, gc_location1 + gc_conn_shape1]
+		for (int s = gc_location1; s < gc_location1 + gc_conn_shape1; s++)
+		{
+			const int write_idx = row_idx0 + s;
 
-				n_rep_cols = delay_end_rep_col-delay_start_rep_col;
+			while ((s == delay_col1) && (delay < D+1))
+			{
+				// if we reach the end of the write interval, update all variables
+				if (delay >= 1){ autapse_idx = -1; }
 
+				tdx += blockDim.x;
+				delay_col0 = sh_delays[tdx];
+				delay_col1 = sh_delays[tdx + blockDim.x];
+				n_rep_cols = delay_col1 - delay_col0;
 				if (n_rep_cols >0)
 				{
-					offset_max = 0.f;
-					offset_min = 0.f;
+					min_hit = -1;
+					max_hit = gc_location1 + gc_conn_shape1;
 					min = 0;
-					max = max_delay_counts[syn_count_idx] - 1;
-					fmax_idx = __int2float_rn(max);
+					max = n_targets[tdx] - 1;
+					minf = 0.f;
+					maxf0 = __int2float_rn(max);
+					maxf = maxf0;
+					sort_key = write_idx;				
+				}
+				delay++;
+			}
 
-					sort_key = write_idx;
-					i = 0;
+			if (n_rep_cols > 0) {	
+
+				if (min > max){ printf("\n Warning [min>max] (%d, %d) %d > %d, range=[%f, %f]", n, s, min, max, 0.f, maxf0); }
+
+				new_sink = random_uniform_int_with_exclusion(&local_state, minf, maxf, maxf0, (has_autapses) && (delay == 0), autapse_idx, n, s);
+
 				
-					//if (delay >= D + 1)
-					//{
-					//	printf("\n Warning (k_set_locally_indexed_connections): Loop limit exceeded!");
-					//}
+				if (s == delay_col0){
+					min_hit = new_sink;
+					max_hit = new_sink;
+				} else {
 					
-					frange = (fmax_idx + 1) / __int2float_rn(n_rep_cols);
-					if (frange > fmin_range)
-					{	
-						offset_min = 0.f;
-						fmax = frange-1.f;
-						offset_max = fmax_idx - roundf(fmax);
-					}
-				}
-				
-			}
-
-			//if (bprint)
-			//{
-			//	printf("\n\n start (%d, %d) [%d,%d] (d: %d) range (%f, %f) [%f] max: %f", n, write_col, delay_start_rep_col, delay_end_rep_col, delay, offset_min, fmax_idx - offset_max, frange, fmax_idx);
-			//}
-
-			int new_sink = random_uniform_int(&local_state, offset_min, fmax_idx - offset_max);
-			while ((!allow_self_connection) && (delay == 0) && (new_sink==self_sink) && (i<50))
-			{
-				new_sink = random_uniform_int(&local_state, offset_min, fmax_idx - offset_max);
-				i++;
-				if (i >= 50)
-				{
-					printf("\n (%d, %d) Warning (k_set_locally_indexed_connections, self_sink: max_count %f): Loop limit exceeded!", n, write_col, fmax_idx);
-					printf("\n (%d, %d) Warning [...,%d] (d: %d) new_sink %d, self_sink %d, idx %d", n, write_col, delay_end_rep_col, delay, new_sink, self_sink, write_idx);
-				}
-			}
-			
-			if (!(frange > fmin_range))
-			{
-				int k = 0;
-				
-				bool duplicated = true;
-				while (duplicated && (k<50))
-				{
-					if ((k==45))
+					int k = 0;
+					bool duplicated = true;
+					while (duplicated && (k<=50))
 					{
-						printf("\n (%d, %d) Warning (duplicated): Loop limit exceeded!", n, write_col);
-						printf("\n (%d, %d) [%d,%d] (d: %d) new_sink %d range (%f, %f) [%f]  max: %f",
-							       n, write_col, delay_start_rep_col, delay_end_rep_col, delay, new_sink, offset_min, fmax_idx - offset_max, frange, fmax_idx);
-					}
-					duplicated = false;
-					int j = row_start_idx + delay_start_rep_col;
-					i = delay_start_rep_col;
-					while ((!duplicated) && (i < write_col))
-					{
-						duplicated = (network_rep[j] == new_sink);
-						if ((k >= 45))
-						{
-							printf("\nn = (%d, %d) (%d, %d, %d) %d <%d> %d", n, write_col, i, j, k, network_rep[j], duplicated , new_sink);
+						duplicated = duplicated_int(min_hit, max_hit, row_idx0, n, s, maxf0, minf, maxf, delay_col0, delay_col1, autapse_idx, new_sink, &N_rep[0], k);
+						if (duplicated) {
+							new_sink = random_uniform_int_with_exclusion(&local_state, minf, maxf, maxf0, (has_autapses) && (delay == 0), autapse_idx, n, s);
 						}
-						i++;
-						j++;
+						k++;
 					}
-					if (duplicated)
-					{
-						new_sink = random_uniform_int(&local_state, offset_min, fmax_idx - offset_max);
-						i = 0;
-						while ((!allow_self_connection) && (delay == 0) && (new_sink == self_sink) && (i < 50))
-						{
-							
-							new_sink = random_uniform_int(&local_state, offset_min, fmax_idx - offset_max);
-							i++;
-							if (i >= 50)
-							{
-								printf("\n (%d, %d) Warning (2) (k_set_locally_indexed_connections, self_sink: max_count %f): Loop limit exceeded!", n, write_col, fmax_idx);
-								printf("\n (%d, %d) Warning (2) [...,%d] (d: %d) new_sink %d, self_sink %d", n, write_col, delay_end_rep_col, delay, new_sink, self_sink);
-							}
-						}
-					}
-					k++;
-				}
-			}
+				} 
 
-			//if (bprint)
-			//{
-			//	printf("\n end (%d, %d) [%d,%d] (d: %d) new_sink %d range (%f, %f) [%f]  max: %f ", 
-			//       n, write_col, delay_start_rep_col, delay_end_rep_col, delay, new_sink, offset_min, fmax_idx - offset_max, frange, fmax_idx);
-			//}
-
-			if (new_sink > max)
-			{
-				printf("\n Warning (%d, %d) (k_set_locally_indexed_connections): Max index exceeded! [%d,%d] (d: %d) new_sink %d range (%f, %f) [%f]  max: %f / %d",
-					n, write_col, delay_start_rep_col, delay_end_rep_col, delay, new_sink, offset_min, fmax_idx - offset_max, frange, fmax_idx, max);
-			}
-
-
-			if (frange > fmin_range)
-			{
-				offset_min = roundf(fmax) + 1.f;
-
-				fmax += frange;
-
-				offset_max = fmax_idx - roundf(fmax);
-			}
-			else
-			{
-				if (new_sink == max)
-				{
-					max--;
-					offset_max += 1.f;
-
-				}
-				if (new_sink == min)
-				{
-					min++;
-					offset_min += 1.f;
-				}
-			}
-
-			//if (limit_exceeded==true && (limit_exceeded2 == false))
-			//{
-			//	limit_exceeded2 = true;
-			//	write_col -= (delay_end_rep_col - delay_start_rep_col);
-			//	bprint = true;
-			//}
-
-
-
-			//delay_rep[write_idx] = delay;
-			//snk_type_rep[write_idx] = snk_type;
-			//network_rep5[write_idx] = self_sink * (delay == 0) - (delay != 0);
-			
-			sort_keys[write_idx] = sort_key;
-			network_rep[write_idx] = new_sink;
-			syn_info[write_idx] = init_weight;
-		
+				// we can narrow the range if we hit the border
+				if (new_sink > max){ printf("\n Loop-Warning [new_sink>max] (%d, %d) range=[%f, %f] -> [*, %d], sink=%d", n, s, 0.f, maxf0, max, new_sink); }
+				else if (new_sink == max){ max--; maxf -= 1.f; }
+				else if (new_sink == min){ min++; minf += 1.f; }
+				else if (new_sink < min_hit){ min_hit = new_sink; }
+				else if (new_sink > max_hit){ max_hit = new_sink; }
+				
+				sort_keys[write_idx] = sort_key;
+				N_rep[write_idx] = new_sink;	
+			}	
 		}
 		
-		state[n] = local_state;
+		curand_states[n] = local_state;
 	}
 }
 
@@ -1024,10 +985,14 @@ void fill_N_rep(
 	const int* G_group_delay_counts,
 	int* G_autapse_indices,
 	int* G_relative_autapse_indices,
+	const bool has_autapses,
 	const int gc_location0,
 	const int gc_location1,
 	const int gc_conn_shape0,
 	const int gc_conn_shape1,
+	const int* cc_syn,
+	int* N_delays,
+	int* sort_keys,
 	int* N_rep,
 	bool verbose
 )
@@ -1050,7 +1015,7 @@ void fill_N_rep(
 	LaunchParameters l(gc_conn_shape0, (void*)k_set_locally_indexed_connections);
 	cudaDeviceSynchronize();
 	
-	k_set_locally_indexed_connections KERNEL_ARGS3(l.grid3, l.block3, l.block3.x* ((1 + 3 * D)) * sizeof(int))(
+	k_set_locally_indexed_connections KERNEL_ARGS3(l.grid3, l.block3, l.block3.x * ((2 * D) + 1) * sizeof(int))(
 		N,
 		S,
 		D,
@@ -1058,18 +1023,21 @@ void fill_N_rep(
 		curand_states,
 		N_G,
 		cc_src,
-		N_delays,
-		cc_syn,
 		G_neuron_counts,
 		G_relative_autapse_indices,
+		has_autapses,
 		gc_location0,
 		gc_location1,
 		gc_conn_shape0,
 		gc_conn_shape1,
-		group_conn.src_type != group_conn.snk_type
-		group_conn.initial_weight,
-		weights,
+		//group_conn.initial_weight,
+		//weights,
+		N_delays,
+		cc_syn,
 		sort_keys,
-		N_rep
+		N_rep,
+		verbose
 	  );
+
+	  printf("\n");
 }

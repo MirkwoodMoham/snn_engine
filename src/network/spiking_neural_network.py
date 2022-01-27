@@ -173,7 +173,9 @@ class NetworkGPUArrays:
         self._fill_syn_counts(S=S, D=D, G=G, type_group_conn_dct=type_group_conn_dct)
         torch.cuda.empty_cache()
         self.print_allocated_memory('syn_counts')
+        self.N_delays = self.t_i_zeros(sh.N_delays)
         self.N_rep = self._set_N_rep(sh.N_rep, N, S, D, G, type_group_conn_dct)
+
         self.print_allocated_memory('N_rep')
 
         print()
@@ -236,22 +238,22 @@ class NetworkGPUArrays:
         sort_keys = self.t_i_zeros(N_rep_shape)
         self.print_allocated_memory('sort_keys')
 
-        for gc in type_group_conn_dct.values():
+        for i, gc in enumerate(type_group_conn_dct.values()):
             cn_row = gc.src_type_value - 1
             ct_row = (gc.snk_type_value - 1) * D + 2
             slice_ = self.G_neuron_counts[cn_row, :]
             counts = torch.repeat_interleave(self.G_neuron_counts[ct_row: ct_row+D, :].T, slice_, dim=0)
 
             if (gc.src.ntype == NeuronTypes.INHIBITORY) and (gc.snk.ntype == NeuronTypes.EXCITATORY):
-                ccsyn = self.G_exp_ccsyn_per_src_type_and_delay[0: D + 1, :]
+                cc_syn = self.G_exp_ccsyn_per_src_type_and_delay[0: D + 1, :]
             elif (gc.src.ntype == NeuronTypes.EXCITATORY) and (gc.snk.ntype == NeuronTypes.INHIBITORY):
-                ccsyn = self.G_exp_exc_ccsyn_per_snk_type_and_delay[0: D + 1, :]
+                cc_syn = self.G_exp_exc_ccsyn_per_snk_type_and_delay[0: D + 1, :]
             elif (gc.src.ntype == NeuronTypes.EXCITATORY) and (gc.snk.ntype == NeuronTypes.EXCITATORY):
-                ccsyn = self.G_exp_exc_ccsyn_per_snk_type_and_delay[D + 1: 2 * (D + 1), :]
+                cc_syn = self.G_exp_exc_ccsyn_per_snk_type_and_delay[D + 1: 2 * (D + 1), :]
             else:
                 raise ValueError
 
-            ccsyn = (torch.repeat_interleave(ccsyn.T, slice_, dim=0).diff(dim=1))
+            # ccsyn = (torch.repeat_interleave(ccsyn.T, slice_, dim=0).diff(dim=1))
 
             ccn_idx_src = G * (gc.src_type_value - 1)
             ccn_idx_snk = G * (gc.snk_type_value - 1)
@@ -269,14 +271,18 @@ class NetworkGPUArrays:
                 cc_src=self.G_neuron_typed_ccount[ccn_idx_src: ccn_idx_src + G + 1].data_ptr(),
                 cc_snk=self.G_neuron_typed_ccount[ccn_idx_snk: ccn_idx_snk + G + 1].data_ptr(),
                 G_rep=self.G_rep.data_ptr(),
-                G_neuron_counts=self.G_neuron_counts.data_ptr(),
+                G_neuron_counts=self.G_neuron_counts[ct_row: ct_row+D, :].data_ptr(),
                 G_group_delay_counts=self.G_group_delay_counts.data_ptr(),
                 G_autapse_indices=G_autapse_indices.data_ptr(),
                 G_relative_autapse_indices=G_relative_autapse_indices.data_ptr(),
+                has_autapses=ccn_idx_src == ccn_idx_snk,
                 gc_location=gc.location,
                 gc_conn_shape=gc.conn_shape,
+                cc_syn=cc_syn.data_ptr(),
+                N_delays=self.N_delays.data_ptr(),
+                sort_keys=sort_keys.data_ptr(),
                 N_rep=n_rep.data_ptr(),
-                verbose=True)
+                verbose=N <= 40)
 
             if G_autapse_indices[1:, :].sum() != -(G_autapse_indices.shape[0] - 1) * G_autapse_indices.shape[1]:
                 raise AssertionError
@@ -286,6 +292,8 @@ class NetworkGPUArrays:
                 raise AssertionError
 
             # print(G_relative_autapse_indices)
+            if i == 2:
+                print()
             self.print_allocated_memory(f'{gc.id}')
             # print()
         del sort_keys
@@ -328,29 +336,73 @@ class NetworkGPUArrays:
         last_row_inh = None
         last_row_exc = None
 
+        mask = torch.zeros(G, dtype=torch.bool, device=self.device)
+        exp_exc = self.t_i_zeros(G)
+        row_exc_max = D + 2
+
         for d in range(D):
+
+            exc_targets = self.G_neuron_counts[2 + D + d, :]
+
+            row_inh = d + 1
+            row_exc = D + 2 + d
+
             if d > 0:
                 inh_targets = self.G_neuron_counts[2 + d, :]
-                exc_targets = self.G_neuron_counts[2 + D + d, :]
                 if max_median_inh_targets_delay < inh_targets.median():
                     max_median_inh_targets_delay = d
                     max_inh_target_row = inh_targets
                 if max_median_exc_targets_delay < exc_targets.median():
                     max_median_exc_targets_delay = d
                     max_exc_target_row = exc_targets
-
-            row_inh = d + 1
-            row_exc = D + 2 + d
+                    row_exc_max = row_exc
 
             exc_ccsyn = self.G_exp_ccsyn_per_src_type_and_delay[row_exc, :]
             self.G_exp_exc_ccsyn_per_snk_type_and_delay[row_inh, :] = exc_ccsyn * (exc_syn_counts[0]/S) + .5
-            self.G_exp_exc_ccsyn_per_snk_type_and_delay[row_exc, :] = exc_ccsyn * (exc_syn_counts[1]/S) + .5
+            exp_exc[:] = exc_ccsyn * (exc_syn_counts[1]/S) + .5
+            self.G_exp_exc_ccsyn_per_snk_type_and_delay[row_exc, :] = exp_exc
+            if d == 0:
+                mask[:] = (exp_exc == exc_targets) & (exp_exc > 0)
+                self.G_exp_exc_ccsyn_per_snk_type_and_delay[row_exc, :][mask] = (exp_exc - 1)[mask]
+            else:
+                self.G_exp_exc_ccsyn_per_snk_type_and_delay[row_exc, :][mask] = (
+                        self.G_exp_exc_ccsyn_per_snk_type_and_delay[row_exc, :] - 1)[mask]
+
             if d == (D-1):
+                if (max_median_exc_targets_delay == 0) or (row_exc_max == D + 2):
+                    raise AssertionError
+        #         last_row_inh = self.G_exp_exc_ccsyn_per_snk_type_and_delay[row_inh, :]
+        #         last_row_exc = self.G_exp_exc_ccsyn_per_snk_type_and_delay[row_exc, :]
+        #
+        # inh_too_low_mask = last_row_inh != exc_syn_counts[0]
+        # exc_too_low_mask = last_row_exc != exc_syn_counts[1]
+        #
+        # if any(inh_too_low_mask) or any(exc_too_low_mask):
+        #     print(self.G_exp_ccsyn_per_src_type_and_delay)
+        #     print(self.G_exp_exc_ccsyn_per_snk_type_and_delay)
+        #     raise AssertionError
+
+        # print(self.G_exp_exc_ccsyn_per_snk_type_and_delay)
+
+        for d in range(max_median_exc_targets_delay, D):
+            row_inh = d + 1
+            row_exc = D + 2 + d
+            self.G_exp_exc_ccsyn_per_snk_type_and_delay[row_exc, :][mask] = (
+                    self.G_exp_exc_ccsyn_per_snk_type_and_delay[row_exc, :] + 1)[mask]
+
+            err = (self.G_exp_exc_ccsyn_per_snk_type_and_delay[row_exc, :]
+                   - self.G_exp_exc_ccsyn_per_snk_type_and_delay[row_exc, :]) < 0
+            if err.any():
+                raise ValueError(f'({row_exc}){err.sum()}')
+
+            if d == (D-1):
+                if (max_median_exc_targets_delay == 0) or (row_exc_max == D + 2):
+                    raise AssertionError
                 last_row_inh = self.G_exp_exc_ccsyn_per_snk_type_and_delay[row_inh, :]
                 last_row_exc = self.G_exp_exc_ccsyn_per_snk_type_and_delay[row_exc, :]
 
-        inh_too_low_mask = last_row_inh < exc_syn_counts[0]
-        exc_too_low_mask = last_row_exc < exc_syn_counts[1]
+        inh_too_low_mask = last_row_inh != exc_syn_counts[0]
+        exc_too_low_mask = last_row_exc != exc_syn_counts[1]
 
         if any(inh_too_low_mask) or any(exc_too_low_mask):
             print(self.G_exp_ccsyn_per_src_type_and_delay)
@@ -445,7 +497,8 @@ class SpikingNeuronNetwork:
         g_exc = self.add_type_group(count=self.N - len(g_inh), neuron_type=NeuronTypes.EXCITATORY)
         print()
         c_ihn_exc = self.add_type_group_conn(g_inh, g_exc, w0=-.49, exp_syn_counts=self.S)
-        c_exc_inh = self.add_type_group_conn(g_exc, g_inh, w0=.51, exp_syn_counts=int((len(g_inh) / self.N) * self.S))
+        c_exc_inh = self.add_type_group_conn(g_exc, g_inh, w0=.51,
+                                             exp_syn_counts=max(int((len(g_inh) / self.N) * self.S), 1))
         c_exc_exc = self.add_type_group_conn(g_exc, g_exc, w0=.5, exp_syn_counts=self.S - len(c_exc_inh))
 
         self.sort_pos()

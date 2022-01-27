@@ -132,8 +132,12 @@ void fill_N_rep_python(
 	const long G_group_delay_counts_dp,
 	long G_autapse_indices_dp,
 	long G_relative_autapse_indices_dp,
+    bool has_autapses,
     const py::tuple& gc_location,
     const py::tuple& gc_conn_shape,
+	long cc_syn_dp,
+	long N_delays_dp,
+    long sort_keys_dp,
 	long N_rep_dp,
 	bool verbose = 0
 )
@@ -146,6 +150,9 @@ void fill_N_rep_python(
     const int* G_group_delay_counts = reinterpret_cast<int*> (G_group_delay_counts_dp);
     int* G_autapse_indices = reinterpret_cast<int*> (G_autapse_indices_dp);
     int* G_relative_autapse_indices = reinterpret_cast<int*> (G_relative_autapse_indices_dp);
+    int* cc_syn = reinterpret_cast<int*> (cc_syn_dp);
+    int* N_delays = reinterpret_cast<int*> (N_delays_dp);
+    int* sort_keys = reinterpret_cast<int*> (sort_keys_dp);
     int* N_rep = reinterpret_cast<int*> (N_rep_dp);
 
     fill_N_rep(
@@ -163,8 +170,12 @@ void fill_N_rep_python(
         G_group_delay_counts,
         G_autapse_indices, 
         G_relative_autapse_indices,
+        has_autapses,
         gc_location[0].cast<int>(), gc_location[1].cast<int>(),
         gc_conn_shape[0].cast<int>(), gc_conn_shape[1].cast<int>(),
+        cc_syn,
+        N_delays,
+        sort_keys,
         N_rep,
         verbose
     );
@@ -222,8 +233,12 @@ PYBIND11_MODULE(snn_construction_gpu, m)
           py::arg("G_group_delay_counts"),
           py::arg("G_autapse_indices"),
           py::arg("G_relative_autapse_indices"),
+          py::arg("has_autapses"),
           py::arg("gc_location"),
           py::arg("gc_conn_shape"),
+          py::arg("cc_syn"),
+          py::arg("N_delays"),
+          py::arg("sort_keys"),
           py::arg("N_rep"),
           py::arg("verbose") = false);
 

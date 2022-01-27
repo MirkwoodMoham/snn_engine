@@ -63,10 +63,14 @@ void fill_N_rep(
 	const int* G_group_delay_counts,
 	int* G_autapse_indices,
 	int* G_relative_autapse_indices,
+	bool has_autapses,
 	int gc_location0,
 	int gc_location1,
 	int gc_conn_shape0,
 	int gc_conn_shape1,
+	const int* cc_syn,
+	int* N_delays,
+	int* sort_keys,
 	int* N_rep,
 	bool verbose
 );

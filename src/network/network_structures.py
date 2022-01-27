@@ -98,6 +98,10 @@ class NeuronTypeGroupConnection(NetworkStructure):
 
         self.conn_shape = (len(src), exp_syn_counts)
 
+        if ((not isinstance(exp_syn_counts, int))
+                or (self.conn_shape[0] < 1) or (self.conn_shape[1] < 1)):
+            raise AssertionError
+
         self.batch_shape = reshape_wrt_size(self.conn_shape, max_batch_size_mb)
 
         if (not isinstance(self.batch_shape, tuple)
@@ -111,7 +115,8 @@ class NeuronTypeGroupConnection(NetworkStructure):
 
     def __str__(self):
         types = self.type_name
-        return f'NeuronTypeGroupConnection(types=({types[0]}, {types[1]}), id={self.id})'
+        return f'NeuronTypeGroupConnection(types=({types[0]}, {types[1]}), id={self.id}, ' \
+               f'shape={self.conn_shape})'
 
     def __len__(self):
         return self.conn_shape[1]

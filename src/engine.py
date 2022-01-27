@@ -18,7 +18,7 @@ class EngineConfig:
 
     @dataclass
     class NetworkConfig(NetworkConfig):
-        N: int = 4 * 10 ** 1
+        N: int = 2 * 10 ** 5
         N_pos_shape: tuple = (1, 1, 1)
 
 
