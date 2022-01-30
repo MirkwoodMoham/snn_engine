@@ -774,7 +774,7 @@ __device__ int random_uniform_int_with_exclusion(
 }
 
 
-__device__ void print_array(int* arr, int r, int c, int col0){
+__device__ void print_array(int* arr, int r, int c, int col0, int sep_row){
 	
 	printf("\n\n");
 	int v;
@@ -789,7 +789,13 @@ __device__ void print_array(int* arr, int r, int c, int col0){
 	printf("\n");
 	for (int j=0; j < r; j++)
 	{
-
+		if (j == sep_row){
+			for (int i=0; i < c; i++)
+			{
+				printf("----");
+			}
+			printf("\n");
+		}
 		for (int i=0; i < c; i++)
 		{
 			v = arr[i + j * c];
@@ -799,7 +805,7 @@ __device__ void print_array(int* arr, int r, int c, int col0){
 			}
 		}
 		printf("\n");
-	}	
+	}
 }
 
 
@@ -894,7 +900,7 @@ __global__ void k_set_locally_indexed_connections(
 			
 		}
 
-		//if ((verbose) && (n == gc_location0)){ print_array(sh_delays, 2 * D + 1, blockDim.x, gc_location0); }
+		if ((verbose) && (n == gc_location0)){ print_array(sh_delays, 2 * D + 1, blockDim.x, gc_location0, D + 1); }
 
 		int sort_key = row_idx0 + gc_location1; // + gc_location1 + max(0, (D - S) * n);
 		
@@ -950,8 +956,9 @@ __global__ void k_set_locally_indexed_connections(
 
 			if (n_rep_cols > 0) {	
 
-				if (min > max){ printf("\n Warning [min>max] (%d, %d in [%d, %d]) %d > %d, range=[%f, %f] targets %d/%d", 
-				n, s, delay_col0, delay_col1, min, max, 0.f, maxf0, n_targets[tdx], G_neuron_counts[src_G + (delay) * G]); }
+				if (min > max){ printf("\n Warning [min>max] (%d, %d in [%d, %d], d=%d) %d > %d, range=[%f, %f] targets %d/%d", 
+				n, s, delay, delay_col0, delay_col1, min, max, 
+				0.f, maxf0, n_targets[tdx], G_neuron_counts[src_G + (delay) * G]); }
 
 				new_sink = random_uniform_int_with_exclusion(&local_state, minf, maxf, maxf0, (has_autapses) && (delay == 0), autapse_idx, n, s);
 
@@ -1273,7 +1280,7 @@ void reindex_N_rep(
 	bool verbose
 )
 {
-	printf("Reindexing: ((%d, %d), (%d, %d))\n", gc_location0, gc_location1, gc_conn_shape0, gc_conn_shape1);
+	printf("Reindexing: ((%d, %d), (%d, %d))", gc_location0, gc_location1, gc_conn_shape0, gc_conn_shape1);
 	cudaDeviceSynchronize();
 	LaunchParameters launch(gc_conn_shape0, (void *)reindex_N_rep_); 
 

@@ -2,7 +2,7 @@ from enum import Enum, unique
 
 import numpy as np
 
-from .gpu_array import (
+from .gpu_arrays import (
     reshape_wrt_size,
     shape_size
 )

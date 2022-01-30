@@ -8,6 +8,7 @@
 
 #include <curand.h>
 #include <curand_kernel.h>
+#include <cusparse.h>
 
 #define THRUST_IGNORE_DEPRECATED_CPP_DIALECT
 

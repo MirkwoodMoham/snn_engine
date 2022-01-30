@@ -44,14 +44,25 @@ cuda_add_library(
     ./src/utils/curand_states.cu
 )
 
+cuda_add_library(
+    snn_simulation_gpu SHARED
+    ./src/simulation/snn_simulation_bindings.cu
+    ./src/simulation/snn_simulation.cu
+    ./src/utils/launch_parameters.cu
+    ./src/utils/curand_states.cu
+)
+
 target_link_libraries(
     snn_construction_gpu
+    snn_simulation_gpu
     ${PYTHON_LIBRARIES}
     cudart
 )
 
 set_target_properties(snn_construction_gpu PROPERTIES PREFIX "")
+set_target_properties(snn_simulation_gpu PROPERTIES PREFIX "")
 
 IF (WIN32)
     set_target_properties(snn_construction_gpu PROPERTIES SUFFIX ".pyd")
+    set_target_properties(snn_simulation_gpu PROPERTIES SUFFIX ".pyd")
 ENDIF()
