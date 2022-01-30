@@ -9,6 +9,11 @@
 #include <curand.h>
 #include <curand_kernel.h>
 
+#define THRUST_IGNORE_DEPRECATED_CPP_DIALECT
+
+#include <thrust/sort.h>
+#include <thrust/device_ptr.h>
+
 #ifdef __INTELLISENSE__
 
 #define KERNEL_ARGS2(grid, block)

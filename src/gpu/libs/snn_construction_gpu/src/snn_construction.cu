@@ -590,7 +590,7 @@ void fill_G_exp_ccsyn_per_src_type_and_delay(
 	);
 	
 	cudaDeviceSynchronize();
-	printf("\n\n");
+	printf("\n");
 }
 
 
@@ -640,8 +640,8 @@ __device__ int relative_typed_delay_rep_index(
 	//{
 	//	printf("\n  search (%d) g_start_col %d, n_g_search %d, g=%d",
 	//		N_autapse_idx, g_search_start_col, n_g_search, g );
-	//	printf("\n  (%d)  [%d], src_loc %d, g = %d [%d, %d]... %d]",
-	//		N_autapse_idx, result, src_loc, g, start_col_next_group, end_col_next_group, last_col);
+	//	printf("\n  (%d)  [%d], src_G %d, g = %d [%d, %d]... %d]",
+	//		N_autapse_idx, result, src_G, g, start_col_next_group, end_col_next_group, last_col);
 	//}
 	
 	bool found = (N_autapse_idx >= Ng_start) && (N_autapse_idx < Ng_next);
@@ -774,14 +774,29 @@ __device__ int random_uniform_int_with_exclusion(
 }
 
 
-__device__ void print_array(int* arr, int r, int c){
+__device__ void print_array(int* arr, int r, int c, int col0){
 	
 	printf("\n\n");
+	int v;
+	for (int i=0; i < c; i++)
+	{
+		v = col0 + i;
+		printf("[%d]", v);
+		if (v < 10){
+			printf(" ");
+		}
+	}
+	printf("\n");
 	for (int j=0; j < r; j++)
 	{
+
 		for (int i=0; i < c; i++)
 		{
-			printf("%d ", arr[i + j * c]);
+			v = arr[i + j * c];
+			printf(" %d ", v);
+			if (v < 10){
+				printf(" ");
+			}
 		}
 		printf("\n");
 	}	
@@ -840,8 +855,8 @@ __global__ void k_set_locally_indexed_connections(
 	const int gc_conn_shape1,
 	//const float init_weight,
 	//float* weights,
-	int* N_delays,
 	const int* cc_syn,
+	int* N_delays,
 	int* sort_keys,
 	int* N_rep,
 	bool verbose
@@ -851,34 +866,37 @@ __global__ void k_set_locally_indexed_connections(
 	int* n_targets = &sh_delays[(D+1) * blockDim.x];
 
 	const int n = gc_location0 + blockIdx.x * blockDim.x + threadIdx.x;
+
+	//{ printf("(%d, 0) = %d\n", n, N_rep[n * S]);}
 	
 	if (n < gc_location0 + gc_conn_shape0)
 	{
 		curandState local_state = curand_states[n];
 		
-		const int src_loc = N_G[n * 2 + 1];
+		const int src_G = N_G[n * 2 + 1];
 		int tdx = threadIdx.x;
 		const int row_idx0 = n * S;
 
-		sh_delays[tdx] = 0;
 		N_delays[n] = 0;
 
-		// if (n == gc_location0){print_array(sh_delays, 2 * D + 1, blockDim.x);}
+		// if (n == gc_location0){print_array(sh_delays, 2 * D + 1, blockDim.x, gc_location1);}
+		
+		sh_delays[tdx] = gc_location1;
 
 		for (int d=1; d<D+1; d++)
 		{
-			int end_rep_col = cc_syn[src_loc + d * G];
+			int end_rep_col = cc_syn[src_G + d * G];
 			
 			sh_delays[tdx + d * blockDim.x] = gc_location1 + end_rep_col;
-			n_targets[tdx + (d-1)* blockDim.x] = G_neuron_counts[src_loc + (d-1) * G];
+			n_targets[tdx + (d-1)* blockDim.x] = G_neuron_counts[src_G + (d-1) * G];
 			
 			N_delays[n + d * N] += end_rep_col;
 			
 		}
 
-		if ((verbose) && (n == gc_location0)){ print_array(sh_delays, 2 * D + 1, blockDim.x); }
+		//if ((verbose) && (n == gc_location0)){ print_array(sh_delays, 2 * D + 1, blockDim.x, gc_location0); }
 
-		int sort_key = row_idx0; // + gc_location1 + max(0, (D - S) * n);
+		int sort_key = row_idx0 + gc_location1; // + gc_location1 + max(0, (D - S) * n);
 		
 		// [delay_col0, delay_col1]: column-interval in which to write sink neurons
 		int delay = 0;
@@ -895,7 +913,7 @@ __global__ void k_set_locally_indexed_connections(
 		
 		int autapse_idx = -1;
 		if (has_autapses){ 
-			autapse_idx = G_relative_autapse_indices[src_loc + delay * G] + (n - cc_src[src_loc]); 
+			autapse_idx = G_relative_autapse_indices[src_G + delay * G] + (n - cc_src[src_G]); 
 		}
 		int new_sink;
 
@@ -932,7 +950,8 @@ __global__ void k_set_locally_indexed_connections(
 
 			if (n_rep_cols > 0) {	
 
-				if (min > max){ printf("\n Warning [min>max] (%d, %d) %d > %d, range=[%f, %f]", n, s, min, max, 0.f, maxf0); }
+				if (min > max){ printf("\n Warning [min>max] (%d, %d in [%d, %d]) %d > %d, range=[%f, %f] targets %d/%d", 
+				n, s, delay_col0, delay_col1, min, max, 0.f, maxf0, n_targets[tdx], G_neuron_counts[src_G + (delay) * G]); }
 
 				new_sink = random_uniform_int_with_exclusion(&local_state, minf, maxf, maxf0, (has_autapses) && (delay == 0), autapse_idx, n, s);
 
@@ -955,14 +974,16 @@ __global__ void k_set_locally_indexed_connections(
 				} 
 
 				// we can narrow the range if we hit the border
-				if (new_sink > max){ printf("\n Loop-Warning [new_sink>max] (%d, %d) range=[%f, %f] -> [*, %d], sink=%d", n, s, 0.f, maxf0, max, new_sink); }
-				else if (new_sink == max){ max--; maxf -= 1.f; }
+				//if (new_sink > max){ printf("\n Loop-Warning [new_sink>max] (%d, %d) range=[%f, %f] -> [*, %d], sink=%d", n, s, 0.f, maxf0, max, new_sink); }
+				if (new_sink == max){ max--; maxf -= 1.f; }
 				else if (new_sink == min){ min++; minf += 1.f; }
 				else if (new_sink < min_hit){ min_hit = new_sink; }
 				else if (new_sink > max_hit){ max_hit = new_sink; }
 				
 				sort_keys[write_idx] = sort_key;
 				N_rep[write_idx] = new_sink;	
+
+				// if (n == gc_location0) { printf("(%d, %d) = %d\n", n, s, N_rep[write_idx]);}
 			}	
 		}
 		
@@ -997,7 +1018,7 @@ void fill_N_rep(
 	bool verbose
 )
 {
-	printf("\nConnecting: ((%d, %d), (%d, %d))", gc_location0, gc_location1, gc_conn_shape0, gc_conn_shape1);
+	printf("Connecting: ((%d, %d), (%d, %d))", gc_location0, gc_location1, gc_conn_shape0, gc_conn_shape1);
 	cudaDeviceSynchronize();
 	LaunchParameters launch(G, (void *)fill_relative_autapse_indices_); 
 	fill_relative_autapse_indices_ KERNEL_ARGS2(launch.grid3, launch.block3)(
@@ -1010,10 +1031,14 @@ void fill_N_rep(
 		G_autapse_indices,
 		G_relative_autapse_indices,
 		false);
+
+	const int block_size_limit = 64;
+	const int shared_memory_size = block_size_limit * ((2 * D) + 1) * sizeof(int);
+	
+	LaunchParameters l(gc_conn_shape0, (void*)k_set_locally_indexed_connections, block_size_limit, shared_memory_size);
 	cudaDeviceSynchronize();
 
-	LaunchParameters l(gc_conn_shape0, (void*)k_set_locally_indexed_connections);
-	cudaDeviceSynchronize();
+	// l.print_info();
 	
 	k_set_locally_indexed_connections KERNEL_ARGS3(l.grid3, l.block3, l.block3.x * ((2 * D) + 1) * sizeof(int))(
 		N,
@@ -1032,12 +1057,250 @@ void fill_N_rep(
 		gc_conn_shape1,
 		//group_conn.initial_weight,
 		//weights,
-		N_delays,
 		cc_syn,
+		N_delays,
 		sort_keys,
 		N_rep,
 		verbose
 	  );
 
+	  checkCudaErrors(cudaDeviceSynchronize());
+	  printf("\n");
+}
+
+
+void sort_N_rep(
+	const int N,
+	const int S,
+	int* sort_keys,
+	int* N_rep,
+	const bool verbose
+){
+
+	auto sort_keys_ptr = thrust::device_pointer_cast(sort_keys);
+	auto N_rep_ptr = thrust::device_pointer_cast(N_rep);
+
+	int n_sorted = 0;
+	int N_batch_size = 50000;
+	int S_batch_size = N_batch_size * S;
+
+	std::string msg;
+	if (verbose) {
+		msg = "sorted: 0/" + std::to_string(N);
+		std::cout << msg;
+	}
+
+	// thrust::stable_sort_by_key(N_rep_ptr, N_rep_ptr + N * S, sort_keys_ptr);
+	// thrust::stable_sort_by_key(sort_keys_ptr, sort_keys_ptr + N * S, N_rep_ptr);
+	
+	while (n_sorted < N){
+			
+	 	if (n_sorted + N_batch_size > N){
+	 		N_batch_size = N - n_sorted;
+			S_batch_size = N_batch_size * S;
+	 	} 
+
+	 	thrust::stable_sort_by_key(N_rep_ptr, N_rep_ptr + S_batch_size, sort_keys_ptr);
+	 	thrust::stable_sort_by_key(sort_keys_ptr, sort_keys_ptr + S_batch_size, N_rep_ptr);
+		
+	 	n_sorted += N_batch_size;
+	 	sort_keys_ptr += S_batch_size;
+	 	N_rep_ptr += S_batch_size;
+
+	 	if (verbose) { 
+	 		std::cout << std::string(msg.length(),'\b');
+	 		msg = "sorted: " + std::to_string(n_sorted) + "/" + std::to_string(N);
+	 		std::cout << msg;
+	 	}
+	}
+
+	if (verbose) printf("\n");
+
+}
+
+
+__global__ void reindex_N_rep_(
+	const int N,
+	const int S,
+	const int D,
+	const int G,
+	const int* N_G,
+	const int* cc_src,
+	const int* cc_snk,
+	const int* G_rep,
+	const int* G_neuron_counts,
+	const int* G_group_delay_counts,
+	const int gc_location0,
+	const int gc_location1,
+	const int gc_conn_shape0,
+	const int gc_conn_shape1,
+	const int* cc_syn,
+	int* N_delays,
+	int* sort_keys,
+	int* N_rep,
+	bool verbose
+)
+{
+
+	extern __shared__ int sh_delays[];
+	int* n_targets = &sh_delays[(D+1) * blockDim.x];
+
+	const int n = gc_location0 + blockIdx.x * blockDim.x + threadIdx.x;
+	
+	if (n < gc_location0 + gc_conn_shape0){
+
+		int print_N = gc_location0 + gc_conn_shape0 - 1;
+
+		const int src_G = N_G[n * 2 + 1];
+		int tdx = threadIdx.x;
+
+		sh_delays[tdx] = gc_location1;
+		for (int d=1; d<D+1; d++)
+		{
+			sh_delays[tdx + d * blockDim.x] = gc_location1 + cc_syn[src_G + d * G];
+			n_targets[tdx + (d-1)* blockDim.x] = G_neuron_counts[src_G + (d-1) * G];	
+		}
+		
+		
+		int N_rep_idx = n * S + gc_location1;
+		int snk_local = N_rep[N_rep_idx];
+		int G_group_delay_counts_idx =  src_G * (D + 1);
+		int n_groups_per_delay = G_group_delay_counts[G_group_delay_counts_idx + 1] - G_group_delay_counts[G_group_delay_counts_idx];
+		int G_rep_idx = src_G * G;
+		int G_rep_idx0 = G_rep_idx;
+		int G_rep_idx1 = G_rep_idx + n_groups_per_delay;
+		int snk_G0 = G_rep[G_rep_idx0];
+		int snk_G1 = G_rep[G_rep_idx1];
+		int snk0 = cc_snk[snk_G0];
+		int snk1 = cc_snk[snk_G0 + 1];
+		int delay = 0;
+		int delay_col0 = sh_delays[tdx];
+		int delay_col1 = sh_delays[tdx + blockDim.x];
+		int n_rep_cols = delay_col1 - delay_col0;
+		int idx_offset = snk0;
+		int offset_delta;
+
+		int snk_global;
+
+		//sort_keys[N_rep_idx] = n * S + delay;
+
+		if (verbose && (n == print_N)) 
+		{
+			printf("(%d, %d, %d in [%d, %d]) N_rep[%d]=%d G_rep[%d]=%d, G_rep[%d]=%d\n",  
+				src_G, n, gc_location1, delay_col0, delay_col1, N_rep_idx, snk_local,G_rep_idx0, snk_G0, G_rep_idx1, snk_G1);
+		}
+
+		for (int s = gc_location1; s < gc_location1 + gc_conn_shape1; s++){
+
+			N_rep_idx = n * S + s; 
+			snk_local = N_rep[N_rep_idx];
+
+			while ((s == delay_col1) && (delay < D+1))
+			{
+				
+				// if we reach the end of the write interval, update all variables
+				tdx += blockDim.x;
+				delay_col0 = sh_delays[tdx];
+				delay_col1 = sh_delays[tdx + blockDim.x];
+				n_rep_cols = delay_col1 - delay_col0;
+				delay++;
+				G_rep_idx += n_groups_per_delay;
+
+				G_group_delay_counts_idx++;
+				n_groups_per_delay = G_group_delay_counts[G_group_delay_counts_idx + 1] - G_group_delay_counts[G_group_delay_counts_idx];
+
+				G_rep_idx0 = G_rep_idx;
+				G_rep_idx1 = G_rep_idx + n_groups_per_delay - 1;
+				snk_G0 = G_rep[G_rep_idx0];
+				snk_G1 = G_rep[G_rep_idx1];
+
+				snk0 = cc_snk[snk_G0];
+				snk1 = cc_snk[snk_G0 + 1];
+				idx_offset = snk0;
+			}
+
+			if (verbose && (n == print_N)) 
+			{
+				printf("(%d, %d, %d in [%d, %d]) N_rep[%d]=%d G_rep[%d]=%d, G_rep[%d]=%d #g=%d = (%d - %d)\n",  
+					src_G, n, s, delay_col0, delay_col1, N_rep_idx, snk_local,G_rep_idx0, snk_G0, G_rep_idx1, snk_G1, n_groups_per_delay, 
+					G_group_delay_counts[G_group_delay_counts_idx + 1], G_group_delay_counts[G_group_delay_counts_idx]);
+			}
+
+			if (n_rep_cols > 0){
+				snk_global = snk_local + idx_offset;
+
+				while (snk_global >= snk1){
+					G_rep_idx0 += 1;
+					snk_G0 = G_rep[G_rep_idx0];
+					snk0 = cc_snk[snk_G0];
+					offset_delta = snk0 - snk1;
+	
+					snk1 = cc_snk[snk_G0 + 1];
+					idx_offset += offset_delta;
+					snk_global += offset_delta;
+				}
+				
+				N_rep[N_rep_idx] = snk_global;
+				sort_keys[N_rep_idx] = n * S + delay;
+			}
+
+		}
+
+	}
+}
+
+
+
+void reindex_N_rep(
+	const int N,
+	const int S,
+	const int D,
+	const int G,
+	const int* N_G,
+	const int* cc_src,
+	const int* cc_snk,
+	const int* G_rep,
+	const int* G_neuron_counts,
+	const int* G_group_delay_counts,
+	const int gc_location0,
+	const int gc_location1,
+	const int gc_conn_shape0,
+	const int gc_conn_shape1,
+	const int* cc_syn,
+	int* N_delays,
+	int* sort_keys,
+	int* N_rep,
+	bool verbose
+)
+{
+	printf("Reindexing: ((%d, %d), (%d, %d))\n", gc_location0, gc_location1, gc_conn_shape0, gc_conn_shape1);
+	cudaDeviceSynchronize();
+	LaunchParameters launch(gc_conn_shape0, (void *)reindex_N_rep_); 
+
+	// l.print_info();
+	
+	reindex_N_rep_ KERNEL_ARGS3(launch.grid3, launch.block3, launch.block3.x * ((2 * D) + 1) * sizeof(int))(
+		N,
+		S,
+		D,
+		G,
+		N_G,
+		cc_src,
+		cc_snk,
+		G_rep,
+		G_neuron_counts,
+		G_group_delay_counts,
+		gc_location0,
+		gc_location1,
+		gc_conn_shape0,
+		gc_conn_shape1,
+		cc_syn,
+		N_delays,
+		sort_keys,
+		N_rep,
+		verbose
+	  );
+
+	  checkCudaErrors(cudaDeviceSynchronize());
 	  printf("\n");
 }

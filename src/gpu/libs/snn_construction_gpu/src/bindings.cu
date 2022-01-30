@@ -182,6 +182,72 @@ void fill_N_rep_python(
 }
 
 
+void sort_N_rep_python(
+	const int N,
+	const int S,
+	long sort_keys_dp,
+	long N_rep_dp	
+){
+    int* sort_keys = reinterpret_cast<int*> (sort_keys_dp);
+    int* N_rep = reinterpret_cast<int*> (N_rep_dp);
+
+    sort_N_rep(N, S, sort_keys, N_rep);
+}
+
+void reindex_N_rep_python(
+	const int N,
+	const int S,
+	const int D,
+	const int G,
+	const long N_G_dp,
+	const long cc_src_dp,
+	const long cc_snk_dp,
+	const long G_rep_dp,
+	const long G_neuron_counts_dp,
+	const long G_group_delay_counts_dp,
+    const py::tuple& gc_location,
+    const py::tuple& gc_conn_shape,
+	long cc_syn_dp,
+	long N_delays_dp,
+    long sort_keys_dp,
+	long N_rep_dp,
+	bool verbose = 0
+)
+{
+    const int* N_G = reinterpret_cast<int*> (N_G_dp);
+    const int* cc_src = reinterpret_cast<int*> (cc_src_dp);
+    const int* cc_snk = reinterpret_cast<int*> (cc_snk_dp);
+    const int* G_rep = reinterpret_cast<int*> (G_rep_dp);
+    const int* G_neuron_counts = reinterpret_cast<int*> (G_neuron_counts_dp);
+    const int* G_group_delay_counts = reinterpret_cast<int*> (G_group_delay_counts_dp);
+    int* cc_syn = reinterpret_cast<int*> (cc_syn_dp);
+    int* N_delays = reinterpret_cast<int*> (N_delays_dp);
+    int* sort_keys = reinterpret_cast<int*> (sort_keys_dp);
+    int* N_rep = reinterpret_cast<int*> (N_rep_dp);
+
+    reindex_N_rep(
+        N, 
+        S, 
+        D, 
+        G,
+        N_G,
+        cc_src, 
+        cc_snk,
+        G_rep, 
+        G_neuron_counts, 
+        G_group_delay_counts,
+        gc_location[0].cast<int>(), gc_location[1].cast<int>(),
+        gc_conn_shape[0].cast<int>(), gc_conn_shape[1].cast<int>(),
+        cc_syn,
+        N_delays,
+        sort_keys,
+        N_rep,
+        verbose
+    );
+}
+
+
+
 PYBIND11_MODULE(snn_construction_gpu, m)
 {
     m.def("fill_N_G_group_id_and_G_neuron_count_per_type", 
@@ -242,6 +308,32 @@ PYBIND11_MODULE(snn_construction_gpu, m)
           py::arg("N_rep"),
           py::arg("verbose") = false);
 
+    m.def("sort_N_rep", 
+          &sort_N_rep_python, 
+          py::arg("N"),
+          py::arg("S"),
+          py::arg("sort_keys"),
+          py::arg("N_rep"));
+    
+    m.def("reindex_N_rep", 
+          &reindex_N_rep_python, 
+          py::arg("N"),
+          py::arg("S"),
+          py::arg("D"),
+          py::arg("G"),
+          py::arg("N_G"),
+          py::arg("cc_src"),
+          py::arg("cc_snk"),
+          py::arg("G_rep"),
+          py::arg("G_neuron_counts"),
+          py::arg("G_group_delay_counts"),
+          py::arg("gc_location"),
+          py::arg("gc_conn_shape"),
+          py::arg("cc_syn"),
+          py::arg("N_delays"),
+          py::arg("sort_keys"),
+          py::arg("N_rep"),
+          py::arg("verbose") = false);
 
     py::class_<CuRandStates, std::shared_ptr<CuRandStates>>(m, "CuRandStates_") //, py::dynamic_attr())
     .def(py::init<int>())
@@ -272,6 +364,7 @@ PYBIND11_MODULE(snn_construction_gpu, m)
 
     m.def("print_random_numbers2", 
           &print_random_numbers2);
+
 
     // m.def("pyadd", &pyadd, "A function which adds two numbers");
     // m.def("pyadd_occupancy", &pyadd_occupancy);

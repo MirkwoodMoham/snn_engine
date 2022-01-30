@@ -74,3 +74,35 @@ void fill_N_rep(
 	int* N_rep,
 	bool verbose
 );
+
+
+void sort_N_rep(
+	int N,
+	int S,
+	int* sort_keys,
+	int* N_rep,
+	bool vebose = true
+);
+
+
+void reindex_N_rep(
+	int N,
+	int S,
+	int D,
+	int G,
+	const int* N_G,
+	const int* cc_src,
+	const int* cc_snk,
+	const int* G_rep,
+	const int* G_neuron_counts,
+	const int* G_group_delay_counts,
+	int gc_location0,
+	int gc_location1,
+	int gc_conn_shape0,
+	int gc_conn_shape1,
+	const int* cc_syn,
+	int* N_delays,
+	int* sort_keys,
+	int* N_rep,
+	bool verbose
+);

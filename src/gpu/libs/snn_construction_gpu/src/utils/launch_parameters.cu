@@ -44,64 +44,64 @@ LaunchParameters::LaunchParameters()
 	grid3 = dim3(grid_size);
 }
 
-LaunchParameters::LaunchParameters(const int n_threads_x, void*init_func)
+LaunchParameters::LaunchParameters(const int n_threads_x, void*init_func, const int dynamicSMemSize, const int blockSizeLimit)
 {
 	func = init_func;
-	init_sizes(n_threads_x, init_func);
+	init_sizes(n_threads_x, init_func, dynamicSMemSize, blockSizeLimit);
 	block3 = dim3(block_size);
 	grid3 = dim3(grid_size);
 }
 
-void LaunchParameters::init_sizes(const int n_threads_x, void* init_func)
+void LaunchParameters::init_sizes(const int n_threads_x, void* init_func, const int dynamicSMemSize, const int blockSizeLimit)
 {
 	// initialize grid_size and block_size
 	// (optionally) initialize block3 and grid3
 
 	// this functions is reused for 2D initialization
 	
-	cudaOccupancyMaxPotentialBlockSize(&min_grid_size, &block_size, func);
+	cudaOccupancyMaxPotentialBlockSize(&min_grid_size, &block_size, func, 0, 64);
 	grid_size = (n_threads_x + block_size - 1) / block_size;
 	if (grid_size == 1) {
 		block_size = std::min(block_size, n_threads_x);
 	}
 }
 
-LaunchParameters::LaunchParameters(
-	void* init_func, 
-	const int n_threads_x, const int n_threads_y,
-	const int block_dim_x, const int block_dim_y)
-{
-	// this functions is reused for reseting the launch parameters
+// LaunchParameters::LaunchParameters(
+// 	const int n_threads_x, const int n_threads_y,
+// 	void* init_func, 
+// 	const int block_dim_x, const int block_dim_y)
+// {
+// 	// this functions is reused for reseting the launch parameters
 	
-	func = init_func;
+// 	func = init_func;
 
-	init_sizes(n_threads_x * n_threads_y, init_func);
+// 	init_sizes(n_threads_x * n_threads_y, init_func, 0);
 
-	float block_dim_xf = static_cast<float>(block_dim_x);
-	const float block_dim_yf = static_cast<float>(block_dim_y);
+// 	float block_dim_xf = static_cast<float>(block_dim_x);
+// 	const float block_dim_yf = static_cast<float>(block_dim_y);
 
 
-	if (n_threads_x > 32)
-	{
-		while (block_dim_xf > static_cast<float>(n_threads_x) + 32.f)
-		{
-			block_dim_xf -= 32.f;
-		}
-	}
-	else
-	{
-		block_dim_xf = static_cast<float>(n_threads_x);
-	}
+// 	if (n_threads_x > 32)
+// 	{
+// 		while (block_dim_xf > static_cast<float>(n_threads_x) + 32.f)
+// 		{
+// 			block_dim_xf -= 32.f;
+// 		}
+// 	}
+// 	else
+// 	{
+// 		block_dim_xf = static_cast<float>(n_threads_x);
+// 	}
 
-	const float grid_dim_x = ceilf(static_cast<float>(n_threads_x) / block_dim_xf);
-	const float grid_dim_y = ceilf(static_cast<float>(n_threads_y) / block_dim_yf);
+// 	const float grid_dim_x = ceilf(static_cast<float>(n_threads_x) / block_dim_xf);
+// 	const float grid_dim_y = ceilf(static_cast<float>(n_threads_y) / block_dim_yf);
 
-	block_size = static_cast<int>(block_dim_xf * block_dim_yf);
-	grid_size = static_cast<int>(grid_dim_x * grid_dim_y);
+// 	block_size = static_cast<int>(block_dim_xf * block_dim_yf);
+// 	grid_size = static_cast<int>(grid_dim_x * grid_dim_y);
 
-	block3 = dim3(static_cast<uint>(block_dim_xf), static_cast<uint>(block_dim_yf));
-	grid3 = dim3(static_cast<uint>(grid_dim_x), static_cast<uint>(grid_dim_y));
-}
+// 	block3 = dim3(static_cast<uint>(block_dim_xf), static_cast<uint>(block_dim_yf));
+// 	grid3 = dim3(static_cast<uint>(grid_dim_x), static_cast<uint>(grid_dim_y));
+// }
 
 
 void LaunchParameters::print_info() 

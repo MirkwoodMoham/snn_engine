@@ -24,15 +24,21 @@ struct LaunchParameters
 	
 	LaunchParameters(
 		int n_threads_x, 
-		void* init_func);
+		void* init_func,
+		int dynamicSMemSize = 0,
+		int blockSizeLimit = 0
+	);
 	void init_sizes(
 		int n_threads_x, 
-		void* init_func);
+		void* init_func,
+		int dynamicSMemSize = 0,
+		int blockSizeLimit = 0
+	);
 
-	LaunchParameters(
-		void* init_func, 
-		int n_threads_x, int n_threads_y, 
-		int block_dim_x =128, int block_dim_y=1);
+	// LaunchParameters(
+	// 	int n_threads_x, int n_threads_y, 
+	// 	void* init_func, 
+	// 	int block_dim_x = 128, int block_dim_y = 1);
 
 	void print_info();
 };
