@@ -33,10 +33,10 @@ class NeuronNetworkState:
 
         self.has_tensor = False
 
-        self._tensor = None
+        self._tensor: Optional[torch.Tensor] = None
 
         if tensor is not None:
-            self.tensor = tensor
+            self.tensor: Optional[torch.Tensor] = tensor
 
     @classmethod
     def __len__(cls):
@@ -46,7 +46,7 @@ class NeuronNetworkState:
         return "NeuronNetworkState:\n" + str(self.tensor)
 
     @property
-    def tensor(self):
+    def tensor(self) -> torch.Tensor:
         return self._tensor
 
     @tensor.setter
@@ -60,6 +60,9 @@ class NeuronNetworkState:
             self.has_tensor = True
         else:
             raise AttributeError
+
+    def data_ptr(self):
+        return self.tensor.data_ptr()
 
     def _row(self, row):
         return self._tensor[row, :]

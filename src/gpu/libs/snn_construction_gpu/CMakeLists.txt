@@ -4,6 +4,7 @@ project(snn_construction_gpu)
 
 enable_language(CUDA)
 find_package(CUDA REQUIRED)
+# find_library(${CUDA_cusparse_LIBRARY} PATHS "/usr/local/cuda/lib64" NO_DEFAULT_PATH) 
 
 if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
   set(CMAKE_CUDA_ARCHITECTURES 61)
@@ -18,6 +19,7 @@ get_filename_component(PROJECT_INC_DIRECTORY ../../../../inc ABSOLUTE)
 
 include_directories(
     ./src/
+    /usr/local/cuda/lib64/
     ${PYTHON_INCLUDE_DIRS}
     ${PROJECT_INC_DIRECTORY}
     ${OPENGL_INCLUDE_DIR}
@@ -25,7 +27,7 @@ include_directories(
 )
 
 link_directories(
-    /usr/local/cuda/lib64
+    /usr/local/cuda11-5/lib64
     "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.5/libs/x64"
 )
 
@@ -54,9 +56,12 @@ cuda_add_library(
 
 target_link_libraries(
     snn_construction_gpu
+    ${CUDA_cusparse_LIBRARY}
+)
+
+target_link_libraries(
     snn_simulation_gpu
-    ${PYTHON_LIBRARIES}
-    cudart
+    ${CUDA_cusparse_LIBRARY}
 )
 
 set_target_properties(snn_construction_gpu PROPERTIES PREFIX "")

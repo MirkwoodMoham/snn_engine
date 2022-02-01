@@ -8,6 +8,7 @@
 
 #include <curand.h>
 #include <curand_kernel.h>
+#include "cublas_v2.h"
 #include <cusparse.h>
 
 #define THRUST_IGNORE_DEPRECATED_CPP_DIALECT
@@ -28,6 +29,17 @@
 #define KERNEL_ARGS4(grid, block, sh_mem, stream) <<< grid, block, sh_mem, stream >>>
 
 #endif
+
+#define WRAP(x) do {x} while (0)
+#define checkCusparseErrors(x) WRAP(									\
+  cusparseStatus_t err = (x);											\
+  if (err != CUSPARSE_STATUS_SUCCESS) {									\
+    std::cerr << "\nCusparse Error " << int(err) << " ("                \
+        << cusparseGetErrorString(err) <<") at Line "                   \
+        << __LINE__ << " of " << __FILE__ << ": " << #x << std::endl;   \
+    exit(1);															\
+  }																		\
+)
 
 #include <utils/launch_parameters.cuh>
 #include <utils/curand_states.cuh>

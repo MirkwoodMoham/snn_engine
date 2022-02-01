@@ -95,27 +95,6 @@ void fill_G_exp_ccsyn_per_src_type_and_delay_python(
     );
 }
 
-struct CuRandStatesPointer
-{
-    std::shared_ptr<CuRandStates> ptr_;
-    
-    CuRandStatesPointer(    
-        const int n_curand_states,
-        bool verbose = true
-    ){
-        ptr_ = std::make_shared<CuRandStates>(n_curand_states, verbose);
-        //print_random_numbers2(ptr_);
-    }
-
-    int n_states(){
-        return ptr_->n_states;
-    }
-
-    std::shared_ptr<CuRandStates> ptr(){
-        return ptr_;
-    }
-};
-
 
 
 void fill_N_rep_python(

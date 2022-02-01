@@ -28,9 +28,8 @@ from .rendered_objects import (
 from .network_states import NeuronNetworkState, IzhikevichModel
 
 
-from gpu import snn_construction_gpu, snn_simulation_gpu
+from gpu import snn_construction_gpu , snn_simulation_gpu
 
-a = snn_simulation_gpu.SnnSimulation_(9)
 
 class NetworkDataShapes:
 
@@ -158,6 +157,31 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.G_props[1: int(shapes.G_props[1]/2)] = 1
 
         self.print_allocated_memory('end')
+
+        self.Fired = self.fzeros(self.N)
+        self.Firing_times = self.fzeros((15, self.N))
+        self.Firing_idcs = self.izeros((15, self.N))
+        self.Firing_counts = self.izeros((1, T * 2))
+
+        a = snn_simulation_gpu.SnnSimulation(
+            N=self.N,
+            G=self.config.G,
+            S=self.S,
+            D=self.config.D,
+            T=T,
+            curand_states_p=self.curand_states,
+            N_G=self.N_G.data_ptr(),
+            G_props=self.G_props.data_ptr(),
+            N_rep=self.N_rep.data_ptr(),
+            N_delays=self.N_delays.data_ptr(),
+            N_states=self.N_states.data_ptr(),
+            N_weights=self.N_weights.data_ptr(),
+            fired=self.Fired.data_ptr(),
+            firing_times=self.Firing_times.data_ptr(),
+            firing_idcs=self.Firing_idcs.data_ptr(),
+            firing_counts=self.Firing_counts.data_ptr()
+        )
+        a.update(True)
 
         print()
 
