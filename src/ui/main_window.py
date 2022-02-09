@@ -5,14 +5,21 @@ from PyQt6.QtGui import QIcon, QAction
 
 from PyQt6.QtWidgets import (
     QApplication,
+    QFrame,
+    QGridLayout,
     QHBoxLayout,
     QPushButton,
+    QSlider,
+    QStatusBar,
+    QVBoxLayout,
+    QWidget
 )
 
 from vispy.app import Application, Canvas
 from vispy.color import Color
 from vispy.gloo.context import GLContext
 from vispy.scene import SceneCanvas, ViewBox, visuals
+from vispy.scene.cameras import MagnifyCamera, Magnify1DCamera
 
 
 def menubar(main_window):
@@ -63,17 +70,23 @@ class UiMainWindow(object):
         self.window = main_window
         self.window.setMenuBar(menubar(self.window))
 
-        self.central_widget = QtWidgets.QWidget(self.window)
+        self.central_widget = QWidget(self.window)
         # self.central_widget.setObjectName("central_widget")
 
-        self.grid_layout = QtWidgets.QGridLayout(self.central_widget)
+        self.grid_layout = QGridLayout(self.central_widget)
         # self.grid_layout.setObjectName("grid_layout")
 
-        self.frame_3d = QtWidgets.QFrame(self.central_widget)
-        self.frame_3d.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
-        self.frame_3d.setFrameShadow(QtWidgets.QFrame.Shadow.Raised)
-        self.central_layout = QtWidgets.QVBoxLayout(self.frame_3d)
-        self.grid_layout.addWidget(self.frame_3d, 0, 0, 1, 1)
+        # # self.left_up_widget = QWidget(self.window)
+        # self.frame_voltage_plot = QFrame(self.central_widget)
+        # self.left_layout = QVBoxLayout(self.frame_voltage_plot)
+        # # self.left_layout.addWidget(self.frame_voltage_plot)
+        # self.grid_layout.addWidget(self.frame_voltage_plot, 1, 0, 1, 1)
+
+        self.frame_3d = QFrame(self.central_widget)
+        self.frame_3d.setFrameShape(QFrame.Shape.StyledPanel)
+        self.frame_3d.setFrameShadow(QFrame.Shadow.Raised)
+        self.central_layout = QVBoxLayout(self.frame_3d)
+        self.grid_layout.addWidget(self.frame_3d, 0, 0, 1, 2)
 
         self.buttons = UiButtons(self.window)
         hbox = QHBoxLayout()
@@ -82,17 +95,17 @@ class UiMainWindow(object):
         hbox.addWidget(self.buttons.toggle_outergrid)
         hbox.addWidget(self.buttons.cancel)
 
-        self.grid_layout.addLayout(hbox, 1, 0, 1, 1, QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.grid_layout.addLayout(hbox, 1, 0, 1, 2, QtCore.Qt.AlignmentFlag.AlignCenter)
 
-        self.horizontalSlider = QtWidgets.QSlider(self.central_widget)
+        self.horizontalSlider = QSlider(self.central_widget)
         self.horizontalSlider.setOrientation(QtCore.Qt.Orientation.Horizontal)
         self.horizontalSlider.setObjectName("horizontalSlider")
 
-        self.grid_layout.addWidget(self.horizontalSlider, 2, 0, 1, 1)
+        self.grid_layout.addWidget(self.horizontalSlider, 3, 0, 1, 2)
 
         self.window.setCentralWidget(self.central_widget)
 
-        self.window.setStatusBar(QtWidgets.QStatusBar(self.window))
+        self.window.setStatusBar(QStatusBar(self.window))
 
         self.retranslate_ui(self.window)
 
@@ -125,18 +138,67 @@ class CanvasConfig:
     bgcolor: Union[str, Color] = 'black'
 
 
-class EngineScene(SceneCanvas):
+class EngineSceneCanvas(SceneCanvas):
 
     def __init__(self,
                  conf: CanvasConfig,
-                 app: Optional[Application]):
+                 app: Optional[Application],
+                 network):
         conf = conf or CanvasConfig()
         super().__init__(**asdict(conf), app=app)
+        self.unfreeze()
+        # self._central_view = None
+        grid = self.central_widget.add_grid()
+        self.network_view = grid.add_view(row=0, col=1, col_span=4, row_span=2)
+        self.network_view.camera = 'turntable'  # or try 'arcball'
+
+        self.voltage_plot_view = grid.add_view(row=0, col=0, border_color=(1, 0, 0))
+        grid1 = visuals.GridLines(parent=self.voltage_plot_view.scene)
+        self.voltage_plot_view.camera = MagnifyCamera(mag=3, size_factor=0.3, radius_ratio=0.6, )
+        self.voltage_plot_view.camera = 'panzoom'
+
+        self.scatter_plot_view = grid.add_view(row=1, col=0, border_color=(1, 0, 0))
+        # self.central_view = ViewBox()
+        # add a colored 3D axis for orientation
+        visuals.XYZAxis(parent=self.network_view.scene)
+        self.freeze()
+
+        if network is not None:
+            self.add_scatter_plot(network)
+            self.add_outer_box(network)
+            self.add_selector_box(network)
+            self.add_voltage_plot(network)
 
     @property
-    def window(self):
+    def _window_id(self):
         # noinspection PyProtectedMember
         return self._backend._id
+
+    def add_scatter_plot(self, network):
+        plot = network.scatter_plot()
+        plot.parent = self.network_view.scene
+        self.network_view.add(plot)
+
+    def add_outer_box(self, network):
+        box: visuals.Box = network.outer_grid
+        box.parent = self.network_view.scene
+        self.network_view.add(box)
+
+    def add_selector_box(self, network):
+        box: visuals.Box = network.selector_box()
+        box.parent = self.network_view.scene
+        self.network_view.add(box)
+
+    def add_voltage_plot(self, network):
+        line: visuals.Box = network.voltage_plot()
+        line.parent = self.voltage_plot_view.scene
+        self.voltage_plot_view.add(line)
+
+    def set_keys(self, keys):
+        self.unfreeze()
+        # noinspection PyProtectedMember
+        self._set_keys(keys)
+        self.freeze()
 
 
 class EngineWindow(QtWidgets.QMainWindow):
@@ -156,50 +218,15 @@ class EngineWindow(QtWidgets.QMainWindow):
         self.setObjectName(name)
         self.resize(800, 600)
 
-        self.scene = EngineScene(conf=CanvasConfig(keys=keys), app=app)
+        # self.central_scene = self.set_central_scene(keys=keys, app=app)
+        self.central_scene = EngineSceneCanvas(conf=CanvasConfig(keys=keys), app=app, network=network)
 
         self.ui = UiMainWindow(self)
-
-        self.central_view = ViewBox()
-        self.central_view.camera = 'turntable'  # or try 'arcball'
-        # add a colored 3D axis for orientation
-        visuals.XYZAxis(parent=self.central_view.scene)
-        self.scene.central_widget.add_widget(self.central_view)
-
-        self.ui.central_layout.addWidget(self.scene.native)
-
-        if network is not None:
-            self.add_scatter_plot(network)
-            self.add_outer_box(network)
-            self.add_selector_box(network)
+        self.ui.central_layout.addWidget(self.central_scene.native)
 
         if show is True:
             self.show()
 
-    def add_scatter_plot(self, network):
-        plot = network.scatter_plot()
-        plot.parent = self.central_view.scene
-        self.central_view.add(plot)
-
-    def add_outer_box(self, network):
-        box: visuals.Box = network.outer_grid
-        box.parent = self.central_view.scene
-        self.central_view.add(box)
-
-    def add_selector_box(self, network):
-        box: visuals.Box = network.selector_box()
-        network.selector_box._parent = self.central_view.scene
-        box.parent = self.central_view.scene
-        self.central_view.add(box)
-
     def set_keys(self, keys):
-        self.scene.unfreeze()
-        self.scene._set_keys(keys)
-        self.scene.freeze()
-
-    # def keyPressEvent(self, e):
-    #     if e.key() == QtCore.Qt.Key.Key_F5:
-    #         print('FF')
-    #         self.close()
-
+        self.central_scene.set_keys(keys)
 

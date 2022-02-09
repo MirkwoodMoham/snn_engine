@@ -20,7 +20,7 @@ class RenderedObject:
 
         self._obj: Optional[Union[visuals.visuals.MarkersVisual]] = None
 
-        self._vbo = None
+        self._pos_vbo = None
         self._ebo = None
         self._parent = None
 
@@ -43,16 +43,15 @@ class RenderedObject:
         return self._shape
 
     @property
-    def vbo_glir_id(self):
-        # noinspection PyProtectedMember
-        return self._obj._vbo.id
+    def pos_vbo_glir_id(self):
+        raise NotImplementedError
 
     # noinspection PyProtectedMember
     @property
-    def vbo(self):
-        if self._vbo is None:
-            self._vbo = get_current_canvas().context.shared.parser._objects[self.vbo_glir_id].handle
-        return self._vbo
+    def pos_vbo(self):
+        if self._pos_vbo is None:
+            self._pos_vbo = get_current_canvas().context.shared.parser._objects[self.pos_vbo_glir_id].handle
+        return self._pos_vbo
 
     def _move(self, i, d=1):
         tr = np.zeros(3)
@@ -99,6 +98,11 @@ class NetworkScatterPlot(RenderedObject):
 
         self._obj.name = 'Neurons'
         self._shape = config.N_pos_shape
+        
+    @property
+    def pos_vbo_glir_id(self):
+        # noinspection PyProtectedMember
+        return self._obj._vbo.id
 
 
 def default_cube_transform(edge_lengths):
@@ -126,6 +130,7 @@ def default_box(shape: tuple,
     return cube
 
 
+# noinspection PyAbstractClass
 class SelectorBox(RenderedObject):
 
     count: int = 0
@@ -137,3 +142,35 @@ class SelectorBox(RenderedObject):
         self._obj.name = name or f'SelectorBox{SelectorBox.count}'
         SelectorBox.count += 1
         self._shape = grid_unit_shape
+        
+
+class VoltagePlot(RenderedObject):
+    
+    def __init__(self):
+        
+        super().__init__()
+        N = 10
+        pos = np.empty((N, 2), np.float32)
+        pos[:, 0] = np.linspace(.05, .95, N)
+
+        color = np.ones((N, 4), dtype=np.float32)
+        color[:, 0] = np.linspace(0, 1, N)
+        color[:, 1] = color[::-1, 0]
+
+        lines = []
+
+        # print('Generating points...')
+        pos[:, 1] = np.random.normal(scale=.025, loc=.3, size=N)
+
+        print('voltage pos:\n', pos, '\n')
+
+        line = visuals.Line(pos=pos, color=color)
+        lines.append(line)
+        line.transform = STTransform()
+        
+        self._obj: visuals.Line = line
+
+    @property
+    def pos_vbo_glir_id(self):
+        return self._obj._line_visual._pos_vbo.id
+    

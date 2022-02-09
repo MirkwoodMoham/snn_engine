@@ -78,7 +78,7 @@ class Engine:
         self.network.outer_grid.visible = not self.network.outer_grid.visible
 
     def print_vbo_data(self):
-        print(vbodata2host(self.network.scatter_plot.vbo))
+        print(vbodata2host(self.network.scatter_plot.pos_vbo))
 
     def trigger_update_switch(self):
         self.update_switch = not self.update_switch

@@ -23,7 +23,8 @@ from .rendered_objects import (
     NetworkScatterPlot,
     RenderedObject,
     SelectorBox,
-    default_box
+    default_box,
+    VoltagePlot
 )
 from .network_states import NeuronNetworkState, IzhikevichModel
 
@@ -108,7 +109,6 @@ class NetworkDataShapes:
 
 # noinspection PyPep8Naming
 class NetworkGPUArrays(GPUArrayCollection):
-
     def __init__(self,
                  config: NetworkConfig,
                  pos_vbo: int,
@@ -116,7 +116,9 @@ class NetworkGPUArrays(GPUArrayCollection):
                  type_group_conn_dct: dict,
                  device: int,
                  T: int,
-                 model=IzhikevichModel):
+                 voltage_plot_vbo: int,
+                 model=IzhikevichModel,
+                 ):
 
         super(NetworkGPUArrays, self).__init__(device=device, bprint_allocated_memory=config.N > 1000)
 
@@ -128,6 +130,13 @@ class NetworkGPUArrays(GPUArrayCollection):
 
         self.curand_states = self._curand_states()
         self.N_pos = self._N_pos(shape=shapes.N_pos, vbo=pos_vbo)
+
+        voltage_plot_shape = (10, 2)
+        voltage_plot = RegisteredGPUArray.from_vbo(
+            voltage_plot_vbo, config=GPUArrayConfig(shape=voltage_plot_shape, strides=(voltage_plot_shape[1] * 4, 4),
+                                                    dtype=np.float32, device=self.device))
+
+        print(voltage_plot.to_dataframe)
 
         (self.N_G,
          self.G_neuron_counts,
@@ -163,7 +172,9 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.Firing_idcs = self.izeros((15, self.N))
         self.Firing_counts = self.izeros((1, T * 2))
 
-        a = snn_simulation_gpu.SnnSimulation(
+        print('N_states:\n', self.N_states)
+
+        self.Simulation = snn_simulation_gpu.SnnSimulation(
             N=self.N,
             G=self.config.G,
             S=self.S,
@@ -181,9 +192,24 @@ class NetworkGPUArrays(GPUArrayCollection):
             firing_idcs=self.Firing_idcs.data_ptr(),
             firing_counts=self.Firing_counts.data_ptr()
         )
-        a.update(True)
+
+        print(self.Firing_idcs)
+
+        for i in range(20):
+            self.update()
+
+
+    def update(self):
+        self.Simulation.update(True)
+        # self.print_sim_state()
 
         print()
+
+    def print_sim_state(self):
+        print('Fired:\n', self.Fired)
+        print('Firing_idcs:\n', self.Firing_idcs)
+        print('Firing_times:\n', self.Firing_times)
+        print('Firing_counts:\n', self.Firing_counts)
 
     @property
     def config(self) -> NetworkConfig:
@@ -618,12 +644,14 @@ class SpikingNeuronNetwork:
 
         self.sort_pos()
 
-        self._scatter_plot = NetworkScatterPlot(self.config)
+        self._network_scatter_plot = NetworkScatterPlot(self.config)
 
         self.GPU: Optional[NetworkGPUArrays] = None
 
-        self._outer_grid = None
-        self._selector_box = None
+        self._outer_grid: Optional[visuals.Box] = None
+        self._selector_box: Optional[SelectorBox] = None
+        self._voltage_plot: Optional[VoltagePlot] = None
+
         self.validate()
 
     @property
@@ -653,7 +681,7 @@ class SpikingNeuronNetwork:
 
     @property
     def scatter_plot(self) -> NetworkScatterPlot:
-        return self._scatter_plot
+        return self._network_scatter_plot
 
     @property
     def outer_grid(self) -> visuals.Box:
@@ -673,16 +701,23 @@ class SpikingNeuronNetwork:
             self._selector_box = SelectorBox(self.config.grid_unit_shape)
         return self._selector_box
 
+    @property
+    def voltage_plot(self):
+        if self._voltage_plot is None:
+            self._voltage_plot = VoltagePlot()
+        return self._voltage_plot
+
     # noinspection PyPep8Naming
     def initialize_GPU_arrays(self, device):
         self.GPU = NetworkGPUArrays(
             config=self.config,
-            pos_vbo=self._scatter_plot.vbo,
+            pos_vbo=self._network_scatter_plot.pos_vbo,
             type_group_dct=self.type_group_dct,
             type_group_conn_dct=self.type_group_conn_dict,
             device=device,
             T=self.T,
-            model=self.model
+            voltage_plot_vbo=self.voltage_plot.pos_vbo,
+            model=self.model,
         )
 
     def sort_pos(self):
