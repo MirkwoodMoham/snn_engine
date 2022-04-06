@@ -1,9 +1,9 @@
-from dataclasses import asdict, dataclass
+# from dataclasses import asdict, dataclass
 import numpy as np
 import pandas as pd
-import time
+# import time
 import torch
-from typing import Dict, Optional, Type
+from typing import Dict, Optional
 from vispy.scene import visuals
 
 from .gpu_arrays import (
@@ -12,7 +12,8 @@ from .gpu_arrays import (
     GPUArrayCollection
 )
 from .network_config import (
-    NetworkConfig
+    NetworkConfig,
+    PlottingConfig
 )
 from .network_structures import (
     NeuronTypes,
@@ -24,18 +25,25 @@ from .rendered_objects import (
     RenderedObject,
     SelectorBox,
     default_box,
-    VoltagePlot
+    VoltagePlot,
+    FiringScatterPlot
 )
-from .network_states import NeuronNetworkState, IzhikevichModel
+from .network_states import IzhikevichModel
 
-
-from gpu import snn_construction_gpu , snn_simulation_gpu
+# noinspection PyUnresolvedReferences
+from gpu import snn_construction_gpu, snn_simulation_gpu
 
 
 class NetworkDataShapes:
 
     # noinspection PyPep8Naming
-    def __init__(self, config: NetworkConfig, T, n_N_states, n_neuron_types=2):
+    def __init__(self,
+                 config: NetworkConfig,
+                 T: int,
+                 n_N_states: int,
+                 plotting_config: PlottingConfig,
+                 n_neuron_types=2):
+
         self.N_pos = (config.N, config.N_pos_n_cols)
         self.N_rep = (config.N, config.S)
         self.N_G = (config.N, config.N_G_n_cols)
@@ -106,9 +114,44 @@ class NetworkDataShapes:
         # dtype=np.int32;  selected_p, thalamic input (on/off), ...
         self.G_props = (config.n_group_properties, config.G)
 
+        self.voltage_plot = (plotting_config.n_voltage_plots * plotting_config.voltage_plot_length, 2)
+        self.firings_scatter_plot = (plotting_config.n_scatter_plots * plotting_config.scatter_plot_length, 13)
+
+        self.voltage_plot_map = (plotting_config.n_voltage_plots, 1)
+        self.firings_scatter_plot_map = (plotting_config.n_scatter_plots, 1)
+
 
 # noinspection PyPep8Naming
 class NetworkGPUArrays(GPUArrayCollection):
+
+    class PlottingGPUArrays(GPUArrayCollection):
+        def __init__(self, device, shapes: NetworkDataShapes,
+                     voltage_plot_vbo, firing_scatter_plot_vbo, bprint_allocated_memory):
+
+            super().__init__(device=device, bprint_allocated_memory=bprint_allocated_memory)
+
+            nbytes_float32 = 4
+
+            self.voltage = RegisteredGPUArray.from_vbo(
+                voltage_plot_vbo,
+                config=GPUArrayConfig(shape=shapes.voltage_plot, strides=(shapes.voltage_plot[1] * nbytes_float32,
+                                                                          nbytes_float32),
+                                      dtype=np.float32, device=self.device))
+
+            self.firings = RegisteredGPUArray.from_vbo(
+                firing_scatter_plot_vbo, config=GPUArrayConfig(shape=shapes.firings_scatter_plot,
+                                                               strides=(shapes.firings_scatter_plot[1] * nbytes_float32,
+                                                                        nbytes_float32),
+                                                               dtype=np.float32, device=self.device))
+
+            self.voltage_map = self.izeros(shapes.voltage_plot_map)
+            self.voltage_map[:, 0] = torch.arange(shapes.voltage_plot_map[0])
+
+            self.firings_map = self.izeros(shapes.firings_scatter_plot_map)
+            self.firings_map[:, 0] = torch.arange(shapes.firings_scatter_plot_map[0])
+
+            print(self.voltage.to_dataframe)
+
     def __init__(self,
                  config: NetworkConfig,
                  pos_vbo: int,
@@ -117,6 +160,8 @@ class NetworkGPUArrays(GPUArrayCollection):
                  device: int,
                  T: int,
                  voltage_plot_vbo: int,
+                 firing_scatter_plot_vbo: int,
+                 plotting_config: PlottingConfig,
                  model=IzhikevichModel,
                  ):
 
@@ -126,17 +171,14 @@ class NetworkGPUArrays(GPUArrayCollection):
         self._type_group_dct = type_group_dct
         self._type_group_conn_dct = type_group_conn_dct
 
-        shapes = NetworkDataShapes(config=config, T=T, n_N_states=model.__len__())
+        shapes = NetworkDataShapes(config=config, T=T, n_N_states=model.__len__(), plotting_config=plotting_config)
+
+        self.plotting_arrays = self.PlottingGPUArrays(device=device, shapes=shapes, voltage_plot_vbo=voltage_plot_vbo,
+                                                      firing_scatter_plot_vbo=firing_scatter_plot_vbo,
+                                                      bprint_allocated_memory=self.bprint_allocated_memory)
 
         self.curand_states = self._curand_states()
         self.N_pos = self._N_pos(shape=shapes.N_pos, vbo=pos_vbo)
-
-        voltage_plot_shape = (10, 2)
-        voltage_plot = RegisteredGPUArray.from_vbo(
-            voltage_plot_vbo, config=GPUArrayConfig(shape=voltage_plot_shape, strides=(voltage_plot_shape[1] * 4, 4),
-                                                    dtype=np.float32, device=self.device))
-
-        print(voltage_plot.to_dataframe)
 
         (self.N_G,
          self.G_neuron_counts,
@@ -171,8 +213,8 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.Firing_times = self.fzeros((15, self.N))
         self.Firing_idcs = self.izeros((15, self.N))
         self.Firing_counts = self.izeros((1, T * 2))
-
-        print('N_states:\n', self.N_states)
+        print()
+        print(self.N_states)
 
         self.Simulation = snn_simulation_gpu.SnnSimulation(
             N=self.N,
@@ -180,7 +222,16 @@ class NetworkGPUArrays(GPUArrayCollection):
             S=self.S,
             D=self.config.D,
             T=T,
+            n_voltage_plots=plotting_config.n_voltage_plots,
+            voltage_plot_length=plotting_config.voltage_plot_length,
+            voltage_plot_data=self.plotting_arrays.voltage.data_ptr(),
+            voltage_plot_map=self.plotting_arrays.voltage_map.data_ptr(),
+            n_scatter_plots=plotting_config.n_scatter_plots,
+            scatter_plot_length=plotting_config.scatter_plot_length,
+            scatter_plot_data=self.plotting_arrays.firings.data_ptr(),
+            scatter_plot_map=self.plotting_arrays.firings_map.data_ptr(),
             curand_states_p=self.curand_states,
+            N_pos=self.N_pos.data_ptr(),
             N_G=self.N_G.data_ptr(),
             G_props=self.G_props.data_ptr(),
             N_rep=self.N_rep.data_ptr(),
@@ -193,17 +244,19 @@ class NetworkGPUArrays(GPUArrayCollection):
             firing_counts=self.Firing_counts.data_ptr()
         )
 
-        print(self.Firing_idcs)
+        # print(self.Firing_idcs)
 
-        for i in range(20):
-            self.update()
-
+        # for i in range(2):
+        #     self.update()
 
     def update(self):
-        self.Simulation.update(True)
+        self.plotting_arrays.voltage.map()
+        self.plotting_arrays.firings.map()
+        self.Simulation.update(False)
+        # self.plotting_arrays.voltage.unmap()
         # self.print_sim_state()
 
-        print()
+        # print()
 
     def print_sim_state(self):
         print('Fired:\n', self.Fired)
@@ -279,9 +332,9 @@ class NetworkGPUArrays(GPUArrayCollection):
         return cu
 
     def _N_pos(self, shape, vbo):
-
+        nbytes_float32 = 4
         N_pos = RegisteredGPUArray.from_vbo(
-            vbo, config=GPUArrayConfig(shape=shape, strides=(shape[1] * 4, 4),
+            vbo, config=GPUArrayConfig(shape=shape, strides=(shape[1] * nbytes_float32, nbytes_float32),
                                        dtype=np.float32, device=self.device))
 
         for g in self.type_groups:
@@ -621,12 +674,19 @@ class NetworkGPUArrays(GPUArrayCollection):
 
 class SpikingNeuronNetwork:
     # noinspection PyPep8Naming
-    def __init__(self, config: NetworkConfig, max_batch_size_mb: int, T: int = 2000, model=IzhikevichModel):
+    def __init__(self,
+                 network_config: NetworkConfig,
+                 plotting_config: PlottingConfig,
+                 max_batch_size_mb: int,
+                 T: int = 2000,
+                 model=IzhikevichModel,
+                 ):
 
-        RenderedObject._grid_unit_shape = config.grid_unit_shape
+        RenderedObject._grid_unit_shape = network_config.grid_unit_shape
 
         self.T = T
-        self._config = config
+        self._network_config: NetworkConfig = network_config
+        self._plotting_config: PlottingConfig = plotting_config
         self.model = model
         self.max_batch_size_mb = max_batch_size_mb
 
@@ -651,12 +711,17 @@ class SpikingNeuronNetwork:
         self._outer_grid: Optional[visuals.Box] = None
         self._selector_box: Optional[SelectorBox] = None
         self._voltage_plot: Optional[VoltagePlot] = None
+        self._firing_scatter_plot: Optional[VoltagePlot] = None
 
         self.validate()
 
     @property
     def config(self):
-        return self._config
+        return self._network_config
+
+    @property
+    def plotting_config(self):
+        return self._plotting_config
 
     def validate(self):
         NeuronTypeGroup.validate(self.type_group_dct, N=self.config.N)
@@ -704,8 +769,16 @@ class SpikingNeuronNetwork:
     @property
     def voltage_plot(self):
         if self._voltage_plot is None:
-            self._voltage_plot = VoltagePlot()
+            self._voltage_plot = VoltagePlot(n_plots=self.plotting_config.n_voltage_plots,
+                                             plot_length=self.plotting_config.voltage_plot_length)
         return self._voltage_plot
+
+    @property
+    def firing_scatter_plot(self):
+        if self._firing_scatter_plot is None:
+            self._firing_scatter_plot = FiringScatterPlot(n_plots=self.plotting_config.n_scatter_plots,
+                                                          plot_length=self.plotting_config.scatter_plot_length)
+        return self._firing_scatter_plot
 
     # noinspection PyPep8Naming
     def initialize_GPU_arrays(self, device):
@@ -717,8 +790,9 @@ class SpikingNeuronNetwork:
             device=device,
             T=self.T,
             voltage_plot_vbo=self.voltage_plot.pos_vbo,
-            model=self.model,
-        )
+            firing_scatter_plot_vbo=self.firing_scatter_plot.pos_vbo,
+            plotting_config=self.plotting_config,
+            model=self.model)
 
     def sort_pos(self):
         """
@@ -739,3 +813,6 @@ class SpikingNeuronNetwork:
                 print('\n', self.config.pos[g.start_idx:g.end_idx+1])
         if self.config.N <= 100:
             print()
+
+    def update(self):
+        self.GPU.update()

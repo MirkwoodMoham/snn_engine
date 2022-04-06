@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Mapping, Optional, Union
+from typing import Optional, Union
 from vispy.scene import visuals
 from vispy.gloo.context import get_current_canvas
 from vispy.visuals.transforms import STTransform
@@ -7,9 +7,9 @@ from vispy.visuals.transforms import STTransform
 from .network_config import (
     NetworkConfig
 )
-from .network_structures import (
-    NeuronTypeGroup
-)
+# from .network_structures import (
+#     NeuronTypeGroup
+# )
 
 
 class RenderedObject:
@@ -28,15 +28,28 @@ class RenderedObject:
 
         self._grid_coordinates = np.zeros(3)
 
+        self._glir = None
+
     def __call__(self):
+        return self._obj
+
+    @property
+    def obj(self):
         return self._obj
 
     @property
     def name(self):
         try:
+            # noinspection PyUnresolvedReferences
             return self._obj.name
         except AttributeError:
-            return self.__str__()
+            return str(self)
+
+    @property
+    def glir(self):
+        if self._glir is None:
+            self._glir = get_current_canvas().context.glir
+        return self._glir
 
     @property
     def shape(self):
@@ -94,6 +107,7 @@ class NetworkScatterPlot(RenderedObject):
                            face_color=(1, 1, 1, .3),
                            edge_color=(0, 0, 0, .5),
                            size=7, edge_width=1)
+        # noinspection PyTypeChecker
         self._obj.set_gl_state('translucent', blend=True, depth_test=True)
 
         self._obj.name = 'Neurons'
@@ -142,35 +156,71 @@ class SelectorBox(RenderedObject):
         self._obj.name = name or f'SelectorBox{SelectorBox.count}'
         SelectorBox.count += 1
         self._shape = grid_unit_shape
-        
+
+
+def plot_pos(n_plots, plot_length):
+
+    pos = np.empty((n_plots * plot_length, 2), np.float32)
+
+    x = np.linspace(0, plot_length - 1, plot_length)
+    y = np.linspace(50, n_plots * 100 - 50, n_plots)
+    # noinspection PyUnresolvedReferences
+    pos[:, 0] = np.meshgrid(x, y)[0].flatten()
+    # print('Generating points...')
+    # pos[:, 1] = np.random.normal(scale=.025, loc=.3, size=N)
+    pos[:, 1] = y.repeat(plot_length)
+    return pos
+
+
+def pos_color(size):
+    color = np.ones((size, 4), dtype=np.float32)
+    color[:, 0] = np.linspace(0, 1, size)
+    color[:, 1] = color[::-1, 0]
+    return color
+
 
 class VoltagePlot(RenderedObject):
     
-    def __init__(self):
+    def __init__(self, n_plots, plot_length):
         
         super().__init__()
-        N = 10
-        pos = np.empty((N, 2), np.float32)
-        pos[:, 0] = np.linspace(.05, .95, N)
 
-        color = np.ones((N, 4), dtype=np.float32)
-        color[:, 0] = np.linspace(0, 1, N)
-        color[:, 1] = color[::-1, 0]
+        connect = np.ones(plot_length).astype(bool)
+        connect[-1] = False
+        connect = connect.reshape(1, plot_length).repeat(n_plots, axis=0).flatten()
 
-        lines = []
-
-        # print('Generating points...')
-        pos[:, 1] = np.random.normal(scale=.025, loc=.3, size=N)
-
-        print('voltage pos:\n', pos, '\n')
-
-        line = visuals.Line(pos=pos, color=color)
-        lines.append(line)
-        line.transform = STTransform()
-        
-        self._obj: visuals.Line = line
+        self._obj: visuals.Line = visuals.Line(pos=plot_pos(n_plots, plot_length),
+                                               color=pos_color(n_plots * plot_length),
+                                               connect=connect,
+                                               antialias=False, width=1)
+        # line = visuals.Line(pos=pos, color=color, connect='strip', antialias=True, method='agg')
+        self._obj.transform = STTransform()
 
     @property
     def pos_vbo_glir_id(self):
         return self._obj._line_visual._pos_vbo.id
-    
+        # return self._obj._line_visual._vbo.id
+
+
+class FiringScatterPlot(RenderedObject):
+
+    def __init__(self, n_plots, plot_length):
+        super().__init__()
+
+        pos = plot_pos(n_plots, plot_length)
+        color = pos_color(n_plots * plot_length)
+        color[:, 3] = 0
+
+        self._obj: visuals.visuals.MarkersVisual = visuals.Markers()
+        # noinspection PyTypeChecker
+        self._obj.set_data(pos,
+                           face_color=color,
+                           edge_color=(1, 1, 1, 1),
+                           size=3, edge_width=0)
+        # noinspection PyTypeChecker
+        self._obj.set_gl_state('translucent', blend=True, depth_test=True)
+
+    @property
+    def pos_vbo_glir_id(self):
+        # noinspection PyProtectedMember
+        return self._obj._vbo.id

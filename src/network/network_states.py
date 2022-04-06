@@ -43,7 +43,7 @@ class NeuronNetworkState:
         return len(cls.rows)
 
     def __str__(self):
-        return "NeuronNetworkState:\n" + str(self.tensor)
+        return f"{self.__class__.__name__}:\n" + str(self.tensor)
 
     @property
     def tensor(self) -> torch.Tensor:
