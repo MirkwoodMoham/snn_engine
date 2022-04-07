@@ -28,7 +28,7 @@ from .rendered_objects import (
     VoltagePlot,
     FiringScatterPlot
 )
-from .network_states import IzhikevichModel
+from .network_states import IzhikevichModel, LocationGroupProperties
 
 # noinspection PyUnresolvedReferences
 from gpu import snn_construction_gpu, snn_simulation_gpu
@@ -44,7 +44,7 @@ class NetworkDataShapes:
                  plotting_config: PlottingConfig,
                  n_neuron_types=2):
 
-        self.N_pos = (config.N, config.N_pos_n_cols)
+        self.N_pos = (config.N, config.vispy_scatter_plot_stride)
         self.N_rep = (config.N, config.S)
         self.N_G = (config.N, config.N_G_n_cols)
 
@@ -112,13 +112,17 @@ class NetworkDataShapes:
         # self.relative_autapse_idcs = (3 * D, G)  # dtype=np.int32
 
         # dtype=np.int32;  selected_p, thalamic input (on/off), ...
-        self.G_props = (config.n_group_properties, config.G)
+        self.G_props = (LocationGroupProperties.__len__(), config.G)
 
         self.voltage_plot = (plotting_config.n_voltage_plots * plotting_config.voltage_plot_length, 2)
-        self.firings_scatter_plot = (plotting_config.n_scatter_plots * plotting_config.scatter_plot_length, 13)
+        self.firings_scatter_plot = (plotting_config.n_scatter_plots * plotting_config.scatter_plot_length,
+                                     config.vispy_scatter_plot_stride)
 
         self.voltage_plot_map = (plotting_config.n_voltage_plots, 1)
         self.firings_scatter_plot_map = (plotting_config.n_scatter_plots, 1)
+
+        assert config.G == self.G_props[1]
+        assert config.N == self.N_states[1]
 
 
 # noinspection PyPep8Naming
@@ -201,11 +205,11 @@ class NetworkGPUArrays(GPUArrayCollection):
 
         self.N_weights = self._set_N_weights(shapes.N_weights)
 
-        self.N_states = model(N=self.N, shape=shapes.N_states, device=self.device,
+        self.N_states = model(shape=shapes.N_states, device=self.device,
                               types_tensor=self.N_G[:, self.config.N_G_neuron_type_col])
 
-        self.G_props = self.izeros(shapes.G_props)
-        self.G_props[1: int(shapes.G_props[1]/2)] = 1
+        self.G_props = LocationGroupProperties(
+            shape=shapes.G_props, device=self.device, config=self.config)
 
         self.print_allocated_memory('end')
 
@@ -213,8 +217,8 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.Firing_times = self.fzeros((15, self.N))
         self.Firing_idcs = self.izeros((15, self.N))
         self.Firing_counts = self.izeros((1, T * 2))
-        print()
-        print(self.N_states)
+        # print()
+        # print(self.N_states)
 
         self.Simulation = snn_simulation_gpu.SnnSimulation(
             N=self.N,
@@ -615,7 +619,7 @@ class NetworkGPUArrays(GPUArrayCollection):
                 verbose=False)
 
         snn_construction_gpu.sort_N_rep(N=N, S=S, sort_keys=sort_keys.data_ptr(), N_rep=N_rep.data_ptr())
-        print(N_rep)
+        # print(N_rep)
         del sort_keys
         self.print_allocated_memory(f'sorted')
 

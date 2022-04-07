@@ -24,7 +24,7 @@ struct SnnSimulation
     
     float* N_pos; 
     int* N_G; 
-    int* G_props; 
+    float* G_props; 
     int* N_rep; 
     int* N_delays; 
     float* N_states; 
@@ -91,7 +91,7 @@ struct SnnSimulation
         curandState* rand_states_,
         float* N_pos_,
         int* N_G_,
-        int* G_props_, 
+        float* G_props_, 
         int* N_rep_, 
         int* N_delays_, 
         float* N_states_,

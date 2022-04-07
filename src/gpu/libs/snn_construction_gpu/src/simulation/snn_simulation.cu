@@ -8,7 +8,7 @@ __global__ void update_N_state_(
 	curandState* randstate, 
 	float* N_pos,
 	const int* N_G,
-	const int* G_props,
+	const float* G_props,
 	float* N_states,
 	float* fired
 	// float* neuron_color,
@@ -22,8 +22,9 @@ __global__ void update_N_state_(
 	{
 		curandState local_state = randstate[n];
 		fired[n] = 0.f;
+		N_pos[n * 13 + 10] = .3f;
 
-		const float ntype = __int2float_rn(N_G[n * 2]);
+		const float ntype = __int2float_rn(N_G[n * 2]) - 1;
 		const int src_G = N_G[n * 2 + 1];
 
 		float pt = N_states[n];
@@ -38,10 +39,13 @@ __global__ void update_N_state_(
 		// printf("\n (%d) (src_G=%d, pt=%f, u=%f, v=%f, a=%f, b=%f, c=%f, d=%f, i=%f)", 
 		// n, src_G, pt, u, v, a, b, c, d, i);
 
-		if ((G_props[src_G + G] != 0) && (pt > 0) && (curand_uniform(&local_state) < pt))
+		if ((G_props[src_G + G] > 0.f) && (pt > 0.f) && (curand_uniform(&local_state) < pt))
 		{
 			const float rt = curand_uniform(&local_state);
-			i += (15.f * ntype + 25.f * (1.f - ntype)) * rt;
+			// i += (G_props[src_G + 3 * G] * ntype + G_props[src_G + 2 * G] * (1.f - ntype)) * rt;
+			i += (G_props[src_G + 3 * G] * ntype + G_props[src_G + 2 * G] * (1.f - ntype)) * rt;
+			// printf("G_props[src_G + 3 * G]=%f, G_props[src_G + 2 * G]=%f \n", 
+			// 	   G_props[src_G + 3 * G], G_props[src_G + 2 * G]);
 		}
 
 		if (v > 30.f)
@@ -50,10 +54,7 @@ __global__ void update_N_state_(
 			u = u + d;
 			fired[n] = t;
 			N_pos[n * 13 + 10] = 1.f;
-
-		} else {
-			N_pos[n * 13 + 10] = .3f;
-		}
+		} 
 		
 		v = v + 0.5f * (0.04f * v * v + 5 * v + 140 - u + i);
 		v = v + 0.5f * (0.04f * v * v + 5 * v + 140 - u + i);
@@ -150,7 +151,7 @@ SnnSimulation::SnnSimulation(
 	curandState* rand_states_,
 	float* N_pos_,
 	int* N_G_,
-    int* G_props_, 
+    float* G_props_, 
     int* N_rep_, 
     int* N_delays_, 
     float* N_states_,

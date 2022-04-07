@@ -41,7 +41,7 @@ SnnSimulation make_SnnSimulation(
 
     float* N_pos = reinterpret_cast<float*> (N_pos_dp);
     int* N_G = reinterpret_cast<int*> (N_G_dp);
-    int* G_props = reinterpret_cast<int*> (G_props_dp);
+    float* G_props = reinterpret_cast<float*> (G_props_dp);
     int* N_rep = reinterpret_cast<int*> (N_rep_dp);
     int* N_delays = reinterpret_cast<int*> (N_delays_dp);
     float* N_states = reinterpret_cast<float*> (N_states_dp);

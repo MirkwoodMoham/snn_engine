@@ -37,7 +37,7 @@ class NetworkConfig:
     pos: np.array = None
     N_pos_shape: tuple = (1, 1, 1)
 
-    N_pos_n_cols: int = 13  # enforced by the vispy scatterplot memory layout
+    vispy_scatter_plot_stride: int = 13  # enforced by the vispy scatterplot memory layout
 
     G_shape: tuple = None
 
@@ -47,12 +47,17 @@ class NetworkConfig:
     N_G_neuron_type_col: int = 0
     N_G_group_id_col: int = 1
 
-    n_group_properties: int = 10
+    class DefaultValues:
+        class ThalamicInput:
+            inh_current: float = 25.
+            exc_current: float = 15.
 
     def __str__(self):
-        m0 = f'\n  +-----------------+' \
-             f'\n  |  NetworkConfig  |' \
-             f'\n  +-----------------+' \
+        name = self.__class__.__name__
+        line = '-' * len(name)
+        m0 = f'\n  +--{line}--+' \
+             f'\n  |  {name}  |' \
+             f'\n  +--{line}--+' \
              f'\n\tN={self.N}, \n\tS={self.S}, \n\tD={self.D}, \n\tG={self.G},'
         m1 = f'\n\tN_pos_shape={self.N_pos_shape},'
         m2 = f'\n\tG_shape={self.G_shape}\n'
@@ -83,7 +88,7 @@ class NetworkConfig:
         assert all([
             isinstance(s, int) and (s / min_shape_el == int(s / min_shape_el)) for s in self.N_pos_shape
         ])
-        assert self.N_pos_n_cols == 13  # enforced by the vispy scatterplot memory layout
+        assert self.vispy_scatter_plot_stride == 13  # enforced by the vispy scatterplot memory layout
 
         if self.pos is None:
             self.pos = (np.random.rand(self.N, 3).astype(np.float32) * np.array(self.N_pos_shape, dtype=np.float32))

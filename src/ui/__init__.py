@@ -1,4 +1,4 @@
-from .main_window import EngineWindow
+from .window import EngineWindow
 from PyQt6 import QtWidgets
 import qdarktheme
 from vispy.app import Application

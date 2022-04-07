@@ -1,9 +1,69 @@
 from dataclasses import asdict, dataclass
 import numpy as np
+import pandas as pd
 import torch
 from typing import Optional
 
 from .network_structures import NeuronTypes
+
+
+class PropertyTensor:
+
+    @dataclass(frozen=True)
+    class Rows:
+        def __len__(self):
+            pass
+
+    _rows = None
+
+    def __init__(self, tensor: Optional[torch.Tensor] = None):
+        self._tensor: Optional[torch.Tensor] = None
+        if tensor is not None:
+            self.tensor: Optional[torch.Tensor] = tensor
+
+    @classmethod
+    def __len__(cls):
+        return len(cls.Rows())
+
+    def __str__(self):
+        return f"{self.__class__.__name__}:\n" + str(self.tensor)
+
+    # noinspection PyPropertyDefinition
+    @classmethod
+    @property
+    def rows(cls):
+        if cls._rows is None:
+            cls._rows = cls.Rows()
+        return cls._rows
+
+    @property
+    def tensor(self) -> torch.Tensor:
+        return self._tensor
+
+    @tensor.setter
+    def tensor(self, v):
+        if self._tensor is None:
+            if ((not len(v.shape) == 2)
+                    or (not v.shape[0] == len(self))):
+                raise ValueError
+
+            self._tensor: torch.Tensor = v
+            self.has_tensor = True
+        else:
+            raise AttributeError
+
+    def data_ptr(self):
+        return self.tensor.data_ptr()
+
+    def _row(self, row):
+        return self._tensor[row, :]
+
+    def _set_row(self, row, v):
+        self._tensor[row, :] = v
+
+    @property
+    def to_dataframe(self) -> pd.DataFrame:
+        return pd.DataFrame(self.tensor.cpu().numpy())
 
 
 @dataclass(frozen=True)
@@ -25,54 +85,8 @@ class NeuronStatesRows:
         return self.i + 1
 
 
-class NeuronNetworkState:
-
-    rows = NeuronStatesRows()
-
-    def __init__(self, tensor: Optional[torch.Tensor] = None):
-
-        self.has_tensor = False
-
-        self._tensor: Optional[torch.Tensor] = None
-
-        if tensor is not None:
-            self.tensor: Optional[torch.Tensor] = tensor
-
-    @classmethod
-    def __len__(cls):
-        return len(cls.rows)
-
-    def __str__(self):
-        return f"{self.__class__.__name__}:\n" + str(self.tensor)
-
-    @property
-    def tensor(self) -> torch.Tensor:
-        return self._tensor
-
-    @tensor.setter
-    def tensor(self, v):
-        if self.has_tensor is False:
-            if ((not len(v.shape) == 2)
-                    or (not v.shape[0] == len(self))):
-                raise ValueError
-
-            self._tensor: torch.Tensor = v
-            self.has_tensor = True
-        else:
-            raise AttributeError
-
-    def data_ptr(self):
-        return self.tensor.data_ptr()
-
-    def _row(self, row):
-        return self._tensor[row, :]
-
-    def _set_row(self, row, v):
-        self._tensor[row, :] = v
-
-
 # noinspection PyPep8Naming
-class IzhikevichModel(NeuronNetworkState):
+class IzhikevichModel(PropertyTensor):
 
     @dataclass(frozen=True)
     class Rows(NeuronStatesRows):
@@ -86,11 +100,9 @@ class IzhikevichModel(NeuronNetworkState):
         d: int = 6
         i: int = 7
 
-    rows = Rows()
-
-    def __init__(self, N, shape, device, types_tensor):
-        super(IzhikevichModel, self).__init__()
-        self._N = N
+    def __init__(self, shape, device, types_tensor):
+        super().__init__()
+        self._N = shape[1]
         self.set_tensor(shape, device, types_tensor)
 
     def set_tensor(self, shape, device, types_tensor):
@@ -177,3 +189,59 @@ class IzhikevichModel(NeuronNetworkState):
     def i(self, v):
         self._set_row(self.rows.i, v)
 
+
+class LocationGroupProperties(PropertyTensor):
+
+    @dataclass(frozen=True)
+    class Rows:
+
+        selected: int = 0
+        thalamic_input: int = 1
+        thalamic_inh_input_current: int = 2
+        thalamic_exc_input_current: int = 3
+        prop4: int = 4
+        prop5: int = 5
+        prop6: int = 6
+        prop7: int = 7
+        prop8: int = 8
+        prop9: int = 9
+
+        def __len__(self):
+            return 10
+
+    def __init__(self, shape, device, config):
+        super().__init__()
+        self._G = shape[1]
+        self.set_tensor(shape, device, config)
+
+    def set_tensor(self, shape, device, config):
+        self.tensor = torch.zeros(shape, dtype=torch.float32, device=device)
+        thalamic_input_arr = torch.zeros(self._G)
+        thalamic_input_arr[: int(self._G/2)] = 1
+        self.thalamic_input = thalamic_input_arr
+        self.thalamic_inh_input_current = config.DefaultValues.ThalamicInput.inh_current
+        self.thalamic_exc_input_current = config.DefaultValues.ThalamicInput.exc_current
+
+    @property
+    def thalamic_input(self):
+        return self._row(self.rows.thalamic_input)
+
+    @thalamic_input.setter
+    def thalamic_input(self, v):
+        self._set_row(self.rows.thalamic_input, v)
+
+    @property
+    def thalamic_inh_input_current(self):
+        return self._row(self.rows.thalamic_inh_input_current)
+
+    @thalamic_inh_input_current.setter
+    def thalamic_inh_input_current(self, v):
+        self._set_row(self.rows.thalamic_inh_input_current, v)
+
+    @property
+    def thalamic_exc_input_current(self):
+        return self._row(self.rows.thalamic_exc_input_current)
+
+    @thalamic_exc_input_current.setter
+    def thalamic_exc_input_current(self, v):
+        self._set_row(self.rows.thalamic_exc_input_current, v)
