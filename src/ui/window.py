@@ -1,18 +1,14 @@
 from dataclasses import asdict, dataclass
 from typing import Optional, Union
 
-import vispy.scene
 from PyQt6 import QtWidgets, QtCore
-from PyQt6.QtGui import QIcon, QAction
+from PyQt6.QtGui import QAction
 
 from PyQt6.QtWidgets import (
     QApplication,
     QFrame,
-    QGridLayout,
     QHBoxLayout,
     QPushButton,
-    QSlider,
-    QStyle,
     QSplitter,
     QStatusBar,
     QVBoxLayout,
@@ -26,69 +22,74 @@ from vispy import scene
 from vispy.scene.cameras import PanZoomCamera
 
 from network import SpikingNeuronNetwork
-
-
-class ShortCuts:
-    START_PAUSE_SIMULATION: str = 'Ctrl+S'
-    EXIT_APP: str = 'Ctrl+Q'
-    OUTERGRID: str = 'Ctrl+G'
+from .ui_element import ButtonMenuAction, Slider
 
 
 @dataclass
-class StatusTips:
+class UIElements:
 
-    START_PAUSE_SIMULATION: str = 'Start/Pause Simulation'
-    EXIT_APP: str = 'Exit application'
-    OUTERGRID: str = 'Show/Hide OuterGrid'
+    parent: Optional[QtWidgets.QMainWindow] = None
+
+    START_SIMULATION: ButtonMenuAction = ButtonMenuAction(menu_name='&Start Simulation',
+                                                          menu_short_cut='F9',
+                                                          status_tip='Start Simulation',
+                                                          icon_name='control.png')
+
+    PAUSE_SIMULATION: ButtonMenuAction = ButtonMenuAction(menu_name='&Pause Simulation',
+                                                          menu_short_cut='F10',
+                                                          status_tip='Pause Simulation',
+                                                          icon_name='control-pause.png',
+                                                          disabled=True)
+
+    EXIT_APP: ButtonMenuAction = ButtonMenuAction(menu_name='&Exit',
+                                                  name='Exit',
+                                                  status_tip='Close Application',
+                                                  menu_short_cut='Ctrl+Q')
+
+    TOGGLE_OUTERGRID: ButtonMenuAction = ButtonMenuAction(menu_name='&Outergrid',
+                                                          name='Show OuterGrid',
+                                                          status_tip='Show/Hide OuterGrid',
+                                                          menu_short_cut='Ctrl+G', checkable=True)
 
     def __post_init__(self):
-        for k, v in asdict(self).items():
-            if hasattr(ShortCuts, k):
-                setattr(StatusTips, k, v + f" ({getattr(ShortCuts, k)})")
+        dct = asdict(self)
+        dct.pop('parent')
+        for k in dct:
+            v = getattr(self, k)
+            if isinstance(v, ButtonMenuAction):
+                if (v.menu_short_cut is not None) and (v.status_tip is not None):
+                    v.status_tip = v.status_tip + f" ({v.menu_short_cut})"
+                    print(v.status_tip)
+                if v.parent is None:
+                    v.parent = self.parent
 
 
-StatusTips()
-
-
-def set_icon(obj: Union[QAction, QPushButton], name, window):
-    pixmapi = getattr(QStyle.StandardPixmap, name)
-    icon = window.style().standardIcon(pixmapi)
-    obj.setIcon(icon)
-
-
-class UiMainWindow(object):
+class UI(object):
 
     class MenuBar:
         class Actions:
-            def __init__(self, window):
-                self.start: QAction = QAction('&Start/Pause', window)
-                self.start.setShortcut(ShortCuts.START_PAUSE_SIMULATION)
-                self.start.setStatusTip(StatusTips.START_PAUSE_SIMULATION)
-                set_icon(self.start, name='SP_MediaPlay', window=window)
-
-                self.toggle_outergrid = QAction('Show &Outergrid', window)
-                self.toggle_outergrid.setShortcut(ShortCuts.OUTERGRID)
-                self.toggle_outergrid.setStatusTip(StatusTips.OUTERGRID)
-                self.toggle_outergrid.setCheckable(True)
-
-                self.exit = QAction(QIcon('exit.png'), '&Exit', window)
-                self.exit.setShortcut(ShortCuts.EXIT_APP)
-                self.exit.setStatusTip(StatusTips.EXIT_APP)
-
+            def __init__(self):
+                self.start: QAction = UIElements.START_SIMULATION.action()
+                self.pause: QAction = UIElements.PAUSE_SIMULATION.action()
+                self.toggle_outergrid: QAction = UIElements.TOGGLE_OUTERGRID.action()
+                self.exit: QAction = UIElements.EXIT_APP.action()
                 self.exit.triggered.connect(QApplication.instance().quit)
 
-        def __init__(self, main_window):
-            self.actions = self.Actions(main_window)
+        def __init__(self, window):
+            self.actions = self.Actions()
 
-            self.bar = QtWidgets.QMenuBar(main_window)
+            self.bar = QtWidgets.QMenuBar(window)
 
-            self.bar.setGeometry(QtCore.QRect(0, 0, 440, 18))
+            self.bar.setGeometry(QtCore.QRect(0, 0, 440, 130))
             self.bar.setObjectName("menubar")
 
             self.file_menu = self.bar.addMenu('&File')
             self.file_menu.addAction(self.actions.start)
-            self.file_menu.addAction(self.actions.toggle_outergrid)
+            self.file_menu.addAction(self.actions.pause)
             self.file_menu.addAction(self.actions.exit)
+
+            self.view_menu = self.bar.addMenu('&View')
+            self.view_menu.addAction(self.actions.toggle_outergrid)
 
     class UiLeft:
 
@@ -96,23 +97,20 @@ class UiMainWindow(object):
             def __init__(self, window):
                 self.window = window
                 max_width = 140
-                self.start = QPushButton("Start")
-                set_icon(self.start, name='SP_MediaPlay', window=window)
-                self.start.setStatusTip(StatusTips.START_PAUSE_SIMULATION)
-                self.start.clicked.connect(self.button_clicked)
+                self.start: QPushButton = UIElements.START_SIMULATION.button()
+                self.pause: QPushButton = UIElements.PAUSE_SIMULATION.button()
+                self.exit: QPushButton = UIElements.EXIT_APP.button()
+                self.toggle_outergrid: QPushButton = UIElements.TOGGLE_OUTERGRID.button()
 
-                self.exit = QPushButton("Exit")
-                self.exit.setStatusTip(StatusTips.EXIT_APP)
-                self.exit.clicked.connect(self.button_clicked)
-                self.exit.clicked.connect(QApplication.instance().quit)
-
-                self.toggle_outergrid = QPushButton('Show OuterGrid')
                 self.toggle_outergrid.setMinimumWidth(max_width)
                 self.toggle_outergrid.setMaximumWidth(max_width)
                 self.start.setMaximumWidth(max_width)
                 self.exit.setMaximumWidth(max_width)
-                self.toggle_outergrid.setStatusTip(StatusTips.OUTERGRID)
-                self.toggle_outergrid.setCheckable(True)
+
+                self.start.clicked.connect(self.button_clicked)
+                self.pause.clicked.connect(self.button_clicked)
+                self.exit.clicked.connect(QApplication.instance().quit)
+                self.exit.clicked.connect(self.button_clicked)
                 self.toggle_outergrid.clicked.connect(self.button_clicked)
 
             def button_clicked(self):
@@ -122,27 +120,38 @@ class UiMainWindow(object):
 
         class Sliders:
             def __init__(self):
-                self.thalamic_inh_input_current = QSlider(QtCore.Qt.Orientation.Horizontal)
-                self.thalamic_exc_input_current = QSlider(QtCore.Qt.Orientation.Horizontal)
+                self.thalamic_inh_input_current = Slider(name='Th. inh. Current [I]',
+                                                         prop_id='thalamic_inh_input_current',
+                                                         min_value=0, max_value=10000)
+                self.thalamic_exc_input_current = Slider('Th. exc. Current [I]',
+                                                         prop_id='thalamic_exc_input_current',
+                                                         min_value=0, max_value=10000)
 
         def __init__(self, window, central_widget):
             self.frame = QFrame(central_widget)
             self.buttons = self.Buttons(window)
             self.sliders = self.Sliders()
-            self.vbox = QVBoxLayout(self.frame)
+            vbox = QVBoxLayout(self.frame)
+
             # self.vbox.addStretch(1)
-            self.vbox.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
+            vbox.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
             # splitter.setSizes([125, 150])
             # hbox.addStretch(1)
-            self.vbox.addWidget(self.buttons.start)
+            play_pause_widget = QWidget(central_widget)
+            play_pause_hbox = QHBoxLayout(play_pause_widget)
+            play_pause_hbox.addWidget(self.buttons.start)
+            play_pause_hbox.addWidget(self.buttons.pause)
+            vbox.addWidget(play_pause_widget)
             # vbox.addWidget(splitter)
-            self.vbox.addWidget(self.buttons.toggle_outergrid)
-            self.vbox.addWidget(self.sliders.thalamic_inh_input_current)
-            self.vbox.addWidget(self.sliders.thalamic_exc_input_current)
-            self.vbox.addWidget(self.buttons.exit)
-            # self.vbox.width_max = 100
+            vbox.addWidget(self.buttons.toggle_outergrid)
+            vbox.addWidget(self.sliders.thalamic_inh_input_current.widget)
+            vbox.addWidget(self.sliders.thalamic_exc_input_current.widget)
+            vbox.addWidget(self.buttons.exit)
+            # vbox.width_max = 100
 
     def __init__(self, window):
+
+        self.ui_elements = UIElements(None)
 
         self.menubar = self.MenuBar(window)
         window.setMenuBar(self.menubar.bar)
@@ -221,7 +230,7 @@ class EngineWindow(QtWidgets.QMainWindow):
 
             # self._central_view = None
             grid: scene.widgets.Grid = self.central_widget.add_grid()
-            row_span = 6
+            # row_span = 6
             self.network_view = grid.add_view(row=0, col=0)
 
             self.grid: scene.widgets.Grid = self.network_view.add_grid()
@@ -299,7 +308,7 @@ class EngineWindow(QtWidgets.QMainWindow):
 
         # noinspection PyTypeChecker
         def _plot_view(self,
-                       row, col, row_span, title_str, n_plots, plot_length, cam_yscale=1,
+                       row, col, title_str, n_plots, plot_length, cam_yscale=1,
                        height_min=None, height_max=None):
             v = self.grid.add_view(row=row + 1, col=col, border_color='w', row_span=1)
             if height_min is not None:
@@ -337,13 +346,13 @@ class EngineWindow(QtWidgets.QMainWindow):
 
         # noinspection PyTypeChecker
         def _voltage_plot_view(self, row, col):
-            return self._plot_view(row=row, col=col, row_span=1, title_str="Voltage Plot",
+            return self._plot_view(row=row, col=col, title_str="Voltage Plot",
                                    n_plots=self.n_voltage_plots, plot_length=self.voltage_plot_length,
                                    cam_yscale=100, height_min=350)
 
         # noinspection PyTypeChecker
         def _scatter_plot_view(self, row, col):
-            return self._plot_view(row=row, col=col, row_span=1, title_str="Scatter Plot",
+            return self._plot_view(row=row, col=col, title_str="Scatter Plot",
                                    n_plots=self.n_scatter_plots, plot_length=self.scatter_plot_length, cam_yscale=100,
                                    height_min=200, height_max=500)
 
@@ -372,7 +381,7 @@ class EngineWindow(QtWidgets.QMainWindow):
         # self.central_scene = self.set_central_scene(keys=keys, app=app)
         self.scene_3d = self.EngineSceneCanvas(conf=CanvasConfig(keys=keys), app=app, network=network)
 
-        self.ui = UiMainWindow(self)
+        self.ui = UI(self)
         self.ui.layout_3d.addWidget(self.scene_3d.native)
 
         if show is True:

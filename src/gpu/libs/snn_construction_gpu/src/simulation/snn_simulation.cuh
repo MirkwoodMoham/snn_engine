@@ -64,12 +64,14 @@ struct SnnSimulation
 		
 	int firing_counts_idx = 1;
 	int firing_counts_idx_m1 = 1;
-	int firing_counts_idx_end = 1;
+	// int firing_counts_idx_end = 1;
 
 	int reset_firing_times_ptr_threshold;
 	int n_fired_m1_to_end = 0;
 
     int t = 0;
+
+    bool resetting = false;
 
     SnnSimulation(
         int N_,
@@ -101,7 +103,8 @@ struct SnnSimulation
         int* firing_idcs_,
         int* firing_counts_
     );
-
-    void update(bool verbose);
+    
     void update_voltage_plot();
+    void print_info(bool bprint_idcs = false);
+    void update(bool verbose);
 };

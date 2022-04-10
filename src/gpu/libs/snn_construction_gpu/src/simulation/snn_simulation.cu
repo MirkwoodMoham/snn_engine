@@ -232,14 +232,13 @@ SnnSimulation::SnnSimulation(
 }
 
 
-
-
 __global__ void update_current_(
 	const int N,
 	const int S,
 	const int D,
-	const int* fired_idcs_m1, 
+	const int* fired_idcs_read, 
 	const int* fired_idcs, 
+	const float* firing_times_read,
 	const float* firing_times,
 	const int* N_rep, 
 	const float* N_weights, 
@@ -259,35 +258,72 @@ __global__ void update_current_(
 	if (fired_idx < n_fired)
 	{
 		int n;
+		int firing_time;
 
 		if (fired_idx < n_fired_m1_to_end)
 		{
-			n = fired_idcs_m1[fired_idx];
+			// global index of firing-array < len(fired-array) 
+			// -> use the trailing pointer
+			n = fired_idcs_read[fired_idx];
+			firing_time = __int2float_rn(firing_times_read[fired_idx]);
 		}
 		else
 		{
-			n = fired_idcs[fired_idx- n_fired_m1_to_end];
+			// global index of firing-array >= len(fired-array) 
+			// -> use the 'normal' pointer
+			n = fired_idcs[fired_idx - n_fired_m1_to_end];
+			firing_time = __int2float_rn(firing_times[fired_idx - n_fired_m1_to_end]);
 		}
-		const int firing_time = __int2float_rn(firing_times[fired_idx]);
-	
-		const int delay_idx = n * (D + 1) + (t - firing_time);
+		// const int firing_time = __int2float_rn(firing_times[fired_idx]);
 
+		// const int delay_idx = n * (D + 1) + (t - firing_time);
+
+		// N_delays.shape = (D+1, N)
+		// t - firing-time = delay -> use the dealy to infer which synapses must be activated using
+		// the N_delays array. 
+		const int delay_idx = n + N * (t - firing_time);
 		const int syn_idx_start = n * S + N_delays[delay_idx];
-		const int syn_idx_end = n * S + N_delays[delay_idx+1];
+		const int syn_idx_end = n * S + N_delays[delay_idx + N];
 
+	 	// if ((syn_idx_end > N * S) || ((t - firing_time) >= D))
+		// {
+	 	// 	printf("\n (%d)-(%d < %d = %d) (n_fired=%d) t:%d, firing_time: %d (%d), delay_idx: %d, delay_count: %d, syn = {%d, ..., d}", 
+		// 	 n, fired_idx, n_fired_m1_to_end, 
+		// 	 fired_idx < n_fired_m1_to_end, 
+		// 	 n_fired,
+	 	// 	 t,
+		// 	 firing_time, t-firing_time, delay_idx, N_delays[delay_idx + N], 
+		// 	 N_rep[syn_idx_start] 
+		// 	// N_rep[syn_idx_end -1]
+		// 	);
+	 	// 	printf("\n (%d) syn_idx_start: %d, syn_idx_end: %d",n, syn_idx_start, syn_idx_end);
+		// 	// printf("\nfiring_times:");
+		// 	// for (int i = 0; i < 15; i++) {
+		// 	// 	printf("\n");
+		// 	// 	for (int j = 0; j < N; j++) {
+		// 	// 		printf("%.0f, ", firing_times[i * N + j]);
+		// 	// 	}
+		// 	// }
+	 	// }
 
-		//printf("\n (%d) firing_time: %d, delay_idx: %d, delay_count: %d, syn = {%d, ..., %d}", 
-		//n, firing_time, delay_idx, N_delays[delay_idx + 1],
-		//N_rep[syn_idx_start], N_rep[syn_idx_end -1]);
-		//printf("\n (%d) syn_idx_start: %d, syn_idx_end: %d",n, syn_idx_start, syn_idx_end);
 
 	
 		for (int s = syn_idx_start; s < syn_idx_end; s++)
 		{
-			//printf("\n (%d)->(%d) [I] = %f", n, N_rep[s], N_states[N_rep[s] + 8 * N]);
+			// if (N_rep[s] >= 0){
+
+			// if (s >= N * S) 
+			// 	printf("\n (%d)->(%d) [I] = %f", n, N_rep[s], N_states[N_rep[s] + 7 * N]);
 			// atomicAdd(&debug_i[N_rep[s]], N_weights[s]);
+			
+			// if (s < N * S) 
 			atomicAdd(&N_states[N_rep[s] + 7 * N], N_weights[s]);
-			//printf("\n (%d)->(%d) [I] = %f", n, N_rep[s], N_states[N_rep[s] + 8 * N]);
+			// if (s >= N * S)
+			// 	printf("\n (%d)->(%d) [I] = %f", n, N_rep[s], N_states[N_rep[s] + 7 * N]);
+
+			// } else {
+			// 	printf("\n (%d) N_rep[s] = %d", n, N_rep[s]);
+			// }
 		}
 	}
 	
@@ -337,7 +373,48 @@ void SnnSimulation::update_voltage_plot()
 	// );
 }
 
+// void print_array()
 
+void SnnSimulation::print_info(bool bprint_idcs){
+	std::cout << "\n\n  ------------------------------------ ";
+	printf("\nt=%d", t);
+	printf("\nn_fired=%d", n_fired);
+	printf("\nn_fired_m1_to_end=%d", n_fired_m1_to_end);
+	printf("\nn_fired_0=%d", n_fired_0);
+	printf("\nn_fired_m1=%d", n_fired_m1);
+	printf("\nn_fired_total=%d", n_fired_total);
+	printf("\nn_fired_total_m1=%d", n_fired_total_m1);
+	printf("\nfiring_counts_write=%p", (void * )firing_counts_write);
+	printf("\n");
+	
+	if (bprint_idcs){
+		printf("\nfiring_idcs:");
+		for (int i = 0; i < 15; i++) {
+			printf("\n");
+			for (int j = 0; j < N; j++) {
+				int firing_index;
+				cudaMemcpy(&firing_index, firing_idcs + i * N + j, 
+					sizeof(float), cudaMemcpyDeviceToHost);
+				printf("%d, ", firing_index);
+			}
+		}
+		printf("\n");
+	}
+
+	printf("\nfiring_times:");
+	for (int i = 0; i < 15; i++) {
+		printf("\n");
+		for (int j = 0; j < N; j++) {
+			float firing_time;
+			cudaMemcpy(&firing_time, firing_times + i * N + j, 
+				sizeof(float), cudaMemcpyDeviceToHost);
+			printf("%.0f, ", firing_time);
+		}
+	}
+	printf("\n");
+
+
+}
 void SnnSimulation::update(const bool verbose)
 {	
 	// if (verbose)
@@ -410,17 +487,25 @@ void SnnSimulation::update(const bool verbose)
     checkCudaErrors(cudaMemcpy(
 		&n_fired_0, firing_counts + firing_counts_idx, sizeof(int), cudaMemcpyDeviceToHost));
 	// n_fired_0 = firing_counts.d_M[firing_counts_idx];
+
+	// bool print_cond = (t==15);
+	// bool print_cond = resetting;
+	// bool print_cond = false;
 	
+	// if (print_cond){
+	// 	print_info();
+	// }
+
 	n_fired_total += n_fired_0;
 	n_fired += n_fired_0;
 	firing_counts_idx += 2;
 
-	if (n_fired_total > n_fired_total_m1) {n_fired_m1_to_end += n_fired_0;}
+	if (n_fired_total > n_fired_total_m1) {
+		n_fired_m1_to_end += n_fired_0;
+	}
 
-	if (t > D)
+	if (t >= D)
 	{
-		
-		
 		cudaMemcpy(&n_fired_m1, firing_counts + firing_counts_idx_m1, 
                    sizeof(int), cudaMemcpyDeviceToHost);
 
@@ -431,61 +516,43 @@ void SnnSimulation::update(const bool verbose)
 		firing_counts_idx_m1 += 2;
 	}
 
-
-
-	if (n_fired_total > reset_firing_times_ptr_threshold)
-	{
-		firing_times_write = firing_times;
-		firing_idcs_write = firing_idcs;
-		firing_counts_write = firing_counts;
-		firing_counts_idx = 0;
-		n_fired_total = 0;
-	}
-	else
+	if (n_fired_total <= reset_firing_times_ptr_threshold)
 	{
 		firing_times_write += n_fired_0;
 		firing_idcs_write += n_fired_0;
 		firing_counts_write += 2;
 	}
-
-	if (n_fired_total_m1 > reset_firing_times_ptr_threshold)
-	{
-		firing_times_read = firing_times;
-		firing_idcs_read = firing_idcs;
-		firing_counts_idx_m1 = 0;
-		n_fired_total_m1 = 0;
-	}
 	else
+	{
+		firing_times_write = firing_times;
+		firing_idcs_write = firing_idcs;
+		firing_counts_write = firing_counts;
+		firing_counts_idx = 1;
+		n_fired_total = 0;
+		// printf("\nt: %d (reset)\n", t);
+		resetting = true;
+	}
+
+	if (n_fired_total_m1 <= reset_firing_times_ptr_threshold)
 	{
 		firing_times_read += n_fired_m1;
 		firing_idcs_read += n_fired_m1;
 	}
+	else
+	{
+		firing_times_read = firing_times;
+		firing_idcs_read = firing_idcs;
 
+		n_fired_m1_to_end = n_fired_total;
+		firing_counts_idx_m1 = 1;
+		n_fired_total_m1 = 0;
+		// printf("\nt: %d (m1-reset)\n", t);
+		resetting = false;
+		// print_info();
+	}
 
-	// if (true)
-	// {
-		
-	// 	//firing_idcs.print_d_m();
-	// 	//firing_counts.print_d_m();
-	// 	//firing_times.print_d_m();
-
-
-	// 	//LG_sim_properties.print_d_m();
-	// }
-
-	// if (verbose)
-	// {
-		
-	// 	// debug_i.print_d_m();
-	// 	// debug_v.print_d_m();
-	// 	printf("\nt = %d", t);
-	// 	printf("\nn_fired_m1=%d", n_fired_m1);
-	// 	printf("\nn_fired_total=%d", n_fired_total);
-	// 	printf("\nn_fired_0=%d", n_fired_0);
-	// 	printf("\nn_fired_total_m1=%d", n_fired_total_m1);
-	// 	printf("\nfiring_counts_write=%p", (void * )firing_counts_write);
-	// 	printf("\n");
-	// 	// firing_idcs_write.print_d_m();
+	// if (print_cond){
+	// 	print_info();
 	// }
 
 	
@@ -501,6 +568,7 @@ void SnnSimulation::update(const bool verbose)
 		firing_idcs_read,
 		firing_idcs,
 		firing_times_read,
+		firing_times,
 		N_rep,
 		N_weights,
 		N_states,
@@ -511,6 +579,8 @@ void SnnSimulation::update(const bool verbose)
 		// debug_i.get_dp()
     );
 	
+	checkCudaErrors(cudaDeviceSynchronize());
+
 	t++;
 
 	cusparseCsrSetPointers(firing_times_sparse,

@@ -219,6 +219,7 @@ class LocationGroupProperties(PropertyTensor):
         thalamic_input_arr = torch.zeros(self._G)
         thalamic_input_arr[: int(self._G/2)] = 1
         self.thalamic_input = thalamic_input_arr
+        # self.thalamic_input = 1
         self.thalamic_inh_input_current = config.DefaultValues.ThalamicInput.inh_current
         self.thalamic_exc_input_current = config.DefaultValues.ThalamicInput.exc_current
 
