@@ -1,4 +1,4 @@
-from .ui_element import ButtonMenuAction
+from .ui_element import ButtonMenuAction, RenderedObjectSliders
 from .window import EngineWindow
 from PyQt6 import QtWidgets
 import qdarktheme

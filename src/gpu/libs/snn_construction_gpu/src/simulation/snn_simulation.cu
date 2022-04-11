@@ -91,7 +91,7 @@ __global__ void update_voltage_plot_(
 		if (n >= 0){
 			const int start_idx = plot_idx * plot_length * 2;
 			voltage_plot_data[start_idx + 2 * t + 1] = (
-				N_states[n + 2 * N] / 2. + __int2float_rn(plot_idx) * 100 + 50 );
+				N_states[n + 2 * N] / 200.f + __int2float_rn(plot_idx) + 0.5 );
 		}
 
 	}

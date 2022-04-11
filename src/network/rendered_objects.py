@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import numpy as np
 from typing import Optional, Union
 from vispy.scene import visuals
@@ -12,6 +13,48 @@ from .network_config import (
 # )
 
 
+@dataclass
+class Scale:
+    transform: STTransform
+
+    @property
+    def x(self):
+        return self.transform.scale[0]
+
+    @x.setter
+    def x(self, v):
+        self.change_scale(0, v)
+
+    @property
+    def y(self):
+        return self.transform.scale[1]
+
+    @y.setter
+    def y(self, v):
+        self.change_scale(1, v)
+
+    @property
+    def z(self):
+        return self.transform.scale[2]
+
+    @z.setter
+    def z(self, v):
+        self.change_scale(2, v)
+
+    @property
+    def a(self):
+        return self.transform.scale[3]
+
+    @a.setter
+    def a(self, v):
+        self.change_scale(3, v)
+
+    def change_scale(self, i, v):
+        sc_new = np.zeros(4)
+        sc_new[i] = v - self.transform.scale[i]
+        self.transform.scale = sc_new
+
+
 class RenderedObject:
 
     _grid_unit_shape: Optional[tuple] = (1, 1, 1)
@@ -19,6 +62,8 @@ class RenderedObject:
     def __init__(self):
 
         self._obj: Optional[Union[visuals.visuals.MarkersVisual]] = None
+
+        self.scale: Optional[Scale] = None
 
         self._pos_vbo = None
         self._ebo = None
@@ -73,9 +118,9 @@ class RenderedObject:
         self._obj.transform.move(tr)
         self._grid_coordinates[i] += 1 * d
 
-        print(f'MOVE {self.name}:',
-              # tr,
-              '\n', self._grid_coordinates)
+        # print(f'MOVE {self.name}:',
+        #       # tr,
+        #       '\n', self._grid_coordinates)
 
     def mv_left(self):
         self._move(0)
@@ -112,6 +157,8 @@ class NetworkScatterPlot(RenderedObject):
 
         self._obj.name = 'Neurons'
         self._shape = config.N_pos_shape
+
+        self.scale = Scale(self._obj.transform)
         
     @property
     def pos_vbo_glir_id(self):
@@ -123,25 +170,26 @@ def default_cube_transform(edge_lengths):
     return STTransform(translate=[edge_lengths[0] / 2, edge_lengths[1] / 2, edge_lengths[2] / 2])
 
 
-def default_box(shape: tuple,
-                segments: tuple = (1, 1, 1),
-                translate=None,
-                scale=None,
-                edge_color='white'):
-    if translate is None:
-        translate = [shape[0] / 2, shape[1] / 2, shape[2] / 2]
-    cube = visuals.Box(width=shape[0],
-                       height=shape[2],
-                       depth=shape[1],
-                       color=None,
-                       # color=(0.5, 0.5, 1, 0.5),
-                       width_segments=segments[0],  # X/RED
-                       height_segments=segments[2],  # Y/Blue
-                       depth_segments=segments[1],  # Z/Green
-                       edge_color=edge_color)
+class DefaultBox(visuals.Box):
 
-    cube.transform = STTransform(translate=translate, scale=scale)
-    return cube
+    def __init__(self, shape: tuple,
+                 segments: tuple = (1, 1, 1),
+                 translate=None,
+                 scale=None,
+                 edge_color='white'):
+
+        if translate is None:
+            translate = (shape[0] / 2, shape[1] / 2, shape[2] / 2)
+        super().__init__(width=shape[0],
+                         height=shape[2],
+                         depth=shape[1],
+                         color=None,
+                         # color=(0.5, 0.5, 1, 0.5),
+                         width_segments=segments[0],  # X/RED
+                         height_segments=segments[2],  # Y/Blue
+                         depth_segments=segments[1],  # Z/Green
+                         edge_color=edge_color)
+        self.transform = STTransform(translate=translate, scale=scale)
 
 
 # noinspection PyAbstractClass
@@ -151,9 +199,9 @@ class SelectorBox(RenderedObject):
 
     def __init__(self, grid_unit_shape, name=None):
         super().__init__()
-        self._obj: visuals.Box = default_box(shape=grid_unit_shape,
-                                             edge_color='orange', scale=[1.01, 1.01, 1.01])
-        self._obj.name = name or f'SelectorBox{SelectorBox.count}'
+        self._obj: visuals.Box = DefaultBox(shape=grid_unit_shape,
+                                            edge_color='orange', scale=[1.01, 1.01, 1.01])
+        self._obj.name = name or f'{self.__class__.__name__}{SelectorBox.count}'
         SelectorBox.count += 1
         self._shape = grid_unit_shape
 
@@ -163,7 +211,7 @@ def plot_pos(n_plots, plot_length):
     pos = np.empty((n_plots * plot_length, 2), np.float32)
 
     x = np.linspace(0, plot_length - 1, plot_length)
-    y = np.linspace(50, n_plots * 100 - 50, n_plots)
+    y = np.linspace(0.5, n_plots - 0.5, n_plots)
     # noinspection PyUnresolvedReferences
     pos[:, 0] = np.meshgrid(x, y)[0].flatten()
     # print('Generating points...')

@@ -22,13 +22,13 @@ from vispy import scene
 from vispy.scene.cameras import PanZoomCamera
 
 from network import SpikingNeuronNetwork
-from .ui_element import ButtonMenuAction, Slider
+from .ui_element import ButtonMenuAction, SpinBoxSlider
 
 
 @dataclass
-class UIElements:
+class ButtonMenuActions:
 
-    parent: Optional[QtWidgets.QMainWindow] = None
+    window: Optional[QtWidgets.QMainWindow] = None
 
     START_SIMULATION: ButtonMenuAction = ButtonMenuAction(menu_name='&Start Simulation',
                                                           menu_short_cut='F9',
@@ -52,31 +52,34 @@ class UIElements:
                                                           menu_short_cut='Ctrl+G', checkable=True)
 
     def __post_init__(self):
+        window_ = self.window
+        self.window = None
         dct = asdict(self)
-        dct.pop('parent')
+        self.window = window_
+        print()
         for k in dct:
             v = getattr(self, k)
             if isinstance(v, ButtonMenuAction):
                 if (v.menu_short_cut is not None) and (v.status_tip is not None):
                     v.status_tip = v.status_tip + f" ({v.menu_short_cut})"
                     print(v.status_tip)
-                if v.parent is None:
-                    v.parent = self.parent
+                if v.window is None:
+                    v.window = self.window
 
 
 class UI(object):
 
     class MenuBar:
-        class Actions:
+        class MenuActions:
             def __init__(self):
-                self.start: QAction = UIElements.START_SIMULATION.action()
-                self.pause: QAction = UIElements.PAUSE_SIMULATION.action()
-                self.toggle_outergrid: QAction = UIElements.TOGGLE_OUTERGRID.action()
-                self.exit: QAction = UIElements.EXIT_APP.action()
+                self.start: QAction = ButtonMenuActions.START_SIMULATION.action()
+                self.pause: QAction = ButtonMenuActions.PAUSE_SIMULATION.action()
+                self.toggle_outergrid: QAction = ButtonMenuActions.TOGGLE_OUTERGRID.action()
+                self.exit: QAction = ButtonMenuActions.EXIT_APP.action()
                 self.exit.triggered.connect(QApplication.instance().quit)
 
         def __init__(self, window):
-            self.actions = self.Actions()
+            self.actions = self.MenuActions()
 
             self.bar = QtWidgets.QMenuBar(window)
 
@@ -94,64 +97,58 @@ class UI(object):
     class UiLeft:
 
         class Buttons:
-            def __init__(self, window):
-                self.window = window
+            def __init__(self):
                 max_width = 140
-                self.start: QPushButton = UIElements.START_SIMULATION.button()
-                self.pause: QPushButton = UIElements.PAUSE_SIMULATION.button()
-                self.exit: QPushButton = UIElements.EXIT_APP.button()
-                self.toggle_outergrid: QPushButton = UIElements.TOGGLE_OUTERGRID.button()
+                self.start: QPushButton = ButtonMenuActions.START_SIMULATION.button()
+                self.pause: QPushButton = ButtonMenuActions.PAUSE_SIMULATION.button()
+                self.exit: QPushButton = ButtonMenuActions.EXIT_APP.button()
+                self.toggle_outergrid: QPushButton = ButtonMenuActions.TOGGLE_OUTERGRID.button()
 
                 self.toggle_outergrid.setMinimumWidth(max_width)
                 self.toggle_outergrid.setMaximumWidth(max_width)
                 self.start.setMaximumWidth(max_width)
                 self.exit.setMaximumWidth(max_width)
 
-                self.start.clicked.connect(self.button_clicked)
-                self.pause.clicked.connect(self.button_clicked)
                 self.exit.clicked.connect(QApplication.instance().quit)
-                self.exit.clicked.connect(self.button_clicked)
-                self.toggle_outergrid.clicked.connect(self.button_clicked)
-
-            def button_clicked(self):
-                sender = self.window.sender()
-                msg = f'Clicked: {sender.text()}'
-                self.window.statusBar().showMessage(msg)
 
         class Sliders:
-            def __init__(self):
-                self.thalamic_inh_input_current = Slider(name='Th. inh. Current [I]',
-                                                         prop_id='thalamic_inh_input_current',
-                                                         min_value=0, max_value=10000)
-                self.thalamic_exc_input_current = Slider('Th. exc. Current [I]',
-                                                         prop_id='thalamic_exc_input_current',
-                                                         min_value=0, max_value=10000)
+            def __init__(self, window):
+
+                self.thalamic_inh_input_current = SpinBoxSlider(name='Th. Inh. Input [I]',
+                                                                window=window,
+                                                                status_tip='Thalamic Inhibitory Input Current [I]',
+                                                                prop_id='thalamic_inh_input_current',
+                                                                min_value=0, max_value=10000)
+                self.thalamic_exc_input_current = SpinBoxSlider(name='Th. Exc. Current [I]',
+                                                                window=window,
+                                                                status_tip='Thalamic Excitatory Input Current [I]',
+                                                                prop_id='thalamic_exc_input_current',
+                                                                min_value=0, max_value=10000)
 
         def __init__(self, window, central_widget):
             self.frame = QFrame(central_widget)
-            self.buttons = self.Buttons(window)
-            self.sliders = self.Sliders()
-            vbox = QVBoxLayout(self.frame)
+            self.buttons = self.Buttons()
+            self.sliders = self.Sliders(window)
+            self.layout = QVBoxLayout(self.frame)
 
             # self.vbox.addStretch(1)
-            vbox.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
+            self.layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
             # splitter.setSizes([125, 150])
             # hbox.addStretch(1)
             play_pause_widget = QWidget(central_widget)
             play_pause_hbox = QHBoxLayout(play_pause_widget)
             play_pause_hbox.addWidget(self.buttons.start)
             play_pause_hbox.addWidget(self.buttons.pause)
-            vbox.addWidget(play_pause_widget)
-            # vbox.addWidget(splitter)
-            vbox.addWidget(self.buttons.toggle_outergrid)
-            vbox.addWidget(self.sliders.thalamic_inh_input_current.widget)
-            vbox.addWidget(self.sliders.thalamic_exc_input_current.widget)
-            vbox.addWidget(self.buttons.exit)
-            # vbox.width_max = 100
+            self.layout.addWidget(play_pause_widget)
+            self.layout.addWidget(self.buttons.toggle_outergrid)
+            self.layout.addWidget(self.sliders.thalamic_inh_input_current.widget)
+            self.layout.addWidget(self.sliders.thalamic_exc_input_current.widget)
+            self.layout.addWidget(self.buttons.exit)
+            # self.layout.width_max = 100
 
     def __init__(self, window):
 
-        self.ui_elements = UIElements(None)
+        self.ui_elements = ButtonMenuActions(window)
 
         self.menubar = self.MenuBar(window)
         window.setMenuBar(self.menubar.bar)
@@ -181,9 +178,9 @@ class UI(object):
         self.retranslate_ui(window)
 
     @staticmethod
-    def retranslate_ui(main_window):
+    def retranslate_ui(window):
         _translate = QtCore.QCoreApplication.translate
-        main_window.setWindowTitle(_translate("SNN Engine", "SNN Engine"))
+        window.setWindowTitle(_translate("SNN Engine", "SNN Engine"))
 
 
 @dataclass
@@ -310,26 +307,23 @@ class EngineWindow(QtWidgets.QMainWindow):
         def _plot_view(self,
                        row, col, title_str, n_plots, plot_length, cam_yscale=1,
                        height_min=None, height_max=None):
-            v = self.grid.add_view(row=row + 1, col=col, border_color='w', row_span=1)
-            if height_min is not None:
-                v.height_min = height_min
-            if height_max is not None:
-                v.height_max = height_max
-
-            scene.visuals.GridLines(parent=v.scene)
 
             title = scene.Label(title_str, color='white')
             title.height_min = 30
             title.height_max = 30
 
             yoffset = 0.05 * n_plots
-            y_axis = scene.AxisWidget(orientation='left', domain=(-yoffset, n_plots + yoffset))
+            y_axis = scene.AxisWidget(orientation='left',
+                                      # domain=(-yoffset, n_plots + yoffset)
+                                      )
             y_axis.stretch = (0.12, 1)
-            y_axis.width_min = 40
-            y_axis.width_max = 40
+            y_axis.width_min = 50
+            y_axis.width_max = y_axis.width_min
 
             xoffset = 0.05 * plot_length
-            x_axis = scene.AxisWidget(orientation='bottom', domain=(-xoffset, plot_length + xoffset))
+            x_axis = scene.AxisWidget(orientation='bottom',
+                                      # domain=(-xoffset, plot_length + xoffset)
+                                      )
             x_axis.stretch = (1, 0.15)
             x_axis.height_min = 20
             x_axis.height_max = 30
@@ -338,22 +332,36 @@ class EngineWindow(QtWidgets.QMainWindow):
             self.grid.add_widget(y_axis, row=row + 1, col=col - 1, row_span=1)
             self.grid.add_widget(x_axis, row=row + 1 + 1, col=col, row_span=1)
 
-            v.camera = PanZoomCamera((x_axis.axis.domain[0],
-                                      y_axis.axis.domain[0] * cam_yscale,
-                                      x_axis.axis.domain[1] + xoffset,
-                                      (y_axis.axis.domain[1] + yoffset) * cam_yscale))
+            # v.camera = PanZoomCamera((x_axis.axis.domain[0],
+            #                           y_axis.axis.domain[0] * cam_yscale,
+            #                           x_axis.axis.domain[1] + xoffset,
+            #                           (y_axis.axis.domain[1] + yoffset) * cam_yscale))
+            v = self.grid.add_view(row=row + 1, col=col, border_color='w', row_span=1)
+            if height_min is not None:
+                v.height_min = height_min
+            if height_max is not None:
+                v.height_max = height_max
+
+            scene.visuals.GridLines(parent=v.scene)
+            v.camera = PanZoomCamera((-xoffset,
+                                      -yoffset * cam_yscale,
+                                      plot_length + xoffset + xoffset,
+                                      (n_plots + yoffset + yoffset) * cam_yscale))
+            x_axis.link_view(v)
+            y_axis.link_view(v)
+            # v.camera.set_range()
             return v
 
         # noinspection PyTypeChecker
         def _voltage_plot_view(self, row, col):
             return self._plot_view(row=row, col=col, title_str="Voltage Plot",
                                    n_plots=self.n_voltage_plots, plot_length=self.voltage_plot_length,
-                                   cam_yscale=100, height_min=350)
+                                   cam_yscale=1, height_min=350)
 
         # noinspection PyTypeChecker
         def _scatter_plot_view(self, row, col):
             return self._plot_view(row=row, col=col, title_str="Scatter Plot",
-                                   n_plots=self.n_scatter_plots, plot_length=self.scatter_plot_length, cam_yscale=100,
+                                   n_plots=self.n_scatter_plots, plot_length=self.scatter_plot_length, cam_yscale=1,
                                    height_min=200, height_max=500)
 
         def set_keys(self, keys):

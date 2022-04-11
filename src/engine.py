@@ -4,13 +4,13 @@ from vispy.app import Timer
 import sys
 
 from network import SpikingNeuronNetwork, NetworkConfig, PlottingConfig
-from ui import EngineWindow, BackendApp
+from ui import EngineWindow, BackendApp, RenderedObjectSliders
 from simulation import vbodata2host
 
 
 class EngineConfig:
 
-    N: int = 3 * 10 ** 5
+    N: int = 3 * 10 ** 2
     T: int = 2000  # Max simulation duration
 
     device: int = 0
@@ -55,38 +55,36 @@ class Engine:
             'pagedown': self.network.selector_box.mv_down,
         })
 
+        self.window.ui.ui_left.layout.addWidget(
+            RenderedObjectSliders(
+                self.network.selector_box,
+                self.window
+            ).widget
+        )
+
         self.time_elapsed_until_last_off = 0
         # self.set_scale(0)
         self.update_switch = False
         self.started = False
         self.timer_on = Timer('auto', connect=self.update, start=False)
+
         self.buttons.start.clicked.connect(self.trigger_update_switch)
         self.buttons.pause.clicked.connect(self.trigger_update_switch)
         self.actions.start.triggered.connect(self.trigger_update_switch)
         self.actions.pause.triggered.connect(self.trigger_update_switch)
 
-        # self.buttons.cancel.clicked.connect(self.print_vbo_data)
         self.buttons.toggle_outergrid.clicked.connect(self.toggle_outergrid)
         self.actions.toggle_outergrid.triggered.connect(self.toggle_outergrid)
 
-        self.sliders.thalamic_inh_input_current.connect(
+        self.sliders.thalamic_inh_input_current.connect_property(
             self.network.GPU.G_props,
             EngineConfig.network_config.DefaultValues.ThalamicInput.inh_current)
 
-        # self.sliders.thalamic_inh_input_current.slider.valueChanged[int].connect(
-        #     self.change_inh_thalamic_input_current_slider)
-        # self.sliders.thalamic_inh_input_current.line_edit.returnPressed.connect(
-        #     self.change_inh_thalamic_input_current_text)
-        # self.sliders.thalamic_inh_input_current.value = (
-        #     EngineConfig.network_config.DefaultValues.ThalamicInput.inh_current
-        # )
+        self.sliders.thalamic_exc_input_current.connect_property(
+            self.network.GPU.G_props,
+            EngineConfig.network_config.DefaultValues.ThalamicInput.exc_current)
 
-        # self.sliders.thalamic_exc_input_current.slider.valueChanged[int].connect(
-        #     self.change_exc_thalamic_input_current_slider)
-        # self.sliders.thalamic_exc_input_current.line_edit.textChanged[str].connect(
-        #     self.change_exc_thalamic_input_current_text)
-        # self.sliders.thalamic_exc_input_current.value = (
-        #     EngineConfig.network_config.DefaultValues.ThalamicInput.exc_current)
+        self
 
     @property
     def actions(self):
@@ -109,36 +107,6 @@ class Engine:
             # self.set_scale(elapsed)
             self.network.GPU.update()
             self.window.scene_3d.time_txt2.text = str(self.network.GPU.Simulation.t)
-
-    def change_inh_thalamic_input_current_slider(self, value):
-        print('slider:', value)
-        if self.sliders.thalamic_inh_input_current.change_from_text is False:
-            self.sliders.thalamic_inh_input_current.change_from_slider = True
-            self.sliders.thalamic_inh_input_current.text_value = self.sliders.thalamic_inh_input_current.func(value)
-            self.network.GPU.G_props.thalamic_inh_input_current = value
-        else:
-            self.sliders.thalamic_inh_input_current.change_from_text = False
-
-    def change_inh_thalamic_input_current_text(self):
-        value = self.sliders.thalamic_inh_input_current.text_value
-        print('text:', value)
-        if self.sliders.thalamic_inh_input_current.change_from_slider is False:
-            self.sliders.thalamic_inh_input_current.change_from_text = True
-            if value != '':
-                self.sliders.thalamic_inh_input_current.set_slider_value(value)
-                # self.network.GPU.G_props.thalamic_inh_input_current = self.sliders.thalamic_inh_input_current.value
-                self.network.GPU.G_props.thalamic_inh_input_current = float(value)
-        else:
-            self.sliders.thalamic_inh_input_current.change_from_slider = False
-
-    def change_exc_thalamic_input_current_slider(self, value):
-        # print(value)
-        self.sliders.thalamic_exc_input_current.text_value = value
-        self.network.GPU.G_props.thalamic_exc_input_current = value
-
-    def change_exc_thalamic_input_current_text(self, value):
-        self.sliders.thalamic_exc_input_current.set_slider_value(value)
-        self.network.GPU.G_props.thalamic_exc_input_current = self.sliders.thalamic_exc_input_current.value
 
     def toggle_outergrid(self):
         self.network.outer_grid.visible = not self.network.outer_grid.visible

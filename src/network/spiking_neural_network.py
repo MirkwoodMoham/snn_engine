@@ -24,7 +24,7 @@ from .rendered_objects import (
     NetworkScatterPlot,
     RenderedObject,
     SelectorBox,
-    default_box,
+    DefaultBox,
     VoltagePlot,
     FiringScatterPlot
 )
@@ -755,9 +755,9 @@ class SpikingNeuronNetwork:
     @property
     def outer_grid(self) -> visuals.Box:
         if self._outer_grid is None:
-            self._outer_grid: visuals.Box = default_box(shape=self.config.N_pos_shape,
-                                                        scale=[.99, .99, .99],
-                                                        segments=self.config.G_shape)
+            self._outer_grid: visuals.Box = DefaultBox(shape=self.config.N_pos_shape,
+                                                       scale=[.99, .99, .99],
+                                                       segments=self.config.G_shape)
             # self._outer_grid.set_gl_state('translucent', blend=True, depth_test=True)
             # self._outer_grid.mesh.set_gl_state('translucent', blend=True, depth_test=True)
             self._outer_grid.visible = False
