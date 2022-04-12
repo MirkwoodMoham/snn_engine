@@ -4,7 +4,11 @@ from vispy.app import Timer
 import sys
 
 from network import SpikingNeuronNetwork, NetworkConfig, PlottingConfig
-from ui import EngineWindow, BackendApp, RenderedObjectSliders
+from gui import (
+    EngineWindow,
+    BackendApp,
+    RenderedObjectSliders
+)
 from simulation import vbodata2host
 
 
@@ -47,20 +51,17 @@ class Engine:
         self.network.initialize_GPU_arrays(EngineConfig.device)
 
         self.window.set_keys({
-            'left': self.network.selector_box.mv_left,
-            'right': self.network.selector_box.mv_right,
-            'up': self.network.selector_box.mv_fw,
-            'down': self.network.selector_box.mv_bw,
-            'pageup': self.network.selector_box.mv_up,
-            'pagedown': self.network.selector_box.mv_down,
+            'left': self.network.selector_box.pos.mv_left,
+            'right': self.network.selector_box.pos.mv_right,
+            'up': self.network.selector_box.pos.mv_fw,
+            'down': self.network.selector_box.pos.mv_bw,
+            'pageup': self.network.selector_box.pos.mv_up,
+            'pagedown': self.network.selector_box.pos.mv_down,
         })
 
-        self.window.ui.ui_left.layout.addWidget(
-            RenderedObjectSliders(
-                self.network.selector_box,
-                self.window
-            ).widget
-        )
+        selector_box_collapsible = RenderedObjectSliders(self.network.selector_box, self.window)
+
+        self.window.ui.ui_left.objects_collapsible.add(selector_box_collapsible)
 
         self.time_elapsed_until_last_off = 0
         # self.set_scale(0)
@@ -84,7 +85,9 @@ class Engine:
             self.network.GPU.G_props,
             EngineConfig.network_config.DefaultValues.ThalamicInput.exc_current)
 
-        self
+        self.sliders.thalamic_exc_input_current.connect_property(
+            self.network.GPU.G_props,
+            EngineConfig.network_config.DefaultValues.ThalamicInput.exc_current)
 
     @property
     def actions(self):

@@ -17,9 +17,12 @@ from PyQt6.QtWidgets import (
     QWidget
 )
 
+from .collapsible_widget.collapsible_widget import CollapsibleWidget
+from network import RenderedObject
+
 
 @dataclass
-class UIElement:
+class GUIElement:
     name: Optional[str] = None
     icon_name: Optional[str] = None
     status_tip: Optional[str] = None
@@ -64,7 +67,7 @@ class UIElement:
 
 
 @dataclass
-class ButtonMenuAction(UIElement):
+class ButtonMenuAction(GUIElement):
     menu_name: Optional[str] = None
     menu_short_cut: Optional[str] = None
     _action = None
@@ -91,6 +94,7 @@ class ButtonMenuAction(UIElement):
     def button(self):
         if self._button is None:
             self._button = QPushButton(self.name, self.window)
+            self._button.setMinimumHeight(28)
             self._init(self._button)
             if self.connects is not None:
                 for callable_ in self.connects:
@@ -106,14 +110,15 @@ class ButtonMenuAction(UIElement):
 
 
 class CustomQSlider(QSlider):
-    def __init__(self, *arg, ui_element: Optional[UIElement] = None,
+    def __init__(self, *arg,
+                 ui_element: Optional[GUIElement] = None,
                  minimum: Optional[int] = None,
                  maximum: Optional[int] = None,
-                 **kwargs):
-        super().__init__(*arg, **kwargs)
+                 single_step: Optional[int] = 100):
+        super().__init__(*arg)
         self.ui_element = ui_element
         self.wheel_func = None
-        self.scroll_step = 100
+        self.scroll_step = single_step
         self.mouse_function = None
 
         if minimum is not None:
@@ -133,9 +138,34 @@ class CustomQSlider(QSlider):
         super().keyPressEvent(a0)
 
 
+class CustomQDoubleSpinBox(QDoubleSpinBox):
+
+    def __init__(self,
+                 parent=None,
+                 ui_element: Optional[GUIElement] = None,
+                 precision=2):
+        super().__init__(parent)
+        self.ui_element = ui_element
+        self.wheel_func = None
+        self.precision = precision
+
+    def wheelEvent(self, e: QtGui.QWheelEvent) -> None:
+        super().wheelEvent(e)
+        if self.wheel_func is not None:
+            self.setValue(round(self.value(), self.precision))
+            self.wheel_func(self.value(), from_scroll=True)
+
+    def keyPressEvent(self, a0: QtGui.QKeyEvent) -> None:
+        super().keyPressEvent(a0)
+        if self.wheel_func is not None:
+            self.setValue(round(self.value(), self.precision))
+            self.wheel_func(self.value(), from_scroll=True)
+
+
 # noinspection PyAttributeOutsideInit
 @dataclass
-class SpinBoxSlider(UIElement):
+class SpinBoxSlider(GUIElement):
+
     prop_id: str = None
     property_container: Any = None
     min_value: Optional[int] = None
@@ -145,6 +175,10 @@ class SpinBoxSlider(UIElement):
     func_inv_: Optional[Callable] = lambda x: int(x * 100)
     orientation: QtCore.Qt.Orientation = QtCore.Qt.Orientation.Horizontal
     boxlayout_orientation: QtCore.Qt.Orientation = QtCore.Qt.Orientation.Vertical
+    maximum_width: Optional[int] = None
+    fixed_width: Optional[int] = None
+    single_step_spin_box: float = 0.1
+    single_step_slider: Optional[int] = 100
 
     def __post_init__(self):
         self.property_container = None
@@ -152,19 +186,26 @@ class SpinBoxSlider(UIElement):
         self.widget = QWidget()
         if self.status_tip is not None:
             self.widget.setStatusTip(self.status_tip)
+        if self.maximum_width is not None:
+            self.widget.setMaximumWidth(self.maximum_width)
+        if self.fixed_width is not None:
+            self.widget.setFixedWidth(self.fixed_width)
 
         if self.boxlayout_orientation == QtCore.Qt.Orientation.Vertical:
             self.layout_box = QVBoxLayout(self.widget)
+            self.widget.setFixedHeight(84)
         else:
             self.layout_box = QHBoxLayout(self.widget)
+            self.widget.setFixedHeight(28)
 
         self.label = QLabel(self.name)
-        self.spin_box = QDoubleSpinBox()
-        self.spin_box.setSingleStep(0.1)
+        self.spin_box = CustomQDoubleSpinBox(ui_element=self)
+        self.spin_box.setSingleStep(self.single_step_spin_box)
 
         # noinspection PyTypeChecker
         self.slider = CustomQSlider(self.orientation, ui_element=self,
-                                    minimum=self.min_value, maximum=self.max_value)
+                                    minimum=self.min_value, maximum=self.max_value,
+                                    single_step=self.single_step_slider)
 
         self.layout_box.addWidget(self.label)
         self.layout_box.addWidget(self.spin_box)
@@ -285,34 +326,60 @@ class SpinBoxSlider(UIElement):
         self.spin_box.lineEdit().returnPressed.connect(self.changed_spinbox)
 
 
-class RenderedObjectSliders:
-    def __init__(self, obj, window):
+class RenderedObjectSliders(CollapsibleWidget):
 
-        self.widget = QWidget()
+    @dataclass
+    class ScaleSliders:
+        x: SpinBoxSlider = None
+        y: SpinBoxSlider = None
+        z: SpinBoxSlider = None
+        a: SpinBoxSlider = None
 
-        layout = QVBoxLayout(self.widget)
-        self.label = QLabel(obj.name)
+    def __init__(self, obj: RenderedObject, window, parent=None, scale_sliders=None):
 
-        scale_frame = QFrame(self.widget)
+        super().__init__(parent=parent, title=obj.name)
+
+        self.scale = self.ScaleSliders()
+
+        scale_frame = QFrame(self)
+        # scale_frame.setFixedHeight(450)
+        scale_frame.setFixedWidth(450)
+        # scale_frame.setMinimumHeight(135)
+        # scale_frame.setFixedWidth(True)
         scale_layout = QHBoxLayout(scale_frame)
-        scale_layout.setSpacing(0)
+        # scale_layout.setSpacing(0)
         scale_layout.setContentsMargins(15, 0, 0, 0)
         scale_sliders_widget = QWidget()
-        scale_sliders_widget.setMaximumHeight(145)
+        # scale_sliders_widget.setMinimumHeight(135)
+        scale_sliders_widget.setMaximumHeight(135)
         scale_sliders_layout = QVBoxLayout(scale_sliders_widget)
+        scale_sliders_layout.setContentsMargins(0, 0, 0, 0)
         scale_layout.addWidget(QLabel('Scale'))
-        # sliders = []
+
+        sliders = []
         for i in ('x', 'y', 'z'):
+
             sbs = SpinBoxSlider(name=i + ':',
                                 window=window,
                                 boxlayout_orientation=QtCore.Qt.Orientation.Horizontal,
                                 status_tip=f"{obj.name}.scale.{i}",
                                 prop_id=i,
-                                )
-            sbs.widget.setMaximumHeight(34)
+                                single_step_spin_box=0.01,
+                                single_step_slider=10)
+            setattr(self.scale, i, sbs)
+            sbs.widget.setFixedHeight(35)
             scale_sliders_layout.addWidget(sbs.widget)
+            sliders.append(sbs)
+
+            sbs.connect_property(
+                obj.scale,
+                getattr(obj.scale, i))
+
+        # scale_frame.setMinimumHeight(25 + 35 * len(sliders))
+        scale_frame.setFixedHeight(25 + 35 * len(sliders))
 
         scale_layout.addWidget(scale_sliders_widget)
-        layout.addWidget(self.label)
-        layout.addWidget(scale_frame)
+        self.add(scale_frame)
 
+    def connect(self):
+        pass

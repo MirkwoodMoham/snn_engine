@@ -12,133 +12,7 @@ from .network_config import (
 #     NeuronTypeGroup
 # )
 
-
-@dataclass
-class Scale:
-    transform: STTransform
-
-    @property
-    def x(self):
-        return self.transform.scale[0]
-
-    @x.setter
-    def x(self, v):
-        self.change_scale(0, v)
-
-    @property
-    def y(self):
-        return self.transform.scale[1]
-
-    @y.setter
-    def y(self, v):
-        self.change_scale(1, v)
-
-    @property
-    def z(self):
-        return self.transform.scale[2]
-
-    @z.setter
-    def z(self, v):
-        self.change_scale(2, v)
-
-    @property
-    def a(self):
-        return self.transform.scale[3]
-
-    @a.setter
-    def a(self, v):
-        self.change_scale(3, v)
-
-    def change_scale(self, i, v):
-        sc_new = np.zeros(4)
-        sc_new[i] = v - self.transform.scale[i]
-        self.transform.scale = sc_new
-
-
-class RenderedObject:
-
-    _grid_unit_shape: Optional[tuple] = (1, 1, 1)
-
-    def __init__(self):
-
-        self._obj: Optional[Union[visuals.visuals.MarkersVisual]] = None
-
-        self.scale: Optional[Scale] = None
-
-        self._pos_vbo = None
-        self._ebo = None
-        self._parent = None
-
-        self._shape = None
-
-        self._grid_coordinates = np.zeros(3)
-
-        self._glir = None
-
-    def __call__(self):
-        return self._obj
-
-    @property
-    def obj(self):
-        return self._obj
-
-    @property
-    def name(self):
-        try:
-            # noinspection PyUnresolvedReferences
-            return self._obj.name
-        except AttributeError:
-            return str(self)
-
-    @property
-    def glir(self):
-        if self._glir is None:
-            self._glir = get_current_canvas().context.glir
-        return self._glir
-
-    @property
-    def shape(self):
-        return self._shape
-
-    @property
-    def pos_vbo_glir_id(self):
-        raise NotImplementedError
-
-    # noinspection PyProtectedMember
-    @property
-    def pos_vbo(self):
-        if self._pos_vbo is None:
-            self._pos_vbo = get_current_canvas().context.shared.parser._objects[self.pos_vbo_glir_id].handle
-        return self._pos_vbo
-
-    def _move(self, i, d=1):
-        tr = np.zeros(3)
-        tr[i] += d * self._grid_unit_shape[i]
-
-        self._obj.transform.move(tr)
-        self._grid_coordinates[i] += 1 * d
-
-        # print(f'MOVE {self.name}:',
-        #       # tr,
-        #       '\n', self._grid_coordinates)
-
-    def mv_left(self):
-        self._move(0)
-
-    def mv_right(self):
-        self._move(0, -1)
-
-    def mv_fw(self):
-        self._move(1, -1)
-
-    def mv_bw(self):
-        self._move(1)
-
-    def mv_up(self):
-        self._move(2)
-
-    def mv_down(self):
-        self._move(2, -1)
+from rendered_object import RenderedObject, Scale, Position
 
 
 class NetworkScatterPlot(RenderedObject):
@@ -204,6 +78,9 @@ class SelectorBox(RenderedObject):
         self._obj.name = name or f'{self.__class__.__name__}{SelectorBox.count}'
         SelectorBox.count += 1
         self._shape = grid_unit_shape
+
+        self.scale = Scale(self._obj.transform, obj=self._obj)
+        self.pos = Position(self._obj.transform)
 
 
 def plot_pos(n_plots, plot_length):

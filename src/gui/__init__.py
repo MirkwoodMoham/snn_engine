@@ -1,3 +1,4 @@
+from .collapsible_widget.collapsible_widget import CollapsibleWidget
 from .ui_element import ButtonMenuAction, RenderedObjectSliders
 from .window import EngineWindow
 from PyQt6 import QtWidgets
