@@ -149,17 +149,39 @@ class CustomQDoubleSpinBox(QDoubleSpinBox):
         self.wheel_func = None
         self.precision = precision
 
-    def wheelEvent(self, e: QtGui.QWheelEvent) -> None:
-        super().wheelEvent(e)
+    def set_value(self):
         if self.wheel_func is not None:
             self.setValue(round(self.value(), self.precision))
             self.wheel_func(self.value(), from_scroll=True)
 
+    def mousePressEvent(self, e: QtGui.QMouseEvent) -> None:
+        super().mousePressEvent(e)
+        opt = QtWidgets.QStyleOptionSpinBox()
+        self.initStyleOption(opt)
+        rect_up = self.style().subControlRect(
+            QtWidgets.QStyle.ComplexControl.CC_SpinBox,
+            opt,
+            QtWidgets.QStyle.SubControl.SC_SpinBoxUp)
+        if rect_up.contains(e.pos()):
+            # print('UP')
+            self.set_value()
+        else:
+            rect_down = self.style().subControlRect(
+                QtWidgets.QStyle.ComplexControl.CC_SpinBox,
+                opt,
+                QtWidgets.QStyle.SubControl.SC_SpinBoxDown)
+            if rect_down.contains(e.pos()):
+                # print('DOWN')
+                self.set_value()
+
+    def wheelEvent(self, e: QtGui.QWheelEvent) -> None:
+        super().wheelEvent(e)
+        self.set_value()
+
     def keyPressEvent(self, a0: QtGui.QKeyEvent) -> None:
         super().keyPressEvent(a0)
-        if self.wheel_func is not None:
-            self.setValue(round(self.value(), self.precision))
-            self.wheel_func(self.value(), from_scroll=True)
+        if a0.key() == QtCore.Qt.Key.Key_Enter:
+            self.set_value()
 
 
 # noinspection PyAttributeOutsideInit

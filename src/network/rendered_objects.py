@@ -1,8 +1,6 @@
-from dataclasses import dataclass
 import numpy as np
-from typing import Optional, Union
+# from typing import Optional, Union
 from vispy.scene import visuals
-from vispy.gloo.context import get_current_canvas
 from vispy.visuals.transforms import STTransform
 
 from .network_config import (
@@ -15,6 +13,7 @@ from .network_config import (
 from rendered_object import RenderedObject, Scale, Position
 
 
+# noinspection PyAbstractClass
 class NetworkScatterPlot(RenderedObject):
 
     def __init__(self, config: NetworkConfig):
@@ -35,7 +34,7 @@ class NetworkScatterPlot(RenderedObject):
         self.scale = Scale(self._obj.transform)
         
     @property
-    def pos_vbo_glir_id(self):
+    def vbo_glir_id(self):
         # noinspection PyProtectedMember
         return self._obj._vbo.id
 
@@ -66,21 +65,37 @@ class DefaultBox(visuals.Box):
         self.transform = STTransform(translate=translate, scale=scale)
 
 
-# noinspection PyAbstractClass
 class SelectorBox(RenderedObject):
 
     count: int = 0
 
+    # noinspection PyUnresolvedReferences
     def __init__(self, grid_unit_shape, name=None):
         super().__init__()
         self._obj: visuals.Box = DefaultBox(shape=grid_unit_shape,
-                                            edge_color='orange', scale=[1.01, 1.01, 1.01])
+                                            edge_color='orange', scale=[1.0, 1.0, 1.0])
         self._obj.name = name or f'{self.__class__.__name__}{SelectorBox.count}'
         SelectorBox.count += 1
         self._shape = grid_unit_shape
 
-        self.scale = Scale(self._obj.transform, obj=self._obj)
-        self.pos = Position(self._obj.transform)
+        self.scale = Scale(self)
+        self.pos = Position(self, _grid_unit_shape=grid_unit_shape)
+
+        self.pos_cpu = np.unique(self._obj._border._meshdata._vertices, axis=0)[[0, 1, 2, 4]]
+        assert ((self.pos_cpu[1, ] - self.pos_cpu[0, ]) == (np.array([0, 0, self.pos_cpu[0, 2]]) * - 2)).all()
+        assert ((self.pos_cpu[2, ] - self.pos_cpu[0, ]) == (np.array([0, self.pos_cpu[0, 1], 0]) * - 2)).all()
+        assert ((self.pos_cpu[3, ] - self.pos_cpu[0, ]) == (np.array([self.pos_cpu[0, 0], 0, 0]) * - 2)).all()
+        print()
+
+    @property
+    def vbo_glir_id(self):
+        return self._obj._border._vertices.id
+
+    @property
+    def unique_vertices_cpu(self):
+        return (self.pos_cpu
+                * self.transform.scale[:3]
+                + self.transform.translate[:3])
 
 
 def plot_pos(n_plots, plot_length):
@@ -104,6 +119,7 @@ def pos_color(size):
     return color
 
 
+# noinspection PyAbstractClass
 class VoltagePlot(RenderedObject):
     
     def __init__(self, n_plots, plot_length):
@@ -122,11 +138,11 @@ class VoltagePlot(RenderedObject):
         self._obj.transform = STTransform()
 
     @property
-    def pos_vbo_glir_id(self):
+    def vbo_glir_id(self):
         return self._obj._line_visual._pos_vbo.id
-        # return self._obj._line_visual._vbo.id
 
 
+# noinspection PyAbstractClass
 class FiringScatterPlot(RenderedObject):
 
     def __init__(self, n_plots, plot_length):
@@ -146,6 +162,6 @@ class FiringScatterPlot(RenderedObject):
         self._obj.set_gl_state('translucent', blend=True, depth_test=True)
 
     @property
-    def pos_vbo_glir_id(self):
+    def vbo_glir_id(self):
         # noinspection PyProtectedMember
         return self._obj._vbo.id

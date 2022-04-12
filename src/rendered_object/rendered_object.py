@@ -6,18 +6,97 @@ from vispy.gloo.context import get_current_canvas
 from vispy.visuals.transforms import STTransform
 
 
+class RenderedObject:
+
+    def __init__(self):
+
+        self._obj: Optional[Union[visuals.visuals.MarkersVisual]] = None
+
+        self.scale: Optional[Scale] = None
+
+        self._vbo = None
+        self._pos_vbo = None
+        self._ebo = None
+        self._parent = None
+
+        self._shape = None
+
+        self._glir = None
+
+    def __call__(self):
+        return self._obj
+
+    @property
+    def unique_vertices_cpu(self):
+        raise NotImplementedError
+
+    @property
+    def obj(self):
+        return self._obj
+
+    @property
+    def transform(self) -> STTransform:
+        return self._obj.transform
+
+    @property
+    def name(self):
+        try:
+            # noinspection PyUnresolvedReferences
+            return self._obj.name
+        except AttributeError:
+            return str(self)
+
+    @property
+    def glir(self):
+        if self._glir is None:
+            self._glir = get_current_canvas().context.glir
+        return self._glir
+
+    @property
+    def shape(self):
+        return self._shape
+
+    @property
+    def pos_vbo_glir_id(self):
+        return self.vbo_glir_id
+
+    @property
+    def vbo_glir_id(self):
+        raise NotImplementedError
+
+    # noinspection PyProtectedMember
+    @property
+    def pos_vbo(self):
+        if self._pos_vbo is None:
+            self._pos_vbo = get_current_canvas().context.shared.parser._objects[self.pos_vbo_glir_id].handle
+        return self._pos_vbo
+
+    @property
+    def vbo(self):
+        if self._vbo is None:
+            self._vbo = get_current_canvas().context.shared.parser._objects[self.vbo_glir_id].handle
+        return self._vbo
+
+
 @dataclass
 class _STR:
-    transform: STTransform
-    prop_id: str
-    obj: str = None
+    parent: RenderedObject
+    prop_id: str = 'some key'
 
     def change_prop(self, i, v):
-        sc_new = getattr(self.transform, self.prop_id)
+        sc_old = getattr(self.transform, self.prop_id)
+        sc_new = sc_old.copy()
         sc_new[i] = v
         setattr(self.transform, self.prop_id, sc_new)
-        if self.obj is not None:
-            print(self.obj._border._meshdata._vertices)
+        print()
+        print(self.parent.unique_vertices_cpu)
+        # if self.obj is not None:
+        #     # noinspection PyUnresolvedReferences
+        #     print(self.obj._border._meshdata._vertices)
+
+    @property
+    def transform(self) -> STTransform:
+        return self.parent.transform
 
     @property
     def x(self):
@@ -71,6 +150,10 @@ class Position(_STR):
 
         self.transform.move(tr)
         self._grid_coordinates[i] += 1 * d
+        print(self.parent.unique_vertices_cpu)
+        # if self.parent is not None:
+        #     # noinspection PyUnresolvedReferences
+        #     print(self.obj._border._meshdata._vertices)
 
     def mv_left(self):
         self._move(0)
@@ -91,54 +174,4 @@ class Position(_STR):
         self._move(2, -1)
 
 
-class RenderedObject:
 
-    def __init__(self):
-
-        self._obj: Optional[Union[visuals.visuals.MarkersVisual]] = None
-
-        self.scale: Optional[Scale] = None
-
-        self._pos_vbo = None
-        self._ebo = None
-        self._parent = None
-
-        self._shape = None
-
-        self._glir = None
-
-    def __call__(self):
-        return self._obj
-
-    @property
-    def obj(self):
-        return self._obj
-
-    @property
-    def name(self):
-        try:
-            # noinspection PyUnresolvedReferences
-            return self._obj.name
-        except AttributeError:
-            return str(self)
-
-    @property
-    def glir(self):
-        if self._glir is None:
-            self._glir = get_current_canvas().context.glir
-        return self._glir
-
-    @property
-    def shape(self):
-        return self._shape
-
-    @property
-    def pos_vbo_glir_id(self):
-        raise NotImplementedError
-
-    # noinspection PyProtectedMember
-    @property
-    def pos_vbo(self):
-        if self._pos_vbo is None:
-            self._pos_vbo = get_current_canvas().context.shared.parser._objects[self.pos_vbo_glir_id].handle
-        return self._pos_vbo

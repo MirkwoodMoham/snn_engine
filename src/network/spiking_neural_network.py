@@ -1,4 +1,6 @@
 # from dataclasses import asdict, dataclass
+
+from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 # import time
@@ -32,6 +34,14 @@ from .network_states import IzhikevichModel, LocationGroupProperties
 
 # noinspection PyUnresolvedReferences
 from gpu import snn_construction_gpu, snn_simulation_gpu
+
+
+@dataclass
+class VBOCollection:
+    N_pos: int
+    voltage: int
+    firings: int
+    selector_box: int
 
 
 class NetworkDataShapes:
@@ -158,14 +168,12 @@ class NetworkGPUArrays(GPUArrayCollection):
 
     def __init__(self,
                  config: NetworkConfig,
-                 pos_vbo: int,
                  type_group_dct: dict,
                  type_group_conn_dct: dict,
                  device: int,
                  T: int,
-                 voltage_plot_vbo: int,
-                 firing_scatter_plot_vbo: int,
                  plotting_config: PlottingConfig,
+                 vbos: VBOCollection,
                  model=IzhikevichModel,
                  ):
 
@@ -177,12 +185,14 @@ class NetworkGPUArrays(GPUArrayCollection):
 
         shapes = NetworkDataShapes(config=config, T=T, n_N_states=model.__len__(), plotting_config=plotting_config)
 
-        self.plotting_arrays = self.PlottingGPUArrays(device=device, shapes=shapes, voltage_plot_vbo=voltage_plot_vbo,
-                                                      firing_scatter_plot_vbo=firing_scatter_plot_vbo,
+        # self.selector_box = self._selector_box(())
+
+        self.plotting_arrays = self.PlottingGPUArrays(device=device, shapes=shapes, voltage_plot_vbo=vbos.voltage,
+                                                      firing_scatter_plot_vbo=vbos.firings,
                                                       bprint_allocated_memory=self.bprint_allocated_memory)
 
         self.curand_states = self._curand_states()
-        self.N_pos = self._N_pos(shape=shapes.N_pos, vbo=pos_vbo)
+        self.N_pos = self._N_pos(shape=shapes.N_pos, vbo=vbos.N_pos)
 
         (self.N_G,
          self.G_neuron_counts,
@@ -208,8 +218,7 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.N_states = model(shape=shapes.N_states, device=self.device,
                               types_tensor=self.N_G[:, self.config.N_G_neuron_type_col])
 
-        self.G_props = LocationGroupProperties(
-            shape=shapes.G_props, device=self.device, config=self.config)
+        self.G_props = LocationGroupProperties(shape=shapes.G_props, device=self.device, config=self.config)
 
         self.print_allocated_memory('end')
 
@@ -346,6 +355,13 @@ class NetworkGPUArrays(GPUArrayCollection):
                 orange = torch.Tensor([1, .5, .2])
                 N_pos.tensor[g.start_idx:g.end_idx + 1, 7:10] = orange  # Inhibitory Neurons -> Orange
         return N_pos
+
+    def _selector_box(self, shape, vbo):
+        nbytes_float32 = 4
+        b = RegisteredGPUArray.from_vbo(
+            vbo, config=GPUArrayConfig(shape=shape, strides=(shape[1] * nbytes_float32, nbytes_float32),
+                                       dtype=np.float32, device=self.device))
+        return b
 
     def _G_pos(self, shape):
         groups = torch.arange(self._config.G, device=self.device)
@@ -786,17 +802,21 @@ class SpikingNeuronNetwork:
 
     # noinspection PyPep8Naming
     def initialize_GPU_arrays(self, device):
+        vbos = VBOCollection(
+            N_pos=self._network_scatter_plot.vbo,
+            voltage=self.voltage_plot.pos_vbo,
+            firings=self.firing_scatter_plot.pos_vbo,
+            selector_box=self.selector_box.vbo
+        )
         self.GPU = NetworkGPUArrays(
             config=self.config,
-            pos_vbo=self._network_scatter_plot.pos_vbo,
             type_group_dct=self.type_group_dct,
             type_group_conn_dct=self.type_group_conn_dict,
             device=device,
             T=self.T,
-            voltage_plot_vbo=self.voltage_plot.pos_vbo,
-            firing_scatter_plot_vbo=self.firing_scatter_plot.pos_vbo,
             plotting_config=self.plotting_config,
-            model=self.model)
+            model=self.model,
+            vbos=vbos)
 
     def sort_pos(self):
         """
