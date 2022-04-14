@@ -10,7 +10,8 @@ class RenderedObject:
 
     def __init__(self):
 
-        self._obj: Optional[Union[visuals.visuals.MarkersVisual]] = None
+        self._obj: Optional[Union[visuals.visuals.MarkersVisual,
+                                  visuals.visuals.LineVisual]] = None
 
         self.scale: Optional[Scale] = None
 
@@ -88,11 +89,8 @@ class _STR:
         sc_new = sc_old.copy()
         sc_new[i] = v
         setattr(self.transform, self.prop_id, sc_new)
-        print()
-        print(self.parent.unique_vertices_cpu)
-        # if self.obj is not None:
-        #     # noinspection PyUnresolvedReferences
-        #     print(self.obj._border._meshdata._vertices)
+        # print()
+        # print(self.parent.unique_vertices_cpu)
 
     @property
     def transform(self) -> STTransform:
@@ -150,10 +148,6 @@ class Position(_STR):
 
         self.transform.move(tr)
         self._grid_coordinates[i] += 1 * d
-        print(self.parent.unique_vertices_cpu)
-        # if self.parent is not None:
-        #     # noinspection PyUnresolvedReferences
-        #     print(self.obj._border._meshdata._vertices)
 
     def mv_left(self):
         self._move(0)

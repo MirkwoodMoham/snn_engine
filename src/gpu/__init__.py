@@ -5,6 +5,11 @@ from gpu.libs.snn_construction_gpu.build import (
 
 from .kernel_launch_parameter import DeviceProperties
 
+from .gpu_arrays import (
+    GPUArrayCollection,
+    GPUArrayConfig,
+    RegisteredGPUArray
+)
 # print_random_numbers
 # def func2():
 #     print(10)

@@ -1,5 +1,5 @@
 import numba.cuda
-import numpy as np
+from vispy import gloo
 from vispy.app import Timer
 import sys
 
@@ -122,6 +122,11 @@ class Engine:
             self.buttons.toggle_outergrid.setChecked(False)
             self.actions.toggle_outergrid.setChecked(False)
 
+        from vispy.visuals.transforms import STTransform, TransformSystem
+        a: STTransform = self.network.selected_group_boxes.obj.transform
+        a.move((0,0,.5))
+        print()
+
     def trigger_update_switch(self):
         self.update_switch = not self.update_switch
         if self.update_switch is True:
@@ -150,6 +155,9 @@ class Engine:
 
 
 if __name__ == '__main__':
+
+    gloo.gl.use_gl('gl+')
+
     eng = Engine()
     if sys.flags.interactive != 1:
         eng.run()

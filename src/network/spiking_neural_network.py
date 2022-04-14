@@ -1,6 +1,4 @@
-# from dataclasses import asdict, dataclass
-
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 import numpy as np
 import pandas as pd
 # import time
@@ -8,11 +6,6 @@ import torch
 from typing import Dict, Optional
 from vispy.scene import visuals
 
-from .gpu_arrays import (
-    GPUArrayConfig,
-    RegisteredGPUArray,
-    GPUArrayCollection
-)
 from .network_config import (
     NetworkConfig,
     PlottingConfig
@@ -22,9 +15,10 @@ from .network_structures import (
     NeuronTypeGroup,
     NeuronTypeGroupConnection
 )
+from rendering import RenderedObject
 from .rendered_objects import (
-    NetworkScatterPlot,
-    RenderedObject,
+    BoxSystem,
+    RenderedNeurons,
     SelectorBox,
     DefaultBox,
     VoltagePlot,
@@ -33,7 +27,13 @@ from .rendered_objects import (
 from .network_states import IzhikevichModel, LocationGroupProperties
 
 # noinspection PyUnresolvedReferences
-from gpu import snn_construction_gpu, snn_simulation_gpu
+from gpu import (
+    snn_construction_gpu,
+    snn_simulation_gpu,
+    GPUArrayConfig,
+    RegisteredGPUArray,
+    GPUArrayCollection
+)
 
 
 @dataclass
@@ -42,6 +42,10 @@ class VBOCollection:
     voltage: int
     firings: int
     selector_box: int
+
+    def __post_init__(self):
+        for k, v in asdict(self).items():
+            setattr(self, k, int(v))
 
 
 class NetworkDataShapes:
@@ -211,9 +215,9 @@ class NetworkGPUArrays(GPUArrayCollection):
                                                                               G_neuron_counts=self.G_neuron_counts)
 
         (self.N_rep,
-         self.N_delays) = self._set_N_rep(shapes=shapes, curand_states=self.curand_states)
+         self.N_delays) = self._N_rep_and_N_delays(shapes=shapes, curand_states=self.curand_states)
 
-        self.N_weights = self._set_N_weights(shapes.N_weights)
+        self.N_weights = self._N_weights(shapes.N_weights)
 
         self.N_states = model(shape=shapes.N_states, device=self.device,
                               types_tensor=self.N_G[:, self.config.N_G_neuron_type_col])
@@ -528,7 +532,7 @@ class NetworkGPUArrays(GPUArrayCollection):
 
         return G_conn_probs, G_exp_ccsyn_per_src_type_and_delay, G_exp_exc_ccsyn_per_snk_type_and_delay
 
-    def _set_N_rep(self, shapes, curand_states):
+    def _N_rep_and_N_delays(self, shapes, curand_states):
 
         N, S, D, G = self.config.N, self.config.S, self.config.D, self.config.G
 
@@ -641,7 +645,7 @@ class NetworkGPUArrays(GPUArrayCollection):
 
         return N_rep, N_delays
 
-    def _set_N_weights(self, shape):
+    def _N_weights(self, shape):
         weights = self.fzeros(shape)
         for gc in self.type_group_conns:
             weights[gc.location[0]: gc.location[0] + gc.conn_shape[0],
@@ -724,7 +728,7 @@ class SpikingNeuronNetwork:
 
         self.sort_pos()
 
-        self._network_scatter_plot = NetworkScatterPlot(self.config)
+        self._neurons = RenderedNeurons(self.config)
 
         self.GPU: Optional[NetworkGPUArrays] = None
 
@@ -732,6 +736,7 @@ class SpikingNeuronNetwork:
         self._selector_box: Optional[SelectorBox] = None
         self._voltage_plot: Optional[VoltagePlot] = None
         self._firing_scatter_plot: Optional[VoltagePlot] = None
+        self._selected_group_boxes: Optional[BoxSystem] = None
 
         self.validate()
 
@@ -765,15 +770,16 @@ class SpikingNeuronNetwork:
         return c
 
     @property
-    def scatter_plot(self) -> NetworkScatterPlot:
-        return self._network_scatter_plot
+    def neurons(self) -> RenderedNeurons:
+        return self._neurons
 
     @property
     def outer_grid(self) -> visuals.Box:
         if self._outer_grid is None:
             self._outer_grid: visuals.Box = DefaultBox(shape=self.config.N_pos_shape,
                                                        scale=[.99, .99, .99],
-                                                       segments=self.config.G_shape)
+                                                       segments=self.config.G_shape,
+                                                       depth_test=False)
             # self._outer_grid.set_gl_state('translucent', blend=True, depth_test=True)
             # self._outer_grid.mesh.set_gl_state('translucent', blend=True, depth_test=True)
             self._outer_grid.visible = False
@@ -781,7 +787,7 @@ class SpikingNeuronNetwork:
         return self._outer_grid
 
     @property
-    def selector_box(self) -> visuals.Box:
+    def selector_box(self) -> SelectorBox:
         if self._selector_box is None:
             self._selector_box = SelectorBox(self.config.grid_unit_shape)
         return self._selector_box
@@ -800,12 +806,19 @@ class SpikingNeuronNetwork:
                                                           plot_length=self.plotting_config.scatter_plot_length)
         return self._firing_scatter_plot
 
+    @property
+    def selected_group_boxes(self):
+        if self._selected_group_boxes is None:
+            pos = np.array([[0, 0, 0], [1, 1, 1]])
+            self._selected_group_boxes = BoxSystem(pos=pos)
+        return self._selected_group_boxes
+
     # noinspection PyPep8Naming
     def initialize_GPU_arrays(self, device):
         vbos = VBOCollection(
-            N_pos=self._network_scatter_plot.vbo,
-            voltage=self.voltage_plot.pos_vbo,
-            firings=self.firing_scatter_plot.pos_vbo,
+            N_pos=self._neurons.vbo,
+            voltage=self.voltage_plot.vbo,
+            firings=self.firing_scatter_plot.vbo,
             selector_box=self.selector_box.vbo
         )
         self.GPU = NetworkGPUArrays(
@@ -817,6 +830,12 @@ class SpikingNeuronNetwork:
             plotting_config=self.plotting_config,
             model=self.model,
             vbos=vbos)
+
+    def select_groups(self):
+        v = self.selector_box.selection_vertices
+        p = self.GPU.G_pos
+
+        self.GPU.G_props.selected
 
     def sort_pos(self):
         """
@@ -840,3 +859,5 @@ class SpikingNeuronNetwork:
 
     def update(self):
         self.GPU.update()
+
+

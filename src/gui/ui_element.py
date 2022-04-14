@@ -18,7 +18,7 @@ from PyQt6.QtWidgets import (
 )
 
 from .collapsible_widget.collapsible_widget import CollapsibleWidget
-from network import RenderedObject
+from rendering import RenderedObject
 
 
 @dataclass

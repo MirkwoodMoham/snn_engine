@@ -224,6 +224,14 @@ class LocationGroupProperties(PropertyTensor):
         self.thalamic_exc_input_current = config.DefaultValues.ThalamicInput.exc_current
 
     @property
+    def selected(self):
+        return self._row(self.rows.selected)
+
+    @selected.setter
+    def selected(self, v):
+        self._set_row(self.rows.selected, v)
+
+    @property
     def thalamic_input(self):
         return self._row(self.rows.thalamic_input)
 

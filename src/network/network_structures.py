@@ -1,8 +1,6 @@
 from enum import Enum, unique
 
-import numpy as np
-
-from .gpu_arrays import (
+from gpu.gpu_arrays import (
     reshape_wrt_size,
     shape_size
 )
@@ -29,13 +27,13 @@ class NetworkStructure:
             print('NEW:', self)
 
 
+# noinspection PyPep8Naming
 class NeuronTypeGroup(NetworkStructure):
 
     """
     Index-container for type-neuron-groups.
     """
 
-    # noinspection PyPep8Naming
     def __init__(self, ID, start_idx, end_idx, S, neuron_type: NeuronTypes, group_dct, verbose=True):
         super().__init__(ID=ID, struct_dict=group_dct)
         self.ntype = neuron_type if isinstance(neuron_type, NeuronTypes) else NeuronTypes(neuron_type)
@@ -54,7 +52,6 @@ class NeuronTypeGroup(NetworkStructure):
     def __str__(self):
         return f'NeuronTypeGroup(type={self.ntype.name}, [{self.start_idx}, {self.end_idx}], id={self.id})'
 
-    # noinspection PyPep8Naming
     @classmethod
     def from_count(cls, ID, nN, S, neuron_type, group_dct):
         last_group = group_dct[max(group_dct)] if len(group_dct) > 0 else None

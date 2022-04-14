@@ -92,31 +92,21 @@ class EngineSceneCanvas(scene.SceneCanvas):
         self.freeze()
 
         if network is not None:
-            self.add_scatter_plot(network)
-            self.add_outer_box(network)
-            self.add_selector_box(network)
+            self.add_to_network_view(network.neurons.obj)
+            self.add_to_network_view(network.outer_grid)
+            self.add_to_network_view(network.selector_box.obj)
             self.add_voltage_plot(network)
             self.add_firing_scatter_plot(network)
+            self.add_to_network_view(network.selected_group_boxes.obj)
 
     @property
     def _window_id(self):
         # noinspection PyProtectedMember
         return self._backend._id
 
-    def add_scatter_plot(self, network: SpikingNeuronNetwork):
-        plot = network.scatter_plot()
-        plot.parent = self.network_view.scene
-        self.network_view.add(plot)
-
-    def add_outer_box(self, network: SpikingNeuronNetwork):
-        box: scene.visuals.Box = network.outer_grid
-        box.parent = self.network_view.scene
-        self.network_view.add(box)
-
-    def add_selector_box(self, network: SpikingNeuronNetwork):
-        box: scene.visuals.Box = network.selector_box()
-        box.parent = self.network_view.scene
-        self.network_view.add(box)
+    def add_to_network_view(self, obj):
+        obj.parent = self.network_view.scene
+        self.network_view.add(obj)
 
     def add_voltage_plot(self, network: SpikingNeuronNetwork):
         line: scene.visuals.Box = network.voltage_plot.obj
