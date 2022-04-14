@@ -50,6 +50,8 @@ class Engine:
         # keep order for vbo numbers (3/3)
         self.network.initialize_GPU_arrays(EngineConfig.device)
 
+        # self.window.scene_3d.add_to_network_view(self.network.selected_group_boxes.obj)
+
         self.window.set_keys({
             'left': self.network.selector_box.pos.mv_left,
             'right': self.network.selector_box.pos.mv_right,

@@ -5,6 +5,7 @@ from vispy.app import Application, Canvas
 from vispy.color import Color
 from vispy.gloo.context import GLContext
 from vispy import scene
+from vispy.visuals.transforms import STTransform
 from vispy.scene.cameras import PanZoomCamera
 
 from network import SpikingNeuronNetwork
@@ -63,7 +64,9 @@ class EngineSceneCanvas(scene.SceneCanvas):
 
         self.network_view.camera = 'turntable'  # or try 'arcball'
         # add a colored 3D axis for orientation
-        scene.visuals.XYZAxis(parent=self.network_view.scene)
+        axis = scene.visuals.XYZAxis(parent=self.network_view.scene)
+        axis.transform = STTransform()
+        axis.transform.move((-0.1, -0.1, -0.1))
 
         plot_col = 1
         text_grid: scene.widgets.Grid = self.grid.add_grid(row=0, col=5, row_span=2, col_span=1,

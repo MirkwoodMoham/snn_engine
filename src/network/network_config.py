@@ -111,9 +111,9 @@ class NetworkConfig:
         self.grid_pos = (np.floor((self.pos
                                    / np.array(self.N_pos_shape, dtype=np.float32))
                                   * np.array(min_g_shape, dtype=np.float32)).astype(int))
-        self.grid_unit_shape = (self.N_pos_shape[0] / self.G_shape[0],
-                                self.N_pos_shape[1] / self.G_shape[1],
-                                self.N_pos_shape[2] / self.G_shape[2])
+        self.grid_unit_shape = (float(self.N_pos_shape[0] / self.G_shape[0]),
+                                float(self.N_pos_shape[1] / self.G_shape[1]),
+                                float(self.N_pos_shape[2] / self.G_shape[2]))
 
         assert self.is_cube(self.grid_unit_shape)
         assert self.pos.shape[1] == 3

@@ -22,7 +22,7 @@ class DefaultBox(visuals.Box):
                  translate=None,
                  scale=None,
                  edge_color='white',
-                 depth_test=True):
+                 depth_test=True, border_width=1):
         if translate is None:
             translate = (shape[0] / 2, shape[1] / 2, shape[2] / 2)
         super().__init__(width=shape[0],
@@ -37,6 +37,7 @@ class DefaultBox(visuals.Box):
         self.transform = STTransform(translate=translate, scale=scale)
         self.mesh.set_gl_state(polygon_offset_fill=True,
                                polygon_offset=(1, 1), depth_test=depth_test)
+        self._border.update_gl_state(line_width=max(border_width, 1))
 
 
 # noinspection PyAbstractClass
@@ -47,8 +48,9 @@ class SelectorBox(RenderedObject):
     def __init__(self, grid_unit_shape, name=None):
         super().__init__()
         self._obj: visuals.Box = DefaultBox(shape=grid_unit_shape,
-                                            edge_color='orange', scale=[1.01, 1.01, 1.01],
-                                            depth_test=True)
+                                            edge_color='orange', scale=[1.1, 1.1, 1.1],
+                                            depth_test=False,
+                                            border_width=2)
         self._obj.name = name or f'{self.__class__.__name__}{SelectorBox.count}'
         SelectorBox.count += 1
         self._shape = grid_unit_shape
@@ -95,7 +97,6 @@ class _GSGLLineVisual(_GLLineVisual):
     }
 
     def __init__(self, parent, gcode):
-        self.count = 0
         self._parent = parent
         self._pos_vbo = gloo.VertexBuffer()
         self._color_vbo = gloo.VertexBuffer()
@@ -109,13 +110,11 @@ class _GSGLLineVisual(_GLLineVisual):
 
     def _prepare_transforms(self, view):
         xform = view.transforms.get_transform()
+
         view.view_program.vert['transform'] = xform
         if view.view_program.geom is not None:
+            # xform = view.transforms.get_transform(map_from='visual', map_to='render')
             view.view_program.geom['transform'] = xform
-            view.view_program.geom['size_x'] = .66 + self.count
-            view.view_program.geom['size_y'] = .66
-            view.view_program.geom['size_z'] = .66
-            self.count += 1
 
     def _prepare_draw(self, view):
         prof = Profiler()
@@ -227,50 +226,82 @@ GSLine = visuals.create_visual_node(GSLineVisual)
 # noinspection PyAbstractClass
 class BoxSystem(RenderedObject):
 
-    def __init__(self, pos, color=(0.1, 1., 1., 1.), **kwargs):
+    def __init__(self, pos, grid_unit_shape, color=(0.1, 1., 1., 1.), **kwargs):
+        gcode = f"""
+                // #version 430
 
-        gcode = """
-            // #version 400
-            
-            layout (lines) in;
-            // layout (points, max_vertices=16) out;
-            // layout (line_strip, max_vertices=16) out;
-            layout (line_strip, max_vertices=16) out;
-            
-            in vec4 v_color[];
-            out vec4 g_color;
+                layout (lines) in;
+                layout (line_strip, max_vertices=16) out;
 
-            void main(void){
-            
-                float size_x = $size_x;
-                float size_y = $size_y;
-                float size_z = $size_z;
-            
-                g_color = v_color[0];
-            
-                gl_PointSize = 75;
-                
-                vec4 source_pos = vec4(0.1f, 0.1f, 0.10f, 1.f);
-                vec4 o = $transform(source_pos);
-                vec3 x_offset = vec3(size_x, 0.f, 0.f);
-                vec3 y_offset = vec3(0.f, size_x, 0.f);
-                vec3 z_offset = vec3(0.f, 0.f, size_x);
-                
-                vec4 x = $transform(vec4(source_pos.xyz + x_offset, 1.0f));
-                vec4 y = $transform(vec4(source_pos.xyz + y_offset, 1.0f));
-                
-                gl_Position = o;
-                EmitVertex();	
-                gl_Position = x;
-                EmitVertex();		
-                gl_Position = y;
-                EmitVertex();	
-                EndPrimitive();
-                
-                
-            }
-        """
+                in vec4 v_color[];
+                out vec4 g_color;
+
+                void main(void){{
+
+                    float size_x = {grid_unit_shape[0]}f;
+                    float size_y = {grid_unit_shape[1]}f;
+                    float size_z = {grid_unit_shape[2]}f;
+
+                    g_color = v_color[0];
+
+                    // gl_PointSize = 75;
+
+                    vec4 source_pos = gl_in[0].gl_Position;
+
+                    vec4 x_offset = $transform(vec4(size_x, 0.f, 0.f, 0.f));
+                    vec4 y_offset = $transform(vec4(0.f, size_y, 0.f, 0.f));
+                    vec4 z_offset = $transform(vec4(0.f, 0.f, size_z, 0.f));
+
+                    vec4 o = source_pos;
+                    vec4 x = source_pos + x_offset;
+                    vec4 y = source_pos + y_offset;
+                    vec4 z = source_pos + z_offset;
+                    vec4 xy = source_pos + x_offset + y_offset;
+                    vec4 xz = source_pos + x_offset + z_offset;
+                    vec4 yz = source_pos + y_offset + z_offset;
+                    vec4 xyz = source_pos + x_offset + y_offset + z_offset;
+
+                    gl_Position = o;
+                    EmitVertex();	
+                    gl_Position = x;
+                    EmitVertex();		
+                    gl_Position = xz;
+                    EmitVertex();		
+                    gl_Position = z;
+                    EmitVertex();		
+                    gl_Position = yz;
+                    EmitVertex();		
+                    gl_Position = xyz;
+                    EmitVertex();		
+                    gl_Position = xz;
+                    EmitVertex();		
+                    gl_Position = xyz;
+                    EmitVertex();		
+                    gl_Position = xy;
+                    EmitVertex();		
+                    gl_Position = x;
+                    EmitVertex();		
+                    gl_Position = xy;
+                    EmitVertex();		
+                    gl_Position = y;
+                    EmitVertex();		
+                    gl_Position = o;
+                    EmitVertex();		
+                    gl_Position = z;
+                    EmitVertex();		
+                    gl_Position = yz;
+                    EmitVertex();		
+                    gl_Position = y;
+                    EmitVertex();	
+                    EndPrimitive();
+
+                }}
+            """
         # gcode = None
         super().__init__()
         self._obj = GSLine(gcode=gcode, pos=pos, color=color, **kwargs)
         self._obj.transform = STTransform(translate=(0, 0, 0), scale=(1, 1, 1))
+
+    @property
+    def vbo_glir_id(self):
+        return self._obj._line_visual._pos_vbo.id
