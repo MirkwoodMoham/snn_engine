@@ -106,9 +106,9 @@ class CollapsibleWidget(QtWidgets.QWidget):
                     self.parent_collapsible.height() - self._content.height() + add)
                 self.parent_collapsible._content.setFixedHeight(
                     self.parent_collapsible._content.height() - self._content.height() + add)
-                print('parent:', self.parent_collapsible.height())
+                # print('parent:', self.parent_collapsible.height())
             self.setFixedHeight(self.min_collapsed_height)
-            print('self:', self.height())
+            # print('self:', self.height())
         else:
             self.setFixedHeight(self.min_collapsed_height + self._content.height() - add)
             if self.parent_collapsible is not None:
@@ -118,14 +118,14 @@ class CollapsibleWidget(QtWidgets.QWidget):
                     self.parent_collapsible._content.height() + self._content.height() - add)
                 # - self.min_collapsed_height)
 
-                print('parent:', self.parent_collapsible.height())
-            print('self:', self.height())
+                # print('parent:', self.parent_collapsible.height())
+            # print('self:', self.height())
         self._title_frame._arrow.set_arrow(int(self._is_collapsed))
 
     def add(self, o):
         add = 0
         self._content.setFixedHeight(self._content.height() + o.height() + add)
-        print('content-height:', self._content.height())
+        # print('content-height:', self._content.height())
         self._content_layout.addWidget(o)
         if isinstance(o, CollapsibleWidget):
             # self._content.setFixedHeight(self._content.height() + 3)

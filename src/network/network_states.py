@@ -5,6 +5,10 @@ import torch
 from typing import Optional
 
 from .network_structures import NeuronTypes
+from gpu import (
+    RegisteredGPUArray,
+    GPUArrayConfig
+)
 
 
 class PropertyTensor:
@@ -195,7 +199,7 @@ class LocationGroupProperties(PropertyTensor):
     @dataclass(frozen=True)
     class Rows:
 
-        selected: int = 0
+        prop0: int = 0
         thalamic_input: int = 1
         thalamic_inh_input_current: int = 2
         thalamic_exc_input_current: int = 3
@@ -209,10 +213,22 @@ class LocationGroupProperties(PropertyTensor):
         def __len__(self):
             return 10
 
-    def __init__(self, shape, device, config):
+    def __init__(self, shape, device, config, select_ibo):
         super().__init__()
         self._G = shape[1]
+        nbytes = 4
+        self.selected_array = RegisteredGPUArray.from_buffer(
+            select_ibo, config=GPUArrayConfig(shape=(self._G, 1),
+                                              strides=(2 * nbytes, nbytes),
+                                              # strides=(nbytes, nbytes * (self._G + 1)),
+                                              dtype=np.int32, device=device))
+        # pd.options.display.max_columns = 29
+        # print(self.selected_array.to_dataframe)
+        # self.selected[:, :] = self._G
+        # self.selected[0] = 2
+        # self.selected.tensor[0, 1] = 0
         self.set_tensor(shape, device, config)
+        self.selection_property = 'thalamic_input'
 
     def set_tensor(self, shape, device, config):
         self.tensor = torch.zeros(shape, dtype=torch.float32, device=device)
@@ -225,11 +241,13 @@ class LocationGroupProperties(PropertyTensor):
 
     @property
     def selected(self):
-        return self._row(self.rows.selected)
+        return self.selected_array.tensor
 
     @selected.setter
     def selected(self, v):
-        self._set_row(self.rows.selected, v)
+        self.selected_array.tensor[:] = v
+        if self.selection_property is not None:
+            setattr(self, self.selection_property, v.flatten() != self._G)
 
     @property
     def thalamic_input(self):

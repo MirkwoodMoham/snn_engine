@@ -388,6 +388,7 @@ class RenderedObjectSliders(CollapsibleWidget):
                                 prop_id=i,
                                 single_step_spin_box=0.01,
                                 single_step_slider=10)
+
             setattr(self.scale, i, sbs)
             sbs.widget.setFixedHeight(35)
             scale_sliders_layout.addWidget(sbs.widget)

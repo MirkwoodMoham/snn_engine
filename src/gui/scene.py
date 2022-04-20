@@ -1,6 +1,7 @@
 from dataclasses import asdict, dataclass
 from typing import Union, Optional
 
+import numpy as np
 from vispy.app import Application, Canvas
 from vispy.color import Color
 from vispy.gloo.context import GLContext
@@ -95,9 +96,22 @@ class EngineSceneCanvas(scene.SceneCanvas):
         self.freeze()
 
         if network is not None:
+            # arrow = scene.visuals.Arrow(pos=np.array([[1.05, 1.05, 0.05], [1.05, 1.05, 1.05]]),
+            #                             arrows=np.array([[1.05, 1.05, 1.05, 1.05, 1.05, 1.15]]),
+            #                             arrow_type='triangle_60', arrow_size=15,)
+            tube = scene.visuals.Tube(points=np.array([[1.05, 1.05, 0.0],
+                                                       [1.05, 1.05, .3],
+                                                       [1.05, 1.05, .3],
+                                                       [1.05, 1.05, .35]
+                                                       ]),
+                                      tube_points=4,
+                                      radius=np.array([.01, .01, .025, .0, ]))
+            self.add_to_network_view(tube)
             self.add_to_network_view(network.neurons.obj)
             self.add_to_network_view(network.outer_grid)
             self.add_to_network_view(network.selector_box.obj)
+            # self.add_to_network_view(network.selector_box.obj.vertex_normals)
+            # self.add_to_network_view(network.selector_box.obj.face_normals)
             self.add_voltage_plot(network)
             self.add_firing_scatter_plot(network)
             self.add_to_network_view(network.selected_group_boxes.obj)
@@ -187,3 +201,12 @@ class EngineSceneCanvas(scene.SceneCanvas):
         # noinspection PyProtectedMember
         self._set_keys(keys)
         self.freeze()
+
+    def on_mouse_press(self, event):
+
+        tr = self.scene.node_transform(self.network_view.scene)
+        pos = tr.map(event.pos)
+        self.network_view.interactive = False
+        selected = self.visual_at(event.pos)
+        print(selected)
+        self.network_view.interactive = True

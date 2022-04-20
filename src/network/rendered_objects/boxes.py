@@ -1,4 +1,6 @@
 import numpy as np
+import torch
+from typing import Optional, Union
 from vispy import gloo
 from vispy.color import Color
 from vispy.visuals.shaders.function import Function
@@ -8,6 +10,8 @@ from vispy.visuals.line.line import _GLLineVisual, _AggLineVisual, LineVisual
 from vispy.visuals.transforms import STTransform
 from vispy.util.profiler import Profiler
 
+from network.network_config import NetworkConfig
+from network.network_states import LocationGroupProperties
 from rendering import RenderedObject, Scale, Position
 
 
@@ -21,14 +25,15 @@ class DefaultBox(visuals.Box):
                  segments: tuple = (1, 1, 1),
                  translate=None,
                  scale=None,
-                 edge_color='white',
+                 color: Optional[Union[str, tuple]] = None,
+                 edge_color: Union[str, tuple] = 'white',
                  depth_test=True, border_width=1):
         if translate is None:
             translate = (shape[0] / 2, shape[1] / 2, shape[2] / 2)
         super().__init__(width=shape[0],
                          height=shape[2],
                          depth=shape[1],
-                         color=None,
+                         color=color,
                          # color=(0.5, 0.5, 1, 0.5),
                          width_segments=segments[0],  # X/RED
                          height_segments=segments[2],  # Y/Blue
@@ -38,6 +43,21 @@ class DefaultBox(visuals.Box):
         self.mesh.set_gl_state(polygon_offset_fill=True,
                                polygon_offset=(1, 1), depth_test=depth_test)
         self._border.update_gl_state(line_width=max(border_width, 1))
+        # self.unfreeze()
+        # meshdata = self.mesh.mesh_data
+        # self.vertex_normals = visuals.MeshNormals(meshdata, primitive='vertex', color='orange', width=2)
+        # self.face_normals = visuals.MeshNormals(meshdata, primitive='face', color='yellow')
+        # self.vertex_normals.transform = self.transform
+        # self.vertex_normals.visible = True
+        # self.face_normals.transform = self.transform
+        # self.face_normals.visible = True
+        # self.freeze()
+
+    def select(self):
+        print('select')
+
+    def _on_select_callback(self):
+        pass
 
 
 # noinspection PyAbstractClass
@@ -45,25 +65,51 @@ class SelectorBox(RenderedObject):
     count: int = 0
 
     # noinspection PyUnresolvedReferences
-    def __init__(self, grid_unit_shape, name=None):
+    def __init__(self, network_config: NetworkConfig, name=None):
         super().__init__()
-        self._obj: visuals.Box = DefaultBox(shape=grid_unit_shape,
-                                            edge_color='orange', scale=[1.1, 1.1, 1.1],
+        self.network_config = network_config
+        self._obj: visuals.Box = DefaultBox(shape=self.shape,
+                                            color=(1, 0.65, 0, 0.1),
+                                            edge_color=(1, 0.65, 0, 0.5),
+                                            scale=[1.1, 1.1, 1.1],
                                             depth_test=False,
                                             border_width=2)
         self._obj.name = name or f'{self.__class__.__name__}{SelectorBox.count}'
+        self._obj.interactive = True
         SelectorBox.count += 1
-        self._shape = grid_unit_shape
 
         self.scale = Scale(self)
-        self.pos = Position(self, _grid_unit_shape=grid_unit_shape)
+        self.pos = Position(self, _grid_unit_shape=self.shape)
 
-        isv = np.unique(self._obj._border._meshdata._vertices, axis=0)[[0, 1, 2, 4]]
-        assert ((isv[1, ] - isv[0, ]) == (np.array([0, 0, isv[0, 2]]) * - 2)).all()
+        isv = np.unique(self._obj._border._meshdata._vertices, axis=0)[[0, 4, 2, 1]]
+        assert ((isv[1, ] - isv[0, ]) == (np.array([isv[0, 0], 0, 0]) * - 2)).all()
         assert ((isv[2, ] - isv[0, ]) == (np.array([0, isv[0, 1], 0]) * - 2)).all()
-        assert ((isv[3, ] - isv[0, ]) == (np.array([isv[0, 0], 0, 0]) * - 2)).all()
+        assert ((isv[3, ] - isv[0, ]) == (np.array([0, 0, isv[0, 2]]) * - 2)).all()
 
         self.initial_selection_vertices = isv
+
+        self.states_gpu: Optional[LocationGroupProperties] = None
+        self.cuda_device: Optional[str] = None
+
+        # noinspection PyPep8Naming
+        G = self.network_config.G
+
+        self.selected_masks = np.zeros((G, 4), dtype=np.int32)
+
+        self.g_pos_end = self.g_pos.copy()
+        self.g_pos_end[:, 0] = self.g_pos_end[:, 0] + self.shape[0]
+        self.g_pos_end[:, 1] = self.g_pos_end[:, 1] + self.shape[1]
+        self.g_pos_end[:, 2] = self.g_pos_end[:, 2] + self.shape[2]
+
+        self.group_numbers = np.arange(G)  #.reshape((G, 1))
+
+    @property
+    def g_pos(self):
+        return self.network_config.g_pos[:self.network_config.G, :]
+
+    @property
+    def shape(self):
+        return self.network_config.grid_unit_shape
 
     @property
     def vbo_glir_id(self):
@@ -74,6 +120,18 @@ class SelectorBox(RenderedObject):
         return (self.initial_selection_vertices
                 * self.transform.scale[:3]
                 + self.transform.translate[:3])
+
+    def transform_changed(self):
+        g_pos = self.g_pos
+        v = self.selection_vertices
+        self.selected_masks[:, 0] = (g_pos[:, 0] >= v[0, 0]) & (self.g_pos_end[:, 0] <= v[1, 0])
+        self.selected_masks[:, 1] = (g_pos[:, 1] >= v[0, 1]) & (self.g_pos_end[:, 1] <= v[2, 1])
+        self.selected_masks[:, 2] = (g_pos[:, 2] >= v[0, 2]) & (self.g_pos_end[:, 2] <= v[3, 2])
+        self.selected_masks[:, 3] = self.network_config.G
+        self.selected_masks[:, 3] = np.where(~self.selected_masks[:, :3].all(axis=1),
+                                             self.selected_masks[:, 3], self.group_numbers)
+
+        self.states_gpu.selected = torch.from_numpy(self.selected_masks[:, [3]]).to(self.cuda_device)
 
 
 class _GSGLLineVisual(_GLLineVisual):
@@ -115,7 +173,9 @@ class _GSGLLineVisual(_GLLineVisual):
         if view.view_program.geom is not None:
             # xform = view.transforms.get_transform(map_from='visual', map_to='render')
             view.view_program.geom['transform'] = xform
+            view.view_program.geom['transform_inv'] = view.transforms.get_transform(map_from='render', map_to='visual')
 
+    # noinspection DuplicatedCode
     def _prepare_draw(self, view):
         prof = Profiler()
 
@@ -151,6 +211,7 @@ class _GSGLLineVisual(_GLLineVisual):
             self.shared_program['texture2D_LUT'] = cmap and cmap.texture_lut()
 
             # noinspection PyTypeChecker
+        # noinspection PyTypeChecker
         self.update_gl_state(line_smooth=bool(self._parent._antialias))
         px_scale = self.transforms.pixel_scale
         width = px_scale * self._parent._width
@@ -226,7 +287,7 @@ GSLine = visuals.create_visual_node(GSLineVisual)
 # noinspection PyAbstractClass
 class BoxSystem(RenderedObject):
 
-    def __init__(self, pos, grid_unit_shape, color=(0.1, 1., 1., 1.), **kwargs):
+    def __init__(self, pos, grid_unit_shape, max_z, color=(0.1, 1., 1., 1.), **kwargs):
         gcode = f"""
                 // #version 430
 
@@ -247,6 +308,10 @@ class BoxSystem(RenderedObject):
                     // gl_PointSize = 75;
 
                     vec4 source_pos = gl_in[0].gl_Position;
+                    
+                    if ($transform_inv(source_pos).z > {max_z}f){{
+                        return;
+                    }}
 
                     vec4 x_offset = $transform(vec4(size_x, 0.f, 0.f, 0.f));
                     vec4 y_offset = $transform(vec4(0.f, size_y, 0.f, 0.f));
@@ -305,3 +370,7 @@ class BoxSystem(RenderedObject):
     @property
     def vbo_glir_id(self):
         return self._obj._line_visual._pos_vbo.id
+
+    @property
+    def ibo_glir_id(self):
+        return self._obj._line_visual._connect_ibo.id

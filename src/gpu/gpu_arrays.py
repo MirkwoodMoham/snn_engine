@@ -132,14 +132,14 @@ class RegisteredGPUArray:
 
     # noinspection PyArgumentList
     @classmethod
-    def from_vbo(cls, vbo, config: GPUArrayConfig = None, cpu_array: np.array = None):
+    def from_buffer(cls, buffer, config: GPUArrayConfig = None, cpu_array: np.array = None):
 
         if config is not None:
             assert cpu_array is None
         else:
             config = GPUArrayConfig.from_cpu_array(cpu_array)
 
-        reg = RegisteredBuffer(vbo)
+        reg = RegisteredBuffer(buffer)
         mapping: RegisteredMapping = reg.map(None)
         ptr, size = mapping.device_ptr_and_size()
         gpu_data = ExternalMemory(ptr, size)

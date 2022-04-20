@@ -63,7 +63,11 @@ class Engine:
 
         selector_box_collapsible = RenderedObjectSliders(self.network.selector_box, self.window)
 
-        self.window.ui.ui_left.objects_collapsible.add(selector_box_collapsible)
+        self.ui_left.objects_collapsible.add(selector_box_collapsible)
+
+        self.ui_left.objects_collapsible.toggle_collapsed()
+        selector_box_collapsible.toggle_collapsed()
+        self.ui_left.thalamic_input_collapsible.toggle_collapsed()
 
         self.time_elapsed_until_last_off = 0
         # self.set_scale(0)
@@ -87,21 +91,21 @@ class Engine:
             self.network.GPU.G_props,
             EngineConfig.network_config.DefaultValues.ThalamicInput.exc_current)
 
-        self.sliders.thalamic_exc_input_current.connect_property(
-            self.network.GPU.G_props,
-            EngineConfig.network_config.DefaultValues.ThalamicInput.exc_current)
-
     @property
     def actions(self):
         return self.window.ui.menubar.actions
 
     @property
     def buttons(self):
-        return self.window.ui.ui_left.buttons
+        return self.ui_left.buttons
 
     @property
     def sliders(self):
-        return self.window.ui.ui_left.sliders
+        return self.ui_left.sliders
+
+    @property
+    def ui_left(self):
+        return self.window.ui.ui_left
 
     def run(self):
         self.app.vs.run()
@@ -125,8 +129,8 @@ class Engine:
             self.actions.toggle_outergrid.setChecked(False)
 
         from vispy.visuals.transforms import STTransform, TransformSystem
-        a: STTransform = self.network.selected_group_boxes.obj.transform
-        a.move((0,0,.5))
+        # a: STTransform = self.network.selected_group_boxes.obj.transform
+        # a.move((0, 0, .5))
         print()
 
     def trigger_update_switch(self):

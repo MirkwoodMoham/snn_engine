@@ -1,6 +1,6 @@
 import numpy as np
 from vispy.scene import visuals
-from vispy.visuals.transforms import STTransform
+# from vispy.visuals.transforms import STTransform
 
 from rendering import RenderedObject
 
@@ -12,8 +12,6 @@ def plot_pos(n_plots, plot_length):
     y = np.linspace(0.5, n_plots - 0.5, n_plots)
     # noinspection PyUnresolvedReferences
     pos[:, 0] = np.meshgrid(x, y)[0].flatten()
-    # print('Generating points...')
-    # pos[:, 1] = np.random.normal(scale=.025, loc=.3, size=N)
     pos[:, 1] = y.repeat(plot_length)
     return pos
 

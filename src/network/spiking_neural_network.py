@@ -37,11 +37,12 @@ from gpu import (
 
 
 @dataclass
-class VBOCollection:
+class BufferCollection:
     N_pos: int
     voltage: int
     firings: int
-    selected_group_boxes: int
+    selected_group_boxes_vbo: int
+    selected_group_boxes_ibo: int
 
     def __post_init__(self):
         for k, v in asdict(self).items():
@@ -150,13 +151,13 @@ class NetworkGPUArrays(GPUArrayCollection):
 
             nbytes_float32 = 4
 
-            self.voltage = RegisteredGPUArray.from_vbo(
+            self.voltage = RegisteredGPUArray.from_buffer(
                 voltage_plot_vbo,
                 config=GPUArrayConfig(shape=shapes.voltage_plot, strides=(shapes.voltage_plot[1] * nbytes_float32,
                                                                           nbytes_float32),
                                       dtype=np.float32, device=self.device))
 
-            self.firings = RegisteredGPUArray.from_vbo(
+            self.firings = RegisteredGPUArray.from_buffer(
                 firing_scatter_plot_vbo, config=GPUArrayConfig(shape=shapes.firings_scatter_plot,
                                                                strides=(shapes.firings_scatter_plot[1] * nbytes_float32,
                                                                         nbytes_float32),
@@ -177,7 +178,7 @@ class NetworkGPUArrays(GPUArrayCollection):
                  device: int,
                  T: int,
                  plotting_config: PlottingConfig,
-                 vbos: VBOCollection,
+                 buffers: BufferCollection,
                  model=IzhikevichModel,
                  ):
 
@@ -191,18 +192,18 @@ class NetworkGPUArrays(GPUArrayCollection):
 
         # self.selector_box = self._selector_box(())
 
-        self.plotting_arrays = self.PlottingGPUArrays(device=device, shapes=shapes, voltage_plot_vbo=vbos.voltage,
-                                                      firing_scatter_plot_vbo=vbos.firings,
+        self.plotting_arrays = self.PlottingGPUArrays(device=device, shapes=shapes, voltage_plot_vbo=buffers.voltage,
+                                                      firing_scatter_plot_vbo=buffers.firings,
                                                       bprint_allocated_memory=self.bprint_allocated_memory)
 
         self.curand_states = self._curand_states()
-        self.N_pos: RegisteredGPUArray = self._N_pos(shape=shapes.N_pos, vbo=vbos.N_pos)
+        self.N_pos: RegisteredGPUArray = self._N_pos(shape=shapes.N_pos, vbo=buffers.N_pos)
 
         (self.N_G,
          self.G_neuron_counts,
          self.G_neuron_typed_ccount) = self._N_G_and_G_neuron_counts_1of2(shapes)
 
-        self.G_pos: RegisteredGPUArray = self._G_pos(shape=shapes.G_pos, vbo=vbos.selected_group_boxes)
+        self.G_pos: RegisteredGPUArray = self._G_pos(shape=shapes.G_pos, vbo=buffers.selected_group_boxes_vbo)
         self.G_delay_distance = self._G_delay_distance(self.G_pos)
         self._G_neuron_counts_2of2(self.G_delay_distance, self.G_neuron_counts)
         self.G_group_delay_counts = self._G_group_delay_counts(shapes.G_delay_counts, self.G_delay_distance)
@@ -222,7 +223,8 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.N_states = model(shape=shapes.N_states, device=self.device,
                               types_tensor=self.N_G[:, self.config.N_G_neuron_type_col])
 
-        self.G_props = LocationGroupProperties(shape=shapes.G_props, device=self.device, config=self.config)
+        self.G_props = LocationGroupProperties(shape=shapes.G_props, device=self.device, config=self.config,
+                                               select_ibo=buffers.selected_group_boxes_ibo)
 
         self.print_allocated_memory('end')
 
@@ -346,7 +348,7 @@ class NetworkGPUArrays(GPUArrayCollection):
 
     def _N_pos(self, shape, vbo):
         nbytes_float32 = 4
-        N_pos = RegisteredGPUArray.from_vbo(
+        N_pos = RegisteredGPUArray.from_buffer(
             vbo, config=GPUArrayConfig(shape=shape, strides=(shape[1] * nbytes_float32, nbytes_float32),
                                        dtype=np.float32, device=self.device))
 
@@ -358,7 +360,7 @@ class NetworkGPUArrays(GPUArrayCollection):
 
     def _selector_box(self, shape, vbo):
         nbytes_float32 = 4
-        b = RegisteredGPUArray.from_vbo(
+        b = RegisteredGPUArray.from_buffer(
             vbo, config=GPUArrayConfig(shape=shape, strides=(shape[1] * nbytes_float32, nbytes_float32),
                                        dtype=np.float32, device=self.device))
         return b
@@ -376,7 +378,7 @@ class NetworkGPUArrays(GPUArrayCollection):
         # gpos[:, 1] = y * (self._config.N_pos_shape[1] / self._config.G_shape[1])
         # gpos[:, 2] = z * (self._config.N_pos_shape[2] / self._config.G_shape[2])
 
-        G_pos = RegisteredGPUArray.from_vbo(
+        G_pos = RegisteredGPUArray.from_buffer(
             vbo, config=GPUArrayConfig(shape=shape, strides=(shape[1] * 4, 4),
                                        dtype=np.float32, device=self.device))
 
@@ -787,7 +789,7 @@ class SpikingNeuronNetwork:
     @property
     def selector_box(self) -> SelectorBox:
         if self._selector_box is None:
-            self._selector_box = SelectorBox(self.config.grid_unit_shape)
+            self._selector_box = SelectorBox(self.config)
         return self._selector_box
 
     @property
@@ -809,31 +811,25 @@ class SpikingNeuronNetwork:
         if self._selected_group_boxes is None:
             # noinspection PyPep8Naming
             G = self._network_config.G
-            g_shape = self._network_config.G_shape
+            connect = np.zeros((G+1, 2)) + G
+            # connect = np.ones(G).astype(np.bool)
+            self._selected_group_boxes = BoxSystem(pos=self._network_config.g_pos,
+                                                   connect=connect,
+                                                   # connect='strip',
+                                                   max_z=self.config.max_z,
+                                                   grid_unit_shape=self.config.grid_unit_shape)
 
-            groups = np.arange(G)
-            z = np.floor(groups / (g_shape[0] * g_shape[1]))
-            r = groups - z * (g_shape[0] * g_shape[1])
-            y = np.floor(r / g_shape[0])
-            x = r - y * g_shape[0]
-
-            g_pos = np.zeros((G+1, 3), dtype=np.float32)
-            n_pos_shape = self._network_config.N_pos_shape
-            g_pos[:G, 0] = x * (n_pos_shape[0] / g_shape[0])
-            g_pos[:G, 1] = y * (n_pos_shape[1] / g_shape[1])
-            g_pos[:G, 2] = z * (n_pos_shape[2] / g_shape[2])
-            # pos = self.GPU.G_pos.cpu().numpy()
-            self._selected_group_boxes = BoxSystem(pos=g_pos, grid_unit_shape=self.config.grid_unit_shape)
             # print(g_pos)
         return self._selected_group_boxes
 
     # noinspection PyPep8Naming
     def initialize_GPU_arrays(self, device):
-        vbos = VBOCollection(
+        buffers = BufferCollection(
             N_pos=self._neurons.vbo,
             voltage=self.voltage_plot.vbo,
             firings=self.firing_scatter_plot.vbo,
-            selected_group_boxes=self._selected_group_boxes.vbo,
+            selected_group_boxes_vbo=self.selected_group_boxes.vbo,
+            selected_group_boxes_ibo=self.selected_group_boxes.ibo,
         )
         self.GPU = NetworkGPUArrays(
             config=self.config,
@@ -843,7 +839,11 @@ class SpikingNeuronNetwork:
             T=self.T,
             plotting_config=self.plotting_config,
             model=self.model,
-            vbos=vbos)
+            buffers=buffers)
+
+        self.selector_box.cuda_device = self.GPU.device
+        self.selector_box.states_gpu = self.GPU.G_props
+        self.selector_box.transform_connected = True
 
     def select_groups(self):
         v = self.selector_box.selection_vertices

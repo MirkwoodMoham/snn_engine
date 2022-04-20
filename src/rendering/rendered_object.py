@@ -17,12 +17,14 @@ class RenderedObject:
 
         self._vbo = None
         self._pos_vbo = None
-        self._ebo = None
+        self._ibo = None
         self._parent = None
 
         self._shape = None
 
         self._glir = None
+
+        self.transform_connected = True
 
     def __call__(self):
         return self._obj
@@ -62,8 +64,15 @@ class RenderedObject:
         return self.vbo_glir_id
 
     @property
+    def ibo_glir_id(self):
+        raise NotImplementedError
+
+    @property
     def vbo_glir_id(self):
         raise NotImplementedError
+
+    def transform_changed(self):
+        pass
 
     # noinspection PyProtectedMember
     @property
@@ -78,6 +87,12 @@ class RenderedObject:
             self._vbo = get_current_canvas().context.shared.parser._objects[self.vbo_glir_id].handle
         return self._vbo
 
+    @property
+    def ibo(self):
+        if self._ibo is None:
+            self._ibo = get_current_canvas().context.shared.parser._objects[self.ibo_glir_id].handle
+        return self._ibo
+
 
 @dataclass
 class _STR:
@@ -89,6 +104,8 @@ class _STR:
         sc_new = sc_old.copy()
         sc_new[i] = v
         setattr(self.transform, self.prop_id, sc_new)
+        if self.parent.transform_connected is True:
+            self.parent.transform_changed()
         # print()
         # print(self.parent.unique_vertices_cpu)
 
@@ -148,6 +165,9 @@ class Position(_STR):
 
         self.transform.move(tr)
         self._grid_coordinates[i] += 1 * d
+
+        if self.parent.transform_connected is True:
+            self.parent.transform_changed()
 
     def mv_left(self):
         self._move(0)

@@ -1,7 +1,7 @@
-import ctypes
+# import ctypes
 from dataclasses import dataclass
 import numpy as np
-from typing import Literal, Optional
+from typing import Optional
 
 
 @dataclass
@@ -46,6 +46,8 @@ class NetworkConfig:
     N_G_n_cols: int = 2
     N_G_neuron_type_col: int = 0
     N_G_group_id_col: int = 1
+
+    max_z: float = 999.
 
     class DefaultValues:
         class ThalamicInput:
@@ -93,6 +95,7 @@ class NetworkConfig:
         if self.pos is None:
             self.pos = (np.random.rand(self.N, 3).astype(np.float32) * np.array(self.N_pos_shape, dtype=np.float32))
             self.pos[self.pos == max(self.N_pos_shape)] = self.pos[self.pos == max(self.N_pos_shape)] * 0.999999
+            self.validate_pos(self.pos)
         # noinspection PyPep8Naming
         G_shape_list = []
         for s in self.N_pos_shape:
@@ -119,8 +122,41 @@ class NetworkConfig:
         assert self.pos.shape[1] == 3
         assert len(self.pos.shape) == 2
 
-        print('\n', self)
-        print()
+        print('\n', self, '\n')
+
+        assert np.max(self.pos[:, 2]) < self.max_z
+
+        self._g_pos = None
+
+    @property
+    def g_pos(self):
+        if self._g_pos is None:
+            groups = np.arange(self.G)
+            z = np.floor(groups / (self.G_shape[0] * self.G_shape[1]))
+            r = groups - z * (self.G_shape[0] * self.G_shape[1])
+            y = np.floor(r / self.G_shape[0])
+            x = r - y * self.G_shape[0]
+            g_pos = np.zeros((self.G + 1, 3), dtype=np.float32)
+
+            # The last entry will be ignored by the geometry shader (i.e. invisible).
+            # We could also use a primitive restart index instead.
+            # The current solution is simpler w.r.t. vispy.
+            g_pos[:, 2] = self.max_z + 1
+
+            g_pos[:self.G, 0] = x * self.grid_unit_shape[0]
+            g_pos[:self.G, 1] = y * self.grid_unit_shape[1]
+            g_pos[:self.G, 2] = z * self.grid_unit_shape[2]
+
+            assert np.max(g_pos[:self.G, 2]) < self.max_z
+            self.validate_pos(g_pos[:self.G, :])
+            # noinspection PyAttributeOutsideInit
+            self._g_pos = g_pos
+        return self._g_pos
+
+    def validate_pos(self, pos):
+        for i in range(3):
+            assert np.min(pos[:, i]) >= 0
+            assert np.max(pos[:, i]) <= self.N_pos_shape[i]
 
 
 def pos_cloud(size=100000):
@@ -137,5 +173,3 @@ def pos_cloud(size=100000):
     pos += centers[indexes]
 
     return pos
-
-
