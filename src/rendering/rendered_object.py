@@ -1,14 +1,18 @@
+# from copy import deepcopy
 from dataclasses import dataclass
 import numpy as np
 from typing import Optional, Union
-from vispy.scene import visuals
+
+from vispy.scene import visuals, Node
 from vispy.gloo.context import get_current_canvas
 from vispy.visuals.transforms import STTransform
 
 
-class RenderedObject:
+class RenderedObject(Node):
 
-    def __init__(self):
+    def __init__(self, parent=None, name=None, transforms=None, selectable=False):
+
+        super().__init__(parent=parent, name=name, transforms=transforms)
 
         self._obj: Optional[Union[visuals.visuals.MarkersVisual,
                                   visuals.visuals.LineVisual]] = None
@@ -26,6 +30,12 @@ class RenderedObject:
 
         self.transform_connected = True
 
+        self.selectable = selectable
+        self.selected = False
+
+        self.set_transform('st')
+        # self._transform = STTransform()
+
     def __call__(self):
         return self._obj
 
@@ -37,17 +47,17 @@ class RenderedObject:
     def obj(self):
         return self._obj
 
-    @property
-    def transform(self) -> STTransform:
-        return self._obj.transform
+    # @property
+    # def transform(self) -> STTransform:
+    #     return self._obj.transform
 
-    @property
-    def name(self):
-        try:
-            # noinspection PyUnresolvedReferences
-            return self._obj.name
-        except AttributeError:
-            return str(self)
+    # @property
+    # def name(self):
+    #     try:
+    #         # noinspection PyUnresolvedReferences
+    #         return self._obj.name
+    #     except AttributeError:
+    #         return str(self)
 
     @property
     def glir(self):
@@ -92,6 +102,76 @@ class RenderedObject:
         if self._ibo is None:
             self._ibo = get_current_canvas().context.shared.parser._objects[self.ibo_glir_id].handle
         return self._ibo
+
+    def on_select_callback(self, v: bool):
+        raise NotImplementedError
+
+    def select(self, v):
+        if self.selectable is True:
+            self.selected = v
+            self.on_select_callback(v)
+
+
+class NormalArrowVisual(visuals.Tube):
+
+    def __init__(self, points, color=None, name=None, parent=None,
+                 tube_points=4, radius=np.array([.01, .01, .025, .0])):
+        if color is None:
+            if points[:, 0].any():
+                color = np.array([1, 0, 0, 0.3])
+            elif points[:, 1].any():
+                color = np.array([0, 1, 0, 0.3])
+            else:
+                color = np.array([0, 0, 1, 0.3])
+        name = name or parent.name
+        if (points[:, 0] > 0).any():
+            name += ':x+'
+        elif (points[:, 0] < 0).any():
+            name += ':x-'
+        elif (points[:, 1] > 0).any():
+            name += ':y+'
+        elif (points[:, 1] < 0).any():
+            name += ':y-'
+        elif (points[:, 2] > 0).any():
+            name += ':z+'
+        else:
+            name += ':z-'
+
+        super().__init__(name=name, points=points, tube_points=tube_points, radius=radius, color=color, parent=parent)
+        # self.name = name
+        # self.transform: STTransform = parent.transform
+        self.interactive = True
+
+
+        # self.unfreeze()
+        # self._obj_transform: STTransform = transform
+        # self._transform: STTransform = deepcopy(transform)
+        # self._fixed_scale = np.array([1., 1., 1., 1.])
+        # self.freeze()
+
+    # @property
+    # def transform(self):
+    #
+    #     self._transform.translate = self._obj_transform.translate
+    #     self._transform.scale = self._fixed_scale
+    #
+    #     return self._transform
+
+
+class NormalArrow(RenderedObject):
+
+    def __init__(self, points, color=None, name=None, tube_points=4,
+                 radius=np.array([.01, .01, .025, .0]), parent=None, selectable=True):
+        super().__init__(parent=parent, selectable=selectable,
+                         name=name or parent.name + f'.{self.__class__.__name__}')
+        self.transform: STTransform = parent.parent.transform
+
+        self._obj = NormalArrowVisual(points=points, name=name, parent=self,
+                                      tube_points=tube_points, radius=radius, color=color)
+
+    def on_select_callback(self, v):
+        print(f'selected arrow({v}):', self)
+
 
 
 @dataclass

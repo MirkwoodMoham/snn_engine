@@ -36,7 +36,7 @@ class VoltagePlot(RenderedObject):
         self._obj: visuals.Line = visuals.Line(pos=plot_pos(n_plots, plot_length),
                                                color=pos_color(n_plots * plot_length),
                                                connect=connect,
-                                               antialias=False, width=1)
+                                               antialias=False, width=1, parent=self)
         # line = visuals.Line(pos=pos, color=color, connect='strip', antialias=True, method='agg')
         # self._obj.transform = STTransform()
 
@@ -55,7 +55,7 @@ class FiringScatterPlot(RenderedObject):
         color = pos_color(n_plots * plot_length)
         color[:, 3] = 0
 
-        self._obj: visuals.visuals.MarkersVisual = visuals.Markers()
+        self._obj: visuals.visuals.MarkersVisual = visuals.Markers(parent=self)
         # noinspection PyTypeChecker
         self._obj.set_data(pos,
                            face_color=color,

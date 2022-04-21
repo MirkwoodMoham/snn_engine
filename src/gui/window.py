@@ -195,7 +195,7 @@ class UI(object):
         splitter = QSplitter(QtCore.Qt.Orientation.Horizontal)
         splitter.addWidget(self.ui_left.frame)
         splitter.addWidget(self.frame_3d)
-        splitter.setStretchFactor(1, 30)
+
 
         hbox = QHBoxLayout(self.central_widget)
         hbox.addWidget(splitter)
@@ -203,6 +203,9 @@ class UI(object):
         window.setCentralWidget(self.central_widget)
 
         window.setStatusBar(QStatusBar(window))
+
+        splitter.setStretchFactor(0, 6)
+        splitter.setStretchFactor(1, 3)
 
         self.retranslate_ui(window)
 
@@ -228,7 +231,7 @@ class EngineWindow(QtWidgets.QMainWindow):
                 raise AttributeError(f'\'{attr}\' ')
 
         self.setObjectName(name)
-        self.resize(800, 600)
+        self.resize(1200, 800)
 
         # self.central_scene = self.set_central_scene(keys=keys, app=app)
         self.scene_3d = EngineSceneCanvas(conf=CanvasConfig(keys=keys), app=app, network=network)

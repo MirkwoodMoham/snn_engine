@@ -11,17 +11,17 @@ from rendering import RenderedObject
 class RenderedNeurons(RenderedObject):
 
     def __init__(self, config: NetworkConfig):
-        super().__init__()
+        super().__init__(name='Neurons')
 
-        self._obj: visuals.visuals.MarkersVisual = visuals.Markers()
+        self._obj: visuals.visuals.MarkersVisual = visuals.Markers(parent=self)
         self._obj.set_data(config.pos,
                            face_color=(1, 1, 1, .3),
                            edge_color=(0, 0, 0, .5),
                            size=7, edge_width=1)
         # noinspection PyTypeChecker
-        self._obj.set_gl_state('translucent', blend=True, depth_test=True)
+        # self._obj.set_gl_state('translucent', blend=True, depth_test=True)
 
-        self._obj.name = 'Neurons'
+        # self._obj.name = 'Neurons'
         self._shape = config.N_pos_shape
 
     @property

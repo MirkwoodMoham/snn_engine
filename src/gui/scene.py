@@ -1,7 +1,8 @@
+from copy import copy
 from dataclasses import asdict, dataclass
 from typing import Union, Optional
-
 import numpy as np
+
 from vispy.app import Application, Canvas
 from vispy.color import Color
 from vispy.gloo.context import GLContext
@@ -10,6 +11,7 @@ from vispy.visuals.transforms import STTransform
 from vispy.scene.cameras import PanZoomCamera
 
 from network import SpikingNeuronNetwork
+from rendering import RenderedObject
 
 
 @dataclass
@@ -93,47 +95,33 @@ class EngineSceneCanvas(scene.SceneCanvas):
         self.voltage_plot_view.width_max = 600
         self.scatter_plot_view = self._scatter_plot_view(row=3, col=plot_col)
 
+        self.selected_objects = []
+
+        self.click_pos = np.zeros(2)
+        self.current_pos = np.zeros(2)
+
+        self.mouse_pressed = True
+
+        self.grid_transform = self.scene.node_transform(self.grid)
+
         self.freeze()
 
         if network is not None:
-            # arrow = scene.visuals.Arrow(pos=np.array([[1.05, 1.05, 0.05], [1.05, 1.05, 1.05]]),
-            #                             arrows=np.array([[1.05, 1.05, 1.05, 1.05, 1.05, 1.15]]),
-            #                             arrow_type='triangle_60', arrow_size=15,)
-            tube = scene.visuals.Tube(points=np.array([[1.05, 1.05, 0.0],
-                                                       [1.05, 1.05, .3],
-                                                       [1.05, 1.05, .3],
-                                                       [1.05, 1.05, .35]
-                                                       ]),
-                                      tube_points=4,
-                                      radius=np.array([.01, .01, .025, .0, ]))
-            self.add_to_network_view(tube)
-            self.add_to_network_view(network.neurons.obj)
-            self.add_to_network_view(network.outer_grid)
-            self.add_to_network_view(network.selector_box.obj)
-            # self.add_to_network_view(network.selector_box.obj.vertex_normals)
-            # self.add_to_network_view(network.selector_box.obj.face_normals)
-            self.add_voltage_plot(network)
-            self.add_firing_scatter_plot(network)
-            self.add_to_network_view(network.selected_group_boxes.obj)
+            self.network_view.add(network.neurons)
+            self.network_view.add(network.outer_grid)
+            self.network_view.add(network.selector_box)
+            network.selector_box.select(True)
+            self.selected_objects.append(network.selector_box)
+            for arrow in network.selector_box.obj.normals:
+                self.network_view.add(arrow)
+            self.network_view.add(network.selected_group_boxes)
+            self.voltage_plot_view.add(network.voltage_plot)
+            self.scatter_plot_view.add(network.firing_scatter_plot)
 
     @property
     def _window_id(self):
         # noinspection PyProtectedMember
         return self._backend._id
-
-    def add_to_network_view(self, obj):
-        obj.parent = self.network_view.scene
-        self.network_view.add(obj)
-
-    def add_voltage_plot(self, network: SpikingNeuronNetwork):
-        line: scene.visuals.Box = network.voltage_plot.obj
-        line.parent = self.voltage_plot_view.scene
-        self.voltage_plot_view.add(line)
-
-    def add_firing_scatter_plot(self, network: SpikingNeuronNetwork):
-        line: scene.visuals.Box = network.firing_scatter_plot.obj
-        line.parent = self.scatter_plot_view.scene
-        self.scatter_plot_view.add(line)
 
     # noinspection PyTypeChecker
     def _plot_view(self,
@@ -202,11 +190,46 @@ class EngineSceneCanvas(scene.SceneCanvas):
         self._set_keys(keys)
         self.freeze()
 
+    def mouse_pos(self, event):
+        return self.grid_transform.map(event.pos)[:2]
+
     def on_mouse_press(self, event):
 
-        tr = self.scene.node_transform(self.network_view.scene)
-        pos = tr.map(event.pos)
-        self.network_view.interactive = False
-        selected = self.visual_at(event.pos)
-        print(selected)
-        self.network_view.interactive = True
+        if event.button == 1:
+            self.click_pos[:2] = self.mouse_pos(event)
+        # self.update()
+
+    def on_mouse_release(self, event):
+        if event.button == 1:
+            self.current_pos[:2] = self.mouse_pos(event)
+            if not (self.current_pos[:2] - self.click_pos[:2]).any():
+
+                self.network_view.interactive = False
+                selected = self.visual_at(event.pos)
+                print('SELECTED:', selected)
+                self.network_view.interactive = True
+
+                if (selected is None) or (not (selected.parent in self.selected_objects)):
+                    if len(self.selected_objects) > 0:
+                        # if not (self.current_pos[:2] - self.click_pos[:2]).any():
+                        for o in copy(self.selected_objects):
+                            if (selected is None) or (not o.is_child(selected)):
+                                o.select(False)
+                                self.selected_objects.remove(o)
+
+                    if selected is not None:
+                        if isinstance(selected.parent, RenderedObject):
+                            self.selected_objects.append(selected.parent)
+                            selected.parent.select(True)
+
+        print('released', len(self.selected_objects), self.selected_objects)
+
+    def on_mouse_move(self, event):
+
+        if event.button == 1:
+            self.current_pos[:2] = self.mouse_pos(event)
+            # print(self.current_pos)
+            # print(self.click_pos)
+            print(np.linalg.norm(self.current_pos - self.click_pos))
+
+

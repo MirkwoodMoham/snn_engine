@@ -1,1 +1,6 @@
-from .rendered_object import Scale, RenderedObject, Position
+from .rendered_object import (
+    NormalArrow,
+    Position,
+    RenderedObject,
+    Scale
+)
