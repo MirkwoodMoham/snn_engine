@@ -15,16 +15,16 @@ from .network_structures import (
     NeuronTypeGroup,
     NeuronTypeGroupConnection
 )
-from rendering import RenderedObject
+from rendering import RenderedObjectNode
 from .rendered_objects import (
     BoxSystem,
     RenderedNeurons,
     SelectorBox,
-    DefaultBox,
     VoltagePlot,
     FiringScatterPlot
 )
 from .network_states import IzhikevichModel, LocationGroupProperties
+from rendering import Box
 
 # noinspection PyUnresolvedReferences
 from gpu import (
@@ -169,7 +169,7 @@ class NetworkGPUArrays(GPUArrayCollection):
             self.firings_map = self.izeros(shapes.firings_scatter_plot_map)
             self.firings_map[:, 0] = torch.arange(shapes.firings_scatter_plot_map[0])
 
-            print(self.voltage.to_dataframe)
+            # print(self.voltage.to_dataframe)
 
     def __init__(self,
                  config: NetworkConfig,
@@ -706,7 +706,7 @@ class SpikingNeuronNetwork:
                  model=IzhikevichModel,
                  ):
 
-        RenderedObject._grid_unit_shape = network_config.grid_unit_shape
+        RenderedObjectNode._grid_unit_shape = network_config.grid_unit_shape
 
         self.T = T
         self._network_config: NetworkConfig = network_config
@@ -732,11 +732,15 @@ class SpikingNeuronNetwork:
 
         self.GPU: Optional[NetworkGPUArrays] = None
 
+        self.rendered_3d_objs = [self._neurons]
+
         self._outer_grid: Optional[visuals.Box] = None
         self._selector_box: Optional[SelectorBox] = None
         self._voltage_plot: Optional[VoltagePlot] = None
         self._firing_scatter_plot: Optional[VoltagePlot] = None
         self._selected_group_boxes: Optional[BoxSystem] = None
+
+        self._all_rendered_objects_initialized = False
 
         self.validate()
 
@@ -776,13 +780,15 @@ class SpikingNeuronNetwork:
     @property
     def outer_grid(self) -> visuals.Box:
         if self._outer_grid is None:
-            self._outer_grid: visuals.Box = DefaultBox(shape=self.config.N_pos_shape,
-                                                       scale=[.99, .99, .99],
-                                                       segments=self.config.G_shape,
-                                                       depth_test=False)
+            self._outer_grid: visuals.Box = Box(shape=self.config.N_pos_shape,
+                                                scale=[.99, .99, .99],
+                                                segments=self.config.G_shape,
+                                                depth_test=False,
+                                                use_parent_transform=False)
             # self._outer_grid.set_gl_state('translucent', blend=True, depth_test=True)
             # self._outer_grid.mesh.set_gl_state('translucent', blend=True, depth_test=True)
             self._outer_grid.visible = False
+            self.rendered_3d_objs.append(self._outer_grid)
 
         return self._outer_grid
 
@@ -790,6 +796,7 @@ class SpikingNeuronNetwork:
     def selector_box(self) -> SelectorBox:
         if self._selector_box is None:
             self._selector_box = SelectorBox(self.config)
+            self.rendered_3d_objs.append(self._selector_box)
         return self._selector_box
 
     @property
@@ -797,6 +804,7 @@ class SpikingNeuronNetwork:
         if self._voltage_plot is None:
             self._voltage_plot = VoltagePlot(n_plots=self.plotting_config.n_voltage_plots,
                                              plot_length=self.plotting_config.voltage_plot_length)
+            # self.rendered_objs.append(self._voltage_plot)
         return self._voltage_plot
 
     @property
@@ -804,6 +812,7 @@ class SpikingNeuronNetwork:
         if self._firing_scatter_plot is None:
             self._firing_scatter_plot = FiringScatterPlot(n_plots=self.plotting_config.n_scatter_plots,
                                                           plot_length=self.plotting_config.scatter_plot_length)
+            # self.rendered_objs.append(self._firing_scatter_plot)
         return self._firing_scatter_plot
 
     @property
@@ -820,10 +829,14 @@ class SpikingNeuronNetwork:
                                                    grid_unit_shape=self.config.grid_unit_shape)
 
             # print(g_pos)
+            self.rendered_3d_objs.append(self._selected_group_boxes)
         return self._selected_group_boxes
 
     # noinspection PyPep8Naming
     def initialize_GPU_arrays(self, device):
+        if not self._all_rendered_objects_initialized:
+            raise AssertionError('not self._all_rendered_objects_initialized')
+
         buffers = BufferCollection(
             N_pos=self._neurons.vbo,
             voltage=self.voltage_plot.vbo,
@@ -844,12 +857,6 @@ class SpikingNeuronNetwork:
         self.selector_box.cuda_device = self.GPU.device
         self.selector_box.states_gpu = self.GPU.G_props
         self.selector_box.transform_connected = True
-
-    def select_groups(self):
-        v = self.selector_box.selection_vertices
-        p = self.GPU.G_pos
-
-        self.GPU.G_props.selected
 
     def sort_pos(self):
         """
@@ -873,5 +880,29 @@ class SpikingNeuronNetwork:
 
     def update(self):
         self.GPU.update()
+
+    # noinspection PyStatementEffect
+    def initialize_rendered_objs(self):
+        self.voltage_plot
+        self.firing_scatter_plot
+        self.outer_grid
+        self.selector_box
+        # self.selector_box.obj.parent = self.selector_box
+        self.selected_group_boxes
+
+        self._all_rendered_objects_initialized = True
+
+    def add_rendered_objects(self, view_3d, vplot_view, fplot_view):
+        if not self._all_rendered_objects_initialized:
+            self.initialize_rendered_objs()
+        vplot_view.add(self.voltage_plot)
+        fplot_view.add(self.firing_scatter_plot)
+        for o in self.rendered_3d_objs:
+            view_3d.add(o)
+
+        for o in self.selector_box.obj.normals:
+            view_3d.add(o)
+
+        # self.selector_box.obj.parent = view_3d.scene
 
 

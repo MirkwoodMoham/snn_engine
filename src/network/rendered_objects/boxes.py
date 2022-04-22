@@ -1,10 +1,10 @@
 import numpy as np
 import torch
-from typing import Optional, Union
+from typing import Optional
 from vispy import gloo
 from vispy.color import Color
 from vispy.visuals.shaders.function import Function
-from vispy.scene import visuals, VisualNode
+from vispy.scene import visuals
 from vispy.visuals import Visual
 from vispy.visuals.line.line import _GLLineVisual, _AggLineVisual, LineVisual
 from vispy.visuals.transforms import STTransform
@@ -13,131 +13,72 @@ from vispy.util.profiler import Profiler
 from network.network_config import NetworkConfig
 from network.network_states import LocationGroupProperties
 from rendering import (
-    NormalArrow,
+    add_children,
+    Box,
     Position,
-    RenderedObject,
+    RenderedObjectNode,
     Scale,
+    CudaBox,
+    RenderedCudaObjectNode,
+    ArrowVisual
 )
 
 
-def default_cube_transform(edge_lengths):
-    return STTransform(translate=[edge_lengths[0] / 2, edge_lengths[1] / 2, edge_lengths[2] / 2])
-
-
-class DefaultBox(visuals.Box):
-
-    # noinspection PyUnresolvedReferences
-    def __init__(self,
-                 shape: tuple,
-                 segments: tuple = (1, 1, 1),
-                 translate=None,
-                 scale=None,
-                 color: Optional[Union[str, tuple]] = None,
-                 edge_color: Union[str, tuple] = 'white',
-                 name: str = None,
-                 depth_test=True, border_width=1, init_normals=False, parent=None, interactive=False):
-        if translate is None:
-            translate = (shape[0] / 2, shape[1] / 2, shape[2] / 2)
-
-        # self._parent = parent
-        super().__init__(width=shape[0],
-                         height=shape[2],
-                         depth=shape[1],
-                         color=color,
-                         name=name,
-                         # color=(0.5, 0.5, 1, 0.5),
-                         width_segments=segments[0],  # X/RED
-                         height_segments=segments[2],  # Y/Blue
-                         depth_segments=segments[1],  # Z/Green
-                         edge_color=edge_color, parent=parent)
-
-        self.mesh.set_gl_state(polygon_offset_fill=True,
-                               polygon_offset=(1, 1), depth_test=depth_test)
-        self._border.update_gl_state(line_width=max(border_width, 1))
-
-        self.interactive = interactive
-
-        self.unfreeze()
-        if segments == (1, 1, 1):
-            isv = np.unique(self._border._meshdata._vertices, axis=0)[[0, 4, 2, 1]]
-            assert ((isv[1, ] - isv[0, ]) == (np.array([isv[0, 0], 0, 0]) * - 2)).all()
-            assert ((isv[2, ] - isv[0, ]) == (np.array([0, isv[0, 1], 0]) * - 2)).all()
-            assert ((isv[3, ] - isv[0, ]) == (np.array([0, 0, isv[0, 2]]) * - 2)).all()
-            self._initial_selection_vertices = isv
-
-        if parent is not None:
-            # self.transform.scale = scale
-            self.parent.transform.translate = translate
-            self.parent.transform.scale = scale
-            # self.transform = self.parent.transform
-        else:
-            self.transform = STTransform()
-            self.transform.scale = scale
-            self.transform.translate = translate
-
-        if init_normals:
-            assert segments == (1, 1, 1)
-            self.normals = []
-            inv = self.initial_normal_vertices(shape)
-            for i in range(6):
-                self.normals.append(NormalArrow(points=inv[i], parent=self))
-
-        # meshdata = self.mesh.mesh_data
-        # self.vertex_normals = visuals.MeshNormals(meshdata, primitive='vertex', color='orange', width=2)
-        # self.face_normals = visuals.MeshNormals(meshdata, primitive='face', color='yellow')
-        # self.vertex_normals.transform = self.transform
-        # self.vertex_normals.visible = True
-        # self.face_normals.transform = self.transform
-        # self.face_normals.visible = True
-        self.freeze()
-
-
-    @staticmethod
-    def initial_normal_vertices(shape):
-        # isv = self._initial_selection_vertices
-
-        points = np.zeros((6, 4, 3), dtype=np.float32)
-
-        x0 = shape[0]/2
-        y0 = shape[1]/2
-        z0 = shape[2]/2
-
-        points[0] = np.array([[x0, 0, 0], [x0 + x0/2, 0, 0], [x0 + x0/2, 0, 0], [x0 + 2 * x0/3, 0, 0]])
-        points[1] = -1 * points[0]
-        points[2] = np.array([[0, y0, 0], [0, y0 + y0/2, 0], [0, y0 + y0/2, 0], [0, y0 + 2 * y0/3, 0]])
-        points[3] = -1 * points[2]
-        points[4] = np.array([[0, 0, z0], [0, 0, z0 + z0/2], [0, 0, z0 + z0/2], [0, 0, z0 + 2 * z0/3]])
-        points[5] = -1 * points[4]
-
-        return points
-
-
 # noinspection PyAbstractClass
-class SelectorBox(RenderedObject):
+class SelectorBox(RenderedCudaObjectNode):
     count: int = 0
 
     def __init__(self, network_config: NetworkConfig, parent=None, name=None):
-        super().__init__(name=name or f'{self.__class__.__name__}{SelectorBox.count}',
-                         parent=parent, selectable=True)
+        name = name or f'{self.__class__.__name__}{SelectorBox.count}'
+        self._select_children = []
+        # super().__init__(name=name or f'{self.__class__.__name__}{SelectorBox.count}',
+        #                  parent=parent, selectable=True)
         self.network_config = network_config
-        self._obj: visuals.Box = DefaultBox(name=self.name + '.obj',
-                                            shape=self.shape,
-                                            color=(1, 0.65, 0, 0.1),
-                                            edge_color=(1, 0.65, 0, 0.5),
-                                            scale=[1.1, 1.1, 1.1],
-                                            depth_test=False,
-                                            border_width=2, init_normals=True,
-                                            parent=self, interactive=self.selectable)
-        # self._obj.name = self.name
-        # self._obj.__class__.__name__ = self._obj.name
+        self._obj: CudaBox = CudaBox(select_parent=self,
+                                     name=name + '.obj',
+                                     shape=self.shape,
+                                     color=(1, 0.65, 0, 0.1),
+                                     edge_color=(1, 0.65, 0, 0.5),
+                                     # scale=[1.1, 1.1, 1.1],
+                                     depth_test=False,
+                                     border_width=2,
+                                     parent=None)
 
+        super().__init__([self._obj], selectable=True)
+        # self._obj.parent = self
+        self.unfreeze()
+        self._ghost: Box = Box(name=name + '.ghost',
+                               shape=self.shape,
+                               translate=(0, 0, 0),
+                               color=(0, 0.1, 0.2, 0.51),
+                               edge_color=(0, 0.1, 0.2, 0.95),
+                               scale=[0.51, 2.1, 1.1],
+                               depth_test=False,
+                               border_width=2,
+                               parent=self,
+                               use_parent_transform=False)
+        # self.some_arrow = ArrowVisual(self, points=self._obj.normals[0].obj._points + np.array([.5, .5, .5]),
+        #                               name=name, parent=self,
+        #                               color='white')
+
+        self.transform = STTransform()
+        self.transform.translate = (self.shape[0] / 2, self.shape[1] / 2, self.shape[2] / 2)
+        self.transform.scale = [1.1, 1.1, 1.1]
+
+        for normal in self._select_children:
+            normal.transform = self.transform
+
+        # add_children(self.obj, self.obj.normals)
+        # self._ghost._transform = STTransform()
+        # self._ghost.transform.scale = [0.51, 2.1, 1.1]
+
+        self.unfreeze()
         SelectorBox.count += 1
-
+        self.interactive = True
         self.scale = Scale(self)
         self.pos = Position(self, _grid_unit_shape=self.shape)
 
         self.states_gpu: Optional[LocationGroupProperties] = None
-        self.cuda_device: Optional[str] = None
 
         # noinspection PyPep8Naming
         G = self.network_config.G
@@ -150,6 +91,8 @@ class SelectorBox(RenderedObject):
         self.g_pos_end[:, 2] = self.g_pos_end[:, 2] + self.shape[2]
 
         self.group_numbers = np.arange(G)  # .reshape((G, 1))
+
+        self.freeze()
 
     @property
     def g_pos(self):
@@ -183,9 +126,14 @@ class SelectorBox(RenderedObject):
 
     def on_select_callback(self, v: bool):
         print(f'selected({v}): ', self.name)
-        for c in self.obj.children:
+
+        print('\nchildren:', self.children)
+        print('children (obj):', self.obj.children, '\n')
+        print('normals (obj):', self.obj.normals, '\n')
+        # for c in self.obj.children:
+        for c in self.obj.normals:
             # c: NormalArrow
-            c.visible = v
+            c.obj.visible = v
             # c.obj.color = 'white'
             # c.obj.update()
 
@@ -341,7 +289,7 @@ GSLine = visuals.create_visual_node(GSLineVisual)
 
 
 # noinspection PyAbstractClass
-class BoxSystem(RenderedObject):
+class BoxSystem(RenderedObjectNode):
 
     def __init__(self, pos, grid_unit_shape, max_z, color=(0.1, 1., 1., 1.), **kwargs):
         gcode = f"""
@@ -419,10 +367,12 @@ class BoxSystem(RenderedObject):
                 }}
             """
         # gcode = None
-        super().__init__()
+
         # noinspection PyArgumentList
-        self._obj = GSLine(gcode=gcode, pos=pos, color=color, parent=self, **kwargs)
+        self._obj = GSLine(gcode=gcode, pos=pos, color=color, parent=None, **kwargs)
         self._obj.transform = STTransform(translate=(0, 0, 0), scale=(1, 1, 1))
+
+        super().__init__([self.obj])
 
     @property
     def vbo_glir_id(self):

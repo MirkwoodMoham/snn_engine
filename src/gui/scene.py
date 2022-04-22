@@ -11,7 +11,7 @@ from vispy.visuals.transforms import STTransform
 from vispy.scene.cameras import PanZoomCamera
 
 from network import SpikingNeuronNetwork
-from rendering import RenderedObject
+from rendering import RenderedObject, RenderedObjectNode, ArrowVisual
 
 
 @dataclass
@@ -107,16 +107,17 @@ class EngineSceneCanvas(scene.SceneCanvas):
         self.freeze()
 
         if network is not None:
-            self.network_view.add(network.neurons)
-            self.network_view.add(network.outer_grid)
-            self.network_view.add(network.selector_box)
+            network.add_rendered_objects(self.network_view, self.voltage_plot_view, self.scatter_plot_view)
+            # self.network_view.add(network.neurons)
+            # self.network_view.add(network.outer_grid)
+            # self.network_view.add(network.selector_box)
+            # self.network_view.add(network.selected_group_boxes)
+            # self.voltage_plot_view.add(network.voltage_plot)
+            # self.scatter_plot_view.add(network.firing_scatter_plot)
+
             network.selector_box.select(True)
             self.selected_objects.append(network.selector_box)
-            for arrow in network.selector_box.obj.normals:
-                self.network_view.add(arrow)
-            self.network_view.add(network.selected_group_boxes)
-            self.voltage_plot_view.add(network.voltage_plot)
-            self.scatter_plot_view.add(network.firing_scatter_plot)
+
 
     @property
     def _window_id(self):
@@ -206,21 +207,29 @@ class EngineSceneCanvas(scene.SceneCanvas):
 
                 self.network_view.interactive = False
                 selected = self.visual_at(event.pos)
-                print('SELECTED:', selected)
+                # if isinstance(selected, ArrowVisual):
+                #     selected = selected._node_parent
+                print('\nSELECTED:', selected)
                 self.network_view.interactive = True
 
-                if (selected is None) or (not (selected.parent in self.selected_objects)):
+                if selected in self.selected_objects:
+                    for o in copy(self.selected_objects):
+                        if (not (o is selected)) and (not o.is_select_child(selected)):
+                            o.select(False)
+                            self.selected_objects.remove(o)
+
+                elif (selected is None) or (not (selected in self.selected_objects)):
                     if len(self.selected_objects) > 0:
                         # if not (self.current_pos[:2] - self.click_pos[:2]).any():
                         for o in copy(self.selected_objects):
-                            if (selected is None) or (not o.is_child(selected)):
+                            if (selected is None) or (not o.is_select_child(selected)):
                                 o.select(False)
                                 self.selected_objects.remove(o)
 
                     if selected is not None:
-                        if isinstance(selected.parent, RenderedObject):
-                            self.selected_objects.append(selected.parent)
-                            selected.parent.select(True)
+                        if isinstance(selected, RenderedObject):
+                            self.selected_objects.append(selected)
+                            selected.select(True)
 
         print('released', len(self.selected_objects), self.selected_objects)
 

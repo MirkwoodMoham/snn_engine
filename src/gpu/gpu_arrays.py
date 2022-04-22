@@ -72,6 +72,9 @@ class GPUArrayConfig:
 
     def __init__(self, shape=None, strides=None, dtype=None, stream=0, device: torch.device = None):
 
+        if device is None:
+            raise ValueError('device is None.')
+
         self.shape: Optional[tuple] = shape
         self.strides:  tuple = strides
         self.dtype: np.dtype = dtype

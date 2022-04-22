@@ -2,7 +2,7 @@ import numpy as np
 from vispy.scene import visuals
 # from vispy.visuals.transforms import STTransform
 
-from rendering import RenderedObject
+from rendering import RenderedObjectNode
 
 
 def plot_pos(n_plots, plot_length):
@@ -24,10 +24,10 @@ def pos_color(size):
 
 
 # noinspection PyAbstractClass
-class VoltagePlot(RenderedObject):
+class VoltagePlot(RenderedObjectNode):
 
     def __init__(self, n_plots, plot_length):
-        super().__init__()
+        # super().__init__()
 
         connect = np.ones(plot_length).astype(bool)
         connect[-1] = False
@@ -36,7 +36,9 @@ class VoltagePlot(RenderedObject):
         self._obj: visuals.Line = visuals.Line(pos=plot_pos(n_plots, plot_length),
                                                color=pos_color(n_plots * plot_length),
                                                connect=connect,
-                                               antialias=False, width=1, parent=self)
+                                               antialias=False, width=1, parent=None)
+
+        super().__init__([self._obj])
         # line = visuals.Line(pos=pos, color=color, connect='strip', antialias=True, method='agg')
         # self._obj.transform = STTransform()
 
@@ -46,16 +48,16 @@ class VoltagePlot(RenderedObject):
 
 
 # noinspection PyAbstractClass
-class FiringScatterPlot(RenderedObject):
+class FiringScatterPlot(RenderedObjectNode):
 
     def __init__(self, n_plots, plot_length):
-        super().__init__()
+        # super().__init__()
 
         pos = plot_pos(n_plots, plot_length)
         color = pos_color(n_plots * plot_length)
         color[:, 3] = 0
 
-        self._obj: visuals.visuals.MarkersVisual = visuals.Markers(parent=self)
+        self._obj: visuals.visuals.MarkersVisual = visuals.Markers(parent=None)
         # noinspection PyTypeChecker
         self._obj.set_data(pos,
                            face_color=color,
@@ -63,6 +65,9 @@ class FiringScatterPlot(RenderedObject):
                            size=3, edge_width=0)
         # noinspection PyTypeChecker
         self._obj.set_gl_state('translucent', blend=True, depth_test=True)
+
+        super().__init__([self._obj])
+
 
     @property
     def vbo_glir_id(self):

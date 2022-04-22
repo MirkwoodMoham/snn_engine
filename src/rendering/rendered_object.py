@@ -3,26 +3,25 @@ from dataclasses import dataclass
 import numpy as np
 from typing import Optional, Union
 
+from vispy.visuals import CompoundVisual, Visual
 from vispy.scene import visuals, Node
 from vispy.gloo.context import get_current_canvas
 from vispy.visuals.transforms import STTransform
 
 
-class RenderedObject(Node):
+class RenderedObject:
+    def __init__(self, selectable=False):
 
-    def __init__(self, parent=None, name=None, transforms=None, selectable=False):
-
-        super().__init__(parent=parent, name=name, transforms=transforms)
-
-        self._obj: Optional[Union[visuals.visuals.MarkersVisual,
-                                  visuals.visuals.LineVisual]] = None
-
-        self.scale: Optional[Scale] = None
+        if not hasattr(self, '_obj'):
+            self._obj = None
+        if not hasattr(self, '_select_children'):
+            self._select_children = []
 
         self._vbo = None
         self._pos_vbo = None
+        self._color_vbo = None
         self._ibo = None
-        self._parent = None
+        # self._parent = None
 
         self._shape = None
 
@@ -33,11 +32,23 @@ class RenderedObject(Node):
         self.selectable = selectable
         self.selected = False
 
-        self.set_transform('st')
-        # self._transform = STTransform()
+        self._cuda_device: Optional[str] = None
+        self.scale: Optional[Scale] = None
+        self._transform = None
 
-    def __call__(self):
-        return self._obj
+        self._select_parent = None
+
+    @property
+    def select_parent(self):
+        return self._select_parent
+
+    @select_parent.setter
+    def select_parent(self, v):
+        self._select_parent = v
+        v._select_children.append(self)
+
+    def is_select_child(self, v):
+        return v in self._select_children
 
     @property
     def unique_vertices_cpu(self):
@@ -70,6 +81,10 @@ class RenderedObject(Node):
         return self._shape
 
     @property
+    def color_vbo_glir_id(self):
+        return self.vbo_glir_id
+
+    @property
     def pos_vbo_glir_id(self):
         return self.vbo_glir_id
 
@@ -84,23 +99,34 @@ class RenderedObject(Node):
     def transform_changed(self):
         pass
 
-    # noinspection PyProtectedMember
+    @staticmethod
+    def buffer_id(glir_id):
+        return int(get_current_canvas().context.shared.parser._objects[glir_id].handle)
+
+    @property
+    def color_vbo(self):
+        # print(self.buffer_id(self.color_vbo_glir_id))
+        # return self.buffer_id(self.color_vbo_glir_id)
+        if self._color_vbo is None:
+            self._color_vbo = self.buffer_id(self.color_vbo_glir_id)
+        return self._color_vbo
+
     @property
     def pos_vbo(self):
         if self._pos_vbo is None:
-            self._pos_vbo = get_current_canvas().context.shared.parser._objects[self.pos_vbo_glir_id].handle
+            self._pos_vbo = self.buffer_id(self.pos_vbo_glir_id)
         return self._pos_vbo
 
     @property
     def vbo(self):
         if self._vbo is None:
-            self._vbo = get_current_canvas().context.shared.parser._objects[self.vbo_glir_id].handle
+            self._vbo = self.buffer_id(self.vbo_glir_id)
         return self._vbo
 
     @property
     def ibo(self):
         if self._ibo is None:
-            self._ibo = get_current_canvas().context.shared.parser._objects[self.ibo_glir_id].handle
+            self._ibo = self.buffer_id(self.ibo_glir_id)
         return self._ibo
 
     def on_select_callback(self, v: bool):
@@ -112,82 +138,51 @@ class RenderedObject(Node):
             self.on_select_callback(v)
 
 
-class NormalArrowVisual(visuals.Tube):
+class RenderedObjectVisual(CompoundVisual, RenderedObject):
 
-    def __init__(self, points, color=None, name=None, parent=None,
-                 tube_points=4, radius=np.array([.01, .01, .025, .0])):
-        if color is None:
-            if points[:, 0].any():
-                color = np.array([1, 0, 0, 0.3])
-            elif points[:, 1].any():
-                color = np.array([0, 1, 0, 0.3])
-            else:
-                color = np.array([0, 0, 1, 0.3])
-        name = name or parent.name
-        if (points[:, 0] > 0).any():
-            name += ':x+'
-        elif (points[:, 0] < 0).any():
-            name += ':x-'
-        elif (points[:, 1] > 0).any():
-            name += ':y+'
-        elif (points[:, 1] < 0).any():
-            name += ':y-'
-        elif (points[:, 2] > 0).any():
-            name += ':z+'
-        else:
-            name += ':z-'
+    # def __init__(self, parent=None, name=None, transforms=None, selectable=False):
+    def __init__(self, subvisuals, parent=None, selectable=False):
 
-        super().__init__(name=name, points=points, tube_points=tube_points, radius=radius, color=color, parent=parent)
-        # self.name = name
-        # self.transform: STTransform = parent.transform
-        self.interactive = True
+        # super().__init__(parent=parent, name=name, transforms=transforms)
 
+        self.unfreeze()
+        # self._obj: Optional[Union[visuals.visuals.MarkersVisual,
+        #                           visuals.visuals.LineVisual]] = None
+        RenderedObject.__init__(self, selectable=selectable)
 
+        CompoundVisual.__init__(self, subvisuals)
+        # for v in subvisuals:
+        #     v.parent = self
+
+        self.freeze()
         # self.unfreeze()
-        # self._obj_transform: STTransform = transform
-        # self._transform: STTransform = deepcopy(transform)
-        # self._fixed_scale = np.array([1., 1., 1., 1.])
-        # self.freeze()
 
-    # @property
-    # def transform(self):
-    #
-    #     self._transform.translate = self._obj_transform.translate
-    #     self._transform.scale = self._fixed_scale
-    #
-    #     return self._transform
+        if parent is not None:
+            self.parent = parent
+
+        # self.set_transform('st')
+
+        # self._transform = STTransform()
+
+def add_children(parent: Node, children: list):
+    for child in children:
+        parent._add_child(child)
 
 
-class NormalArrow(RenderedObject):
-
-    def __init__(self, points, color=None, name=None, tube_points=4,
-                 radius=np.array([.01, .01, .025, .0]), parent=None, selectable=True):
-        super().__init__(parent=parent, selectable=selectable,
-                         name=name or parent.name + f'.{self.__class__.__name__}')
-        self.transform: STTransform = parent.parent.transform
-
-        self._obj = NormalArrowVisual(points=points, name=name, parent=self,
-                                      tube_points=tube_points, radius=radius, color=color)
-
-    def on_select_callback(self, v):
-        print(f'selected arrow({v}):', self)
-
+RenderedObjectNode = visuals.create_visual_node(RenderedObjectVisual)
 
 
 @dataclass
 class _STR:
-    parent: RenderedObject
+    parent: RenderedObjectNode
     prop_id: str = 'some key'
 
     def change_prop(self, i, v):
-        sc_old = getattr(self.transform, self.prop_id)
-        sc_new = sc_old.copy()
-        sc_new[i] = v
-        setattr(self.transform, self.prop_id, sc_new)
+        p = getattr(self.transform, self.prop_id)
+        p[i] = v
+        setattr(self.transform, self.prop_id, p)
         if self.parent.transform_connected is True:
             self.parent.transform_changed()
-        # print()
-        # print(self.parent.unique_vertices_cpu)
 
     @property
     def transform(self) -> STTransform:

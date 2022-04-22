@@ -18,7 +18,7 @@ from PyQt6.QtWidgets import (
 )
 
 from .collapsible_widget.collapsible_widget import CollapsibleWidget
-from rendering import RenderedObject
+from rendering import RenderedObjectNode
 
 
 @dataclass
@@ -357,7 +357,7 @@ class RenderedObjectSliders(CollapsibleWidget):
         z: SpinBoxSlider = None
         a: SpinBoxSlider = None
 
-    def __init__(self, obj: RenderedObject, window, parent=None, scale_sliders=None):
+    def __init__(self, obj: RenderedObjectNode, window, parent=None, scale_sliders=None):
 
         super().__init__(parent=parent, title=obj.name)
 

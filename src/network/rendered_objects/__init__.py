@@ -1,3 +1,3 @@
 from .neurons import RenderedNeurons
-from .boxes import DefaultBox, SelectorBox, BoxSystem
+from .boxes import SelectorBox, BoxSystem
 from .plots import VoltagePlot, FiringScatterPlot
