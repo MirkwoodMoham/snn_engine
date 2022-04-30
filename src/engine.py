@@ -53,12 +53,12 @@ class Engine:
         # self.window.scene_3d.add_to_network_view(self.network.selected_group_boxes.obj)
 
         self.window.set_keys({
-            'left': self.network.selector_box.pos.mv_left,
-            'right': self.network.selector_box.pos.mv_right,
-            'up': self.network.selector_box.pos.mv_fw,
-            'down': self.network.selector_box.pos.mv_bw,
-            'pageup': self.network.selector_box.pos.mv_up,
-            'pagedown': self.network.selector_box.pos.mv_down,
+            'left': self.network.selector_box.translate.mv_left,
+            'right': self.network.selector_box.translate.mv_right,
+            'up': self.network.selector_box.translate.mv_fw,
+            'down': self.network.selector_box.translate.mv_bw,
+            'pageup': self.network.selector_box.translate.mv_up,
+            'pagedown': self.network.selector_box.translate.mv_down,
         })
 
         selector_box_collapsible = RenderedObjectSliders(self.network.selector_box, self.window)

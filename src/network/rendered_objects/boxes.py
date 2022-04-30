@@ -15,12 +15,16 @@ from network.network_states import LocationGroupProperties
 from rendering import (
     add_children,
     Box,
-    Position,
+    Translate,
     RenderedObjectNode,
     Scale,
     CudaBox,
     RenderedCudaObjectNode,
-    ArrowVisual
+    NormalArrow
+)
+from gpu import (
+    GPUArrayConfig,
+    RegisteredGPUArray
 )
 
 
@@ -29,34 +33,37 @@ class SelectorBox(RenderedCudaObjectNode):
     count: int = 0
 
     def __init__(self, network_config: NetworkConfig, parent=None, name=None):
-        name = name or f'{self.__class__.__name__}{SelectorBox.count}'
-        self._select_children = []
+        self.name = name or f'{self.__class__.__name__}{SelectorBox.count}'
+
+        self._select_children: list[NormalArrow] = []
         # super().__init__(name=name or f'{self.__class__.__name__}{SelectorBox.count}',
         #                  parent=parent, selectable=True)
         self.network_config = network_config
-        self._obj: CudaBox = CudaBox(select_parent=self,
-                                     name=name + '.obj',
-                                     shape=self.shape,
-                                     color=(1, 0.65, 0, 0.1),
-                                     edge_color=(1, 0.65, 0, 0.5),
-                                     # scale=[1.1, 1.1, 1.1],
-                                     depth_test=False,
-                                     border_width=2,
-                                     parent=None)
+        self.original_color = (1, 0.65, 0, 0.5)
+        self._visual: CudaBox = CudaBox(select_parent=self,
+                                        name=self.name + '.obj',
+                                        shape=self.shape,
+                                        # color=np.array([1, 0.65, 0, 0.5]),
+                                        color=(1, 0.65, 0, 0.1),
+                                        edge_color=self.original_color,
+                                        # scale=[1.1, 1.1, 1.1],
+                                        depth_test=False,
+                                        border_width=2,
+                                        parent=None)
 
-        super().__init__([self._obj], selectable=True)
+        super().__init__([self._visual], selectable=True, name=self.name)
         # self._obj.parent = self
         self.unfreeze()
-        self._ghost: Box = Box(name=name + '.ghost',
-                               shape=self.shape,
-                               translate=(0, 0, 0),
-                               color=(0, 0.1, 0.2, 0.51),
-                               edge_color=(0, 0.1, 0.2, 0.95),
-                               scale=[0.51, 2.1, 1.1],
-                               depth_test=False,
-                               border_width=2,
-                               parent=self,
-                               use_parent_transform=False)
+        # self._ghost: Box = Box(name=self.name + '.ghost',
+        #                        shape=self.shape,
+        #                        translate=(0, 0, 0),
+        #                        color=(0, 0.1, 0.2, 0.51),
+        #                        edge_color=(0, 0.1, 0.2, 0.95),
+        #                        scale=[0.51, 2.1, 1.1],
+        #                        depth_test=False,
+        #                        border_width=2,
+        #                        parent=self,
+        #                        use_parent_transform=False)
         # self.some_arrow = ArrowVisual(self, points=self._obj.normals[0].obj._points + np.array([.5, .5, .5]),
         #                               name=name, parent=self,
         #                               color='white')
@@ -76,7 +83,8 @@ class SelectorBox(RenderedCudaObjectNode):
         SelectorBox.count += 1
         self.interactive = True
         self.scale = Scale(self)
-        self.pos = Position(self, _grid_unit_shape=self.shape)
+        self.translate = Translate(self, _grid_unit_shape=self.shape)
+        # self.translate = Translate(self)
 
         self.states_gpu: Optional[LocationGroupProperties] = None
 
@@ -103,12 +111,20 @@ class SelectorBox(RenderedCudaObjectNode):
         return self.network_config.grid_unit_shape
 
     @property
+    def color(self):
+        return self.visual._border.color
+
+    @color.setter
+    def color(self, v):
+        self.visual._border.color = v
+
+    @property
     def vbo_glir_id(self):
-        return self._obj._border._vertices.id
+        return self.visual._border._vertices.id
 
     @property
     def selection_vertices(self):
-        return (self.obj._initial_selection_vertices
+        return (self.visual._initial_selection_vertices
                 * self.transform.scale[:3]
                 + self.transform.translate[:3])
 
@@ -125,17 +141,35 @@ class SelectorBox(RenderedCudaObjectNode):
         self.states_gpu.selected = torch.from_numpy(self.selected_masks[:, [3]]).to(self.cuda_device)
 
     def on_select_callback(self, v: bool):
-        print(f'selected({v}): ', self.name)
-
-        print('\nchildren:', self.children)
-        print('children (obj):', self.obj.children, '\n')
-        print('normals (obj):', self.obj.normals, '\n')
+        self.swap_select_color(v)
+        # print('children:', self.children)
+        # print('children (obj):', self.obj.children, '\n')
+        # print('normals (obj):', self.obj.normals, '\n')
         # for c in self.obj.children:
-        for c in self.obj.normals:
+        for c in self.visual.normals:
             # c: NormalArrow
-            c.obj.visible = v
+            c.visual.visible = v
             # c.obj.color = 'white'
             # c.obj.update()
+
+    def init_cuda_attributes(self, device, property_tensor):
+        super().init_cuda_attributes(device)
+        self.states_gpu = property_tensor
+        self.transform_connected = True
+
+    # @property
+    # def color_vbo_glir_id(self):
+    #     return self._obj._border.shared_program.vert['base_color'].id
+
+    # def init_cuda_arrays(self):
+    #     nbytes = 4
+    #     shape = (24, 4)
+    #     print('shape:', shape)
+    #     b = RegisteredGPUArray.from_buffer(
+    #         self.color_vbo, config=GPUArrayConfig(shape=shape, strides=(shape[1] * nbytes, nbytes),
+    #                                               dtype=np.float32, device=self.cuda_device))
+    #     # return b
+    #     self._gpu_array = b
 
 
 class _GSGLLineVisual(_GLLineVisual):
@@ -369,15 +403,15 @@ class BoxSystem(RenderedObjectNode):
         # gcode = None
 
         # noinspection PyArgumentList
-        self._obj = GSLine(gcode=gcode, pos=pos, color=color, parent=None, **kwargs)
-        self._obj.transform = STTransform(translate=(0, 0, 0), scale=(1, 1, 1))
+        self._visual = GSLine(gcode=gcode, pos=pos, color=color, parent=None, **kwargs)
+        self._visual.transform = STTransform(translate=(0, 0, 0), scale=(1, 1, 1))
 
-        super().__init__([self.obj])
+        super().__init__([self.visual])
 
     @property
     def vbo_glir_id(self):
-        return self._obj._line_visual._pos_vbo.id
+        return self.visual._line_visual._pos_vbo.id
 
     @property
     def ibo_glir_id(self):
-        return self._obj._line_visual._connect_ibo.id
+        return self.visual._line_visual._connect_ibo.id

@@ -3,19 +3,26 @@ from dataclasses import dataclass
 import numpy as np
 from typing import Optional, Union
 
-from vispy.visuals import CompoundVisual, Visual
+from vispy.visuals import CompoundVisual, Visual, BaseVisual
 from vispy.scene import visuals, Node
 from vispy.gloo.context import get_current_canvas
 from vispy.visuals.transforms import STTransform
 
 
 class RenderedObject:
-    def __init__(self, selectable=False):
+    def __init__(self, select_parent=None, selectable=False, draggable=False):
 
-        if not hasattr(self, '_obj'):
-            self._obj = None
+        if not hasattr(self, '_visual'):
+            self._visual = None
+
+        if select_parent is not None:
+            self.select_parent = select_parent
         if not hasattr(self, '_select_children'):
             self._select_children = []
+        if not hasattr(self, '_select_parent'):
+            self._select_parent = None
+        if not hasattr(self, 'original_color'):
+            self.original_color = None
 
         self._vbo = None
         self._pos_vbo = None
@@ -27,16 +34,32 @@ class RenderedObject:
 
         self._glir = None
 
-        self.transform_connected = True
+        self.transform_connected = False
 
         self.selectable = selectable
+        self.draggable = draggable
         self.selected = False
+        self.select_color = 'white'
+        self._color = None
+        self.color = self.original_color
 
         self._cuda_device: Optional[str] = None
         self.scale: Optional[Scale] = None
         self._transform = None
 
-        self._select_parent = None
+    @property
+    def color(self):
+        return self._color
+
+    @color.setter
+    def color(self, v):
+        self._color = v
+
+    def swap_select_color(self, v):
+        if v is True:
+            self.color = self.select_color
+        else:
+            self.color = self.original_color
 
     @property
     def select_parent(self):
@@ -45,7 +68,8 @@ class RenderedObject:
     @select_parent.setter
     def select_parent(self, v):
         self._select_parent = v
-        v._select_children.append(self)
+        if v is not None:
+            v._select_children.append(self)
 
     def is_select_child(self, v):
         return v in self._select_children
@@ -55,20 +79,8 @@ class RenderedObject:
         raise NotImplementedError
 
     @property
-    def obj(self):
-        return self._obj
-
-    # @property
-    # def transform(self) -> STTransform:
-    #     return self._obj.transform
-
-    # @property
-    # def name(self):
-    #     try:
-    #         # noinspection PyUnresolvedReferences
-    #         return self._obj.name
-    #     except AttributeError:
-    #         return str(self)
+    def visual(self):
+        return self._visual
 
     @property
     def glir(self):
@@ -82,7 +94,7 @@ class RenderedObject:
 
     @property
     def color_vbo_glir_id(self):
-        return self.vbo_glir_id
+        raise NotImplementedError
 
     @property
     def pos_vbo_glir_id(self):
@@ -132,23 +144,29 @@ class RenderedObject:
     def on_select_callback(self, v: bool):
         raise NotImplementedError
 
+    def on_drag_callback(self, v: bool):
+        raise NotImplementedError
+
     def select(self, v):
         if self.selectable is True:
             self.selected = v
             self.on_select_callback(v)
 
+    def update(self):
+        self.visual.update()
+
 
 class RenderedObjectVisual(CompoundVisual, RenderedObject):
 
     # def __init__(self, parent=None, name=None, transforms=None, selectable=False):
-    def __init__(self, subvisuals, parent=None, selectable=False):
+    def __init__(self, subvisuals, parent=None, selectable=False, draggable=False):
 
         # super().__init__(parent=parent, name=name, transforms=transforms)
 
         self.unfreeze()
         # self._obj: Optional[Union[visuals.visuals.MarkersVisual,
         #                           visuals.visuals.LineVisual]] = None
-        RenderedObject.__init__(self, selectable=selectable)
+        RenderedObject.__init__(self, selectable=selectable, draggable=draggable)
 
         CompoundVisual.__init__(self, subvisuals)
         # for v in subvisuals:
@@ -164,18 +182,76 @@ class RenderedObjectVisual(CompoundVisual, RenderedObject):
 
         # self._transform = STTransform()
 
+
 def add_children(parent: Node, children: list):
     for child in children:
         parent._add_child(child)
 
 
-RenderedObjectNode = visuals.create_visual_node(RenderedObjectVisual)
+# RenderedObjectNode = visuals.create_visual_node(RenderedObjectVisual)
+
+
+# noinspection PyAbstractClass
+class RenderedObjectNode(visuals.VisualNode, RenderedObjectVisual):
+
+    clsname = RenderedObjectVisual.__name__
+    if not (clsname.endswith('Visual') and
+            issubclass(RenderedObjectVisual, BaseVisual)):
+        raise RuntimeError('Class "%s" must end with Visual, and must '
+                           'subclass BaseVisual' % clsname)
+    clsname = clsname[:-6]
+    # noinspection PyBroadException
+    try:
+        __doc__ = visuals.generate_docstring(RenderedObjectVisual, clsname)
+    except Exception:
+        __doc__ = RenderedObjectVisual.__doc__
+
+    def __init__(self, *args, **kwargs):
+        parent = kwargs.pop('parent', None)
+        name = kwargs.pop('name', None)
+        self.name = name  # to allow __str__ before Node.__init__
+        self._visual_superclass = RenderedObjectVisual
+        RenderedObjectVisual.__init__(self, *args, **kwargs)
+        self.unfreeze()
+        visuals.VisualNode.__init__(self, parent=parent, name=name)
+        self.freeze()
+
+
+@dataclass
+class XTZ:
+    x: object = None
+    y: object = None
+    z: object = None
+
+    def __post_init__(self):
+        self._tuple = (self.x, self.y, self.z)
+
+    def __getitem__(self, item):
+        if isinstance(item, int):
+            return self._tuple[item]
+        else:
+            return getattr(self, item)
+
+    def __setattr__(self, key, value):
+        super().__setattr__(key, value)
+        if key != '_tuple':
+            super().__setattr__('_tuple', (self.x, self.y, self.z))
 
 
 @dataclass
 class _STR:
+
     parent: RenderedObjectNode
     prop_id: str = 'some key'
+
+    spin_box_sliders: Optional[XTZ] = None
+
+    min_value: Optional[int] = None
+    max_value: Optional[int] = None
+
+    def __post_init__(self):
+        if self.spin_box_sliders is None:
+            self.spin_box_sliders = XTZ()
 
     def change_prop(self, i, v):
         p = getattr(self.transform, self.prop_id)
@@ -183,6 +259,7 @@ class _STR:
         setattr(self.transform, self.prop_id, p)
         if self.parent.transform_connected is True:
             self.parent.transform_changed()
+        # self.spin_box_sliders[i].actualize_values()
 
     @property
     def transform(self) -> STTransform:
@@ -225,13 +302,20 @@ class _STR:
 class Scale(_STR):
     prop_id: str = 'scale'
 
+    min_value: Optional[int] = 0
+    max_value: Optional[int] = 10
+
 
 @dataclass
-class Position(_STR):
+class Translate(_STR):
     _grid_unit_shape: Optional[tuple] = (1, 1, 1)
     prop_id: str = 'translate'
 
+    min_value: Optional[int] = -5
+    max_value: Optional[int] = 5
+
     def __post_init__(self):
+        super().__post_init__()
         self._grid_coordinates = np.zeros(3)
 
     def _move(self, i, d=1):
@@ -243,6 +327,8 @@ class Position(_STR):
 
         if self.parent.transform_connected is True:
             self.parent.transform_changed()
+
+        self.spin_box_sliders[i].actualize_values()
 
     def mv_left(self):
         self._move(0)

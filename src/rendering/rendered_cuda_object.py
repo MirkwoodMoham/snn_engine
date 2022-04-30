@@ -19,20 +19,38 @@ class CudaObject:
     @cuda_device.setter
     def cuda_device(self, v):
         self._cuda_device = v
-        for child in self.children:
-            child.cuda_device = v
-        try:
-            for subv in self._subvisuals:
-                subv.cuda_device = v
-        except AttributeError:
-            pass
-        try:
-            for subv in self.normals:
-                subv.cuda_device = v
-        except AttributeError:
-            pass
 
-    def ini_cuda_attributes(self):
+        # for child in self.children:
+        #     child.cuda_device = v
+        # try:
+        #     for subvisual in self._subvisuals:
+        #         subvisual.cuda_device = v
+        # except AttributeError:
+        #     pass
+        # try:
+        #     for normal in self.normals:
+        #         normal.cuda_device = v
+        # except AttributeError:
+        #     pass
+
+    def _init_cuda_attributes(self, device, attr_list):
+        for a in attr_list:
+            try:
+                for o in getattr(self, a):
+                    o.init_cuda_attributes(device)
+            except AttributeError:
+                pass
+
+    def init_cuda_attributes(self, device):
+        self.cuda_device = device
+        self.init_cuda_arrays()
+        self._init_cuda_attributes(device, attr_list=['children', '_subvisuals', 'normals'])
+
+    @property
+    def gpu_array(self):
+        return self._gpu_array
+
+    def init_cuda_arrays(self):
         pass
 
 
@@ -42,14 +60,16 @@ class RenderedCudaObjectNode(RenderedObjectNode, CudaObject):
     def __init__(self,
                  subvisuals,
                  parent=None,
-                 # name=None,
+                 name=None,
                  # transforms=None,
-                 selectable=False):
+                 selectable=False,
+                 draggable=False):
         RenderedObjectNode.__init__(self,
                                     subvisuals,
                                     parent=parent,
-                                    # name=name,
+                                    name=name,
                                     # transforms=transforms,
-                                    selectable=selectable)
+                                    selectable=selectable,
+                                    draggable=draggable)
 
         CudaObject.__init__(self)

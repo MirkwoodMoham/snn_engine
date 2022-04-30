@@ -1,6 +1,6 @@
 from .rendered_object import (
     add_children,
-    Position,
+    Translate,
     RenderedObject,
     RenderedObjectNode,
     Scale

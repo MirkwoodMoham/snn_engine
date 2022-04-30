@@ -18,7 +18,7 @@ from PyQt6.QtWidgets import (
 )
 
 from .collapsible_widget.collapsible_widget import CollapsibleWidget
-from rendering import RenderedObjectNode
+from rendering import RenderedObjectNode, Scale, Translate
 
 
 @dataclass
@@ -190,11 +190,11 @@ class SpinBoxSlider(GUIElement):
 
     prop_id: str = None
     property_container: Any = None
-    min_value: Optional[int] = None
-    max_value: Optional[int] = 10000
+    _min_value: Optional[int] = None
+    _max_value: Optional[int] = 10
     # type Callable = float
-    func_: Optional[Callable] = lambda x: float(x)/100.
-    func_inv_: Optional[Callable] = lambda x: int(x * 100)
+    func_: Optional[Callable] = lambda x: float(x)/1000 if x is not None else x
+    func_inv_: Optional[Callable] = lambda x: int(x * 1000) if x is not None else x
     orientation: QtCore.Qt.Orientation = QtCore.Qt.Orientation.Horizontal
     boxlayout_orientation: QtCore.Qt.Orientation = QtCore.Qt.Orientation.Vertical
     maximum_width: Optional[int] = None
@@ -226,8 +226,12 @@ class SpinBoxSlider(GUIElement):
 
         # noinspection PyTypeChecker
         self.slider = CustomQSlider(self.orientation, ui_element=self,
-                                    minimum=self.min_value, maximum=self.max_value,
+                                    # minimum=self.func_inv_(self.min_value),
+                                    # maximum=self.func_inv_(self.max_value),
                                     single_step=self.single_step_slider)
+
+        self.min_value = self._min_value
+        self.max_value = self._max_value
 
         self.layout_box.addWidget(self.label)
         self.layout_box.addWidget(self.spin_box)
@@ -239,6 +243,34 @@ class SpinBoxSlider(GUIElement):
         self.change_from_key_press = False
 
         self.previous_applied_value = None
+
+    @property
+    def min_value(self):
+        return self._min_value
+
+    @min_value.setter
+    def min_value(self, v):
+
+        if v is not None:
+            self._min_value = v
+            self.slider.setMinimum(self.func_inv_(v))
+        else:
+            self._min_value = self.func_(self.slider.minimum())
+        self.spin_box.setMinimum(self._min_value)
+
+    @property
+    def max_value(self):
+        return self._max_value
+
+    @max_value.setter
+    def max_value(self, v):
+
+        if v is not None:
+            self._max_value = v
+            self.slider.setMaximum(self.func_inv_(v))
+        else:
+            self._max_value = self.func_(self.slider.maximum())
+        self.spin_box.setMaximum(self._max_value)
 
     def func(self, v, *args, **kwargs):
         if self.func_ is None:
@@ -327,16 +359,16 @@ class SpinBoxSlider(GUIElement):
                 f"{self.status_tip}: "
                 f"{self.previous_applied_value} -> {self.func(value)}")
             self.spin_box.setValue(self.func(value))
-        elif not self.slider.isSliderDown() or self.change_from_key_press:
+        elif (not self.slider.isSliderDown()) or self.change_from_key_press:
             # self.line_edit.setText(f"{self.func(value)}")
             self.spin_box.setValue(self.func(value))
             self.change_from_key_press = False
 
     # noinspection PyUnresolvedReferences
-    def connect_property(self, property_container, value):
+    def connect_property(self, property_container: Union[Scale, Translate], value=None):
         self.property_container = property_container
-        self.value = value
-        self.previous_applied_value = value
+        self.value = getattr(property_container, self.prop_id) if not value else value
+        self.previous_applied_value = self.value
         self.change_from_text = False
         self.change_from_slider = False
         self.slider.sliderReleased.connect(self.changed_slider)
@@ -347,62 +379,80 @@ class SpinBoxSlider(GUIElement):
         # self.line_edit.returnPressed.connect(self.changed_line_edit)
         self.spin_box.lineEdit().returnPressed.connect(self.changed_spinbox)
 
+        setattr(self.property_container.spin_box_sliders, self.prop_id, self)
 
-class RenderedObjectSliders(CollapsibleWidget):
 
-    @dataclass
-    class ScaleSliders:
+    def actualize_values(self):
+        v = getattr(self.property_container, self.prop_id)
+        print(v)
+        # print(self.spin_box.value())
+        self.spin_box.setValue(v)
+        self.set_slider_value(v)
+        # print(self.spin_box.value())
+
+
+class RenderedObjectPropertyFrame(QFrame):
+
+    class Sliders:
         x: SpinBoxSlider = None
         y: SpinBoxSlider = None
         z: SpinBoxSlider = None
-        a: SpinBoxSlider = None
 
-    def __init__(self, obj: RenderedObjectNode, window, parent=None, scale_sliders=None):
+    def __init__(self, parent, window, obj: RenderedObjectNode,
+                 prop_id: str, label=None,
+                 min_value: Optional[int] = None,
+                 max_value=10):
 
-        super().__init__(parent=parent, title=obj.name)
+        super().__init__(parent)
 
-        self.scale = self.ScaleSliders()
+        self.sliders = self.Sliders()
 
-        scale_frame = QFrame(self)
-        # scale_frame.setFixedHeight(450)
-        scale_frame.setFixedWidth(450)
-        # scale_frame.setMinimumHeight(135)
-        # scale_frame.setFixedWidth(True)
-        scale_layout = QHBoxLayout(scale_frame)
-        # scale_layout.setSpacing(0)
-        scale_layout.setContentsMargins(15, 0, 0, 0)
-        scale_sliders_widget = QWidget()
-        # scale_sliders_widget.setMinimumHeight(135)
-        scale_sliders_widget.setMaximumHeight(135)
-        scale_sliders_layout = QVBoxLayout(scale_sliders_widget)
-        scale_sliders_layout.setContentsMargins(0, 0, 0, 0)
-        scale_layout.addWidget(QLabel('Scale'))
+        self.setFixedWidth(450)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(15, 0, 0, 0)
+        sliders_widget = QWidget()
+        sliders_widget.setMaximumHeight(135)
+        sliders_layout = QVBoxLayout(sliders_widget)
+        sliders_layout.setContentsMargins(0, 0, 0, 0)
+        if label is None:
+            label = prop_id
+            label = label[0].upper() + label[1:]
+        layout.addWidget(QLabel(label))
 
         sliders = []
         for i in ('x', 'y', 'z'):
 
             sbs = SpinBoxSlider(name=i + ':',
                                 window=window,
+                                _min_value=min_value,
+                                _max_value=max_value,
                                 boxlayout_orientation=QtCore.Qt.Orientation.Horizontal,
-                                status_tip=f"{obj.name}.scale.{i}",
+                                status_tip=f"{obj.name}.{prop_id}.{i}",
                                 prop_id=i,
                                 single_step_spin_box=0.01,
                                 single_step_slider=10)
-
-            setattr(self.scale, i, sbs)
+            setattr(self.sliders, i, sbs)
             sbs.widget.setFixedHeight(35)
-            scale_sliders_layout.addWidget(sbs.widget)
+            sliders_layout.addWidget(sbs.widget)
             sliders.append(sbs)
 
-            sbs.connect_property(
-                obj.scale,
-                getattr(obj.scale, i))
+            sbs.connect_property(getattr(obj, prop_id))
 
-        # scale_frame.setMinimumHeight(25 + 35 * len(sliders))
-        scale_frame.setFixedHeight(25 + 35 * len(sliders))
+        self.setFixedHeight(25 + 35 * len(sliders))
 
-        scale_layout.addWidget(scale_sliders_widget)
-        self.add(scale_frame)
+        layout.addWidget(sliders_widget)
+
+
+class RenderedObjectSliders(CollapsibleWidget):
+
+    def __init__(self, obj: RenderedObjectNode, window, parent=None):
+
+        super().__init__(parent=parent, title=obj.name)
+
+        self.scale = RenderedObjectPropertyFrame(parent=self, window=window, obj=obj, prop_id='scale')
+        self.translate = RenderedObjectPropertyFrame(parent=self, window=window, obj=obj, prop_id='translate')
+        self.add(self.scale)
+        self.add(self.translate)
 
     def connect(self):
         pass

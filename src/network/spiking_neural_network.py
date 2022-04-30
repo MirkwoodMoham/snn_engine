@@ -854,9 +854,7 @@ class SpikingNeuronNetwork:
             model=self.model,
             buffers=buffers)
 
-        self.selector_box.cuda_device = self.GPU.device
-        self.selector_box.states_gpu = self.GPU.G_props
-        self.selector_box.transform_connected = True
+        self.selector_box.init_cuda_attributes(self.GPU.device, self.GPU.G_props)
 
     def sort_pos(self):
         """
@@ -900,7 +898,8 @@ class SpikingNeuronNetwork:
         for o in self.rendered_3d_objs:
             view_3d.add(o)
 
-        for o in self.selector_box.obj.normals:
+        # add the normals separately, because otherwise it does not work as expected.
+        for o in self.selector_box.visual.normals:
             view_3d.add(o)
 
         # self.selector_box.obj.parent = view_3d.scene

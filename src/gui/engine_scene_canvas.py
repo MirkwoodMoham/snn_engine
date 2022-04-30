@@ -95,10 +95,12 @@ class EngineSceneCanvas(scene.SceneCanvas):
         self.voltage_plot_view.width_max = 600
         self.scatter_plot_view = self._scatter_plot_view(row=3, col=plot_col)
 
-        self.selected_objects = []
+        self._clicked_obj = None
+        self._selected_objects = []
+        self._last_selected_obj = None
 
-        self.click_pos = np.zeros(2)
-        self.current_pos = np.zeros(2)
+        self._click_pos = np.zeros(2)
+        self._last_mouse_pos = np.zeros(2)
 
         self.mouse_pressed = True
 
@@ -108,15 +110,9 @@ class EngineSceneCanvas(scene.SceneCanvas):
 
         if network is not None:
             network.add_rendered_objects(self.network_view, self.voltage_plot_view, self.scatter_plot_view)
-            # self.network_view.add(network.neurons)
-            # self.network_view.add(network.outer_grid)
-            # self.network_view.add(network.selector_box)
-            # self.network_view.add(network.selected_group_boxes)
-            # self.voltage_plot_view.add(network.voltage_plot)
-            # self.scatter_plot_view.add(network.firing_scatter_plot)
 
-            network.selector_box.select(True)
-            self.selected_objects.append(network.selector_box)
+            self._select(network.selector_box, True)
+            # self._selected_objects.append(network.selector_box)
 
 
     @property
@@ -194,51 +190,73 @@ class EngineSceneCanvas(scene.SceneCanvas):
     def mouse_pos(self, event):
         return self.grid_transform.map(event.pos)[:2]
 
+    def _select_clicked_obj(self):
+
+        if self._clicked_obj is not self._last_selected_obj:
+            for o in copy(self._selected_objects):
+                if ((not (o is self._clicked_obj))
+                        and ((self._clicked_obj is None) or (not o.is_select_child(self._clicked_obj)))):
+                    self._select(o, False)
+
+            if isinstance(self._clicked_obj, RenderedObject):
+                if self._clicked_obj.selected:
+                    # self.clicked_obj.on_select_callback(self.clicked_obj.selected)
+                    self._clicked_obj.update()
+                    self._last_selected_obj = self._clicked_obj
+                else:
+                    print('\nSELECTED:', self._clicked_obj)
+                    self._select(self._clicked_obj, True)
+
     def on_mouse_press(self, event):
 
         if event.button == 1:
-            self.click_pos[:2] = self.mouse_pos(event)
-        # self.update()
+            self.network_view.camera.interactive = False
+            self.network_view.interactive = False
+            self._clicked_obj = self.visual_at(event.pos)
+            self.network_view.interactive = True
+            self._click_pos[:2] = self.mouse_pos(event)
+
+            if isinstance(self._clicked_obj, RenderedObject) and self._clicked_obj.draggable:
+                self._select_clicked_obj()
+            # else:
+
+    def _mouse_moved(self, event):
+        self._last_mouse_pos[:2] = self.mouse_pos(event)
+        return (self._last_mouse_pos[:2] - self._click_pos[:2]).any()
+
+    def _select(self, obj: RenderedObject, v: bool):
+        obj.select(v)
+        if v is True:
+            self._selected_objects.append(obj)
+            self._last_selected_obj = obj
+        else:
+            self._selected_objects.remove(obj)
+            if obj is self._last_selected_obj:
+                self._last_selected_obj = None
+        return obj
 
     def on_mouse_release(self, event):
+        self.network_view.camera.interactive = True
         if event.button == 1:
-            self.current_pos[:2] = self.mouse_pos(event)
-            if not (self.current_pos[:2] - self.click_pos[:2]).any():
+            if (not self._mouse_moved(event)) or (self._clicked_obj is self.visual_at(event.pos)):
+                self._select_clicked_obj()
+            if isinstance(self._last_selected_obj, RenderedObject) and self._last_selected_obj.draggable:
+                self._select(self._last_selected_obj, False).update()
+                self._last_selected_obj = self._selected_objects[-1]
+            # self._last_selected_obj = None
 
-                self.network_view.interactive = False
-                selected = self.visual_at(event.pos)
-                # if isinstance(selected, ArrowVisual):
-                #     selected = selected._node_parent
-                print('\nSELECTED:', selected)
-                self.network_view.interactive = True
-
-                if selected in self.selected_objects:
-                    for o in copy(self.selected_objects):
-                        if (not (o is selected)) and (not o.is_select_child(selected)):
-                            o.select(False)
-                            self.selected_objects.remove(o)
-
-                elif (selected is None) or (not (selected in self.selected_objects)):
-                    if len(self.selected_objects) > 0:
-                        # if not (self.current_pos[:2] - self.click_pos[:2]).any():
-                        for o in copy(self.selected_objects):
-                            if (selected is None) or (not o.is_select_child(selected)):
-                                o.select(False)
-                                self.selected_objects.remove(o)
-
-                    if selected is not None:
-                        if isinstance(selected, RenderedObject):
-                            self.selected_objects.append(selected)
-                            selected.select(True)
-
-        print('released', len(self.selected_objects), self.selected_objects)
+            print(f'currently selected ({len(self._selected_objects)}):', self._selected_objects)
 
     def on_mouse_move(self, event):
-
+        self.network_view.camera.interactive = True
         if event.button == 1:
-            self.current_pos[:2] = self.mouse_pos(event)
-            # print(self.current_pos)
-            # print(self.click_pos)
-            print(np.linalg.norm(self.current_pos - self.click_pos))
+            if isinstance(self._clicked_obj, RenderedObject) and self._clicked_obj.draggable:
+                self.network_view.camera.interactive = False
+                self._last_mouse_pos[:2] = self.mouse_pos(event)
+                dist = np.linalg.norm(self._last_mouse_pos - self._click_pos)
+                dist = self._last_mouse_pos - self._click_pos
+                print(dist)
+                self._clicked_obj.on_drag_callback(dist/100)
+                # self._clicked_obj.
 
 

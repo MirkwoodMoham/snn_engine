@@ -194,6 +194,12 @@ class IzhikevichModel(PropertyTensor):
         self._set_row(self.rows.i, v)
 
 
+class Sliders:
+    def __init__(self, rows):
+        for k in asdict(rows):
+            setattr(self, k, None)
+
+
 class LocationGroupProperties(PropertyTensor):
 
     @dataclass(frozen=True)
@@ -229,6 +235,8 @@ class LocationGroupProperties(PropertyTensor):
         # self.selected.tensor[0, 1] = 0
         self.set_tensor(shape, device, config)
         self.selection_property = 'thalamic_input'
+
+        self.spin_box_sliders = Sliders(self.Rows())
 
     def set_tensor(self, shape, device, config):
         self.tensor = torch.zeros(shape, dtype=torch.float32, device=device)

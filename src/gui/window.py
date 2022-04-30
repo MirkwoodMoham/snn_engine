@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
 )
 
 from vispy.app import Application
-from .scene import EngineSceneCanvas, CanvasConfig
+from .engine_scene_canvas import EngineSceneCanvas, CanvasConfig
 
 from network import SpikingNeuronNetwork
 from .ui_element import ButtonMenuAction, SpinBoxSlider
@@ -118,13 +118,13 @@ class UI(object):
                                                                 status_tip='Thalamic Inhibitory Input Current [I]',
                                                                 prop_id='thalamic_inh_input_current',
                                                                 maximum_width=300,
-                                                                min_value=0, max_value=10000)
+                                                                _min_value=0, _max_value=10000)
                 self.thalamic_exc_input_current = SpinBoxSlider(name='Excitatory Current [I]',
                                                                 window=window,
                                                                 status_tip='Thalamic Excitatory Input Current [I]',
                                                                 prop_id='thalamic_exc_input_current',
                                                                 maximum_width=300,
-                                                                min_value=0, max_value=10000)
+                                                                _min_value=0, _max_value=10000)
 
         def __init__(self, window, central_widget):
 
@@ -195,7 +195,6 @@ class UI(object):
         splitter = QSplitter(QtCore.Qt.Orientation.Horizontal)
         splitter.addWidget(self.ui_left.frame)
         splitter.addWidget(self.frame_3d)
-
 
         hbox = QHBoxLayout(self.central_widget)
         hbox.addWidget(splitter)
