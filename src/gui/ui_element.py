@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 from typing import Any, Callable, Optional, Union
 
+import pandas as pd
 from PyQt6 import QtWidgets, QtCore, QtGui
 from PyQt6.QtGui import QIcon, QAction
 from PyQt6.QtWidgets import (
@@ -19,6 +20,7 @@ from PyQt6.QtWidgets import (
 
 from .collapsible_widget.collapsible_widget import CollapsibleWidget
 from rendering import RenderedObjectNode, Scale, Translate
+from network import LocationGroupProperties
 
 
 @dataclass
@@ -365,7 +367,9 @@ class SpinBoxSlider(GUIElement):
             self.change_from_key_press = False
 
     # noinspection PyUnresolvedReferences
-    def connect_property(self, property_container: Union[Scale, Translate], value=None):
+    def connect_property(self,
+                         property_container: Union[Scale, Translate, LocationGroupProperties],
+                         value=None):
         self.property_container = property_container
         self.value = getattr(property_container, self.prop_id) if not value else value
         self.previous_applied_value = self.value
@@ -381,10 +385,14 @@ class SpinBoxSlider(GUIElement):
 
         setattr(self.property_container.spin_box_sliders, self.prop_id, self)
 
+        if hasattr(self.property_container, 'value_ranges'):
+            interval: pd.Interval = self.property_container.value_ranges[self.prop_id]
+            self.min_value = interval.left
+            self.max_value = interval.right
 
     def actualize_values(self):
         v = getattr(self.property_container, self.prop_id)
-        print(v)
+        # print(v)
         # print(self.spin_box.value())
         self.spin_box.setValue(v)
         self.set_slider_value(v)

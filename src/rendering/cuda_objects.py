@@ -33,31 +33,40 @@ class NormalArrow(RenderedCudaObjectNode):
 
     def __init__(self, select_parent, points, color=None, name=None, tube_points=4,
                  radius=np.array([.01, .01, .025, .0]), parent: Optional[Node] = None,
-                 selectable=True, draggable=True):
+                 selectable=True, draggable=True, mod_factor=1):
         # super().__init__(parent=parent, selectable=selectable,
         #                  # name=name or parent.name + f'.{self.__class__.__name__}'
         #                  )
         # self.transform: STTransform = STTransform()
 
         self.last_scale = None
+        self.last_translate = None
+
+        self._mod_factor = mod_factor
 
         self.select_parent = select_parent
         # super().__init__(parent=parent, selectable=selectable)
 
-        self.scaled_extraction_dir = 1
+        self._translate_dir = 1
         for i, d in enumerate(['x', 'y', 'z']):
             if (points[:, i] != 0).any():
-                self.scaled_extraction_dim = d
+                self._dim_int = i
+                self._dim: str = d
+                self._translate_dir = 1
+                self._modifier_dir = 1
                 if (points[:, i] < 0).any():
-                    self.scaled_extraction_dir = -1
-        self.modifier_dim = 0
-        if self.scaled_extraction_dim == 'z':
-            self.modifier_dim = 1
-            self.scaled_extraction_dir *= -1
+                    self._modifier_dir = -1
+                    self._translate_dir = -1
+
+        self._modifier_dim = 0
+        if self._dim == 'z':
+            self._modifier_dim = 1
+            self._modifier_dir *= -1
+            # self._translate_dir *= -1
 
         if name is None:
-            name = (f"{self._select_parent.name}.{self.__class__.__name__}:{self.scaled_extraction_dim}"
-                    f"{'+' if self.scaled_extraction_dir > 0 else '-'}")
+            name = (f"{self._select_parent.name}.{self.__class__.__name__}:{self._dim}"
+                    f"{'+' if self._modifier_dir > 0 else '-'}")
 
         if color is None:
             if points[:, 0].any():
@@ -80,21 +89,33 @@ class NormalArrow(RenderedCudaObjectNode):
         # print(self.gpu_array.tensor[:, 3][:6], '...')
         self.gpu_array.tensor[:, 3] = 1. if v is True else .3
 
-        self.last_scale = getattr(self.select_parent.scale, self.scaled_extraction_dim)
-        print('last_scale:', self.last_scale)
+        self.last_scale = getattr(self.select_parent.scale, self._dim)
+        self.last_translate = getattr(self.select_parent.translate, self._dim)
+        # print('last_scale:', self.last_scale)
         # print(self.gpu_array.tensor[:, 3][:6], '...')
 
-    def on_drag_callback(self, v: np.ndarray):
-        v = v[self.modifier_dim] * self.scaled_extraction_dir
-        print(f'\ndragged arrow({v}):', self, '\n')
+    def on_drag_callback(self, v: np.ndarray, mode: int):
+        v = v[self._modifier_dim] * self._modifier_dir * self._mod_factor
+        print(f'\ndragged arrow({v}):', self, '')
 
         # self.select_parent.scale.x += v * self.scale_extraction_factor
         # current_scale = getattr(self.select_parent.scale, 'x')
-        setattr(self.select_parent.scale, self.scaled_extraction_dim, self.last_scale + v)
+        if mode == 0:
+            setattr(self.select_parent.scale, self._dim, self.last_scale + v)
+        elif mode == 1:
+            setattr(self.select_parent.translate, self._dim,
+                    self.last_translate + self._translate_dir * v / 4)
+        else:
+            new_scale = self.last_scale + v/2
+            setattr(self.select_parent.scale, self._dim, new_scale)
+            edge_diff = self.select_parent.shape[self._dim_int] * (new_scale - self.last_scale)
+            setattr(self.select_parent.translate, self._dim,
+                    self.last_translate + self._translate_dir * (edge_diff / 2))
         self.actualize_ui()
 
     def actualize_ui(self):
-        getattr(self.select_parent.scale.spin_box_sliders, self.scaled_extraction_dim).actualize_values()
+        getattr(self.select_parent.scale.spin_box_sliders, self._dim).actualize_values()
+        getattr(self.select_parent.translate.spin_box_sliders, self._dim).actualize_values()
 
     @property
     def pos_vbo_glir_id(self):
@@ -147,7 +168,7 @@ class CudaBox(Box, CudaObject):
             self.normals = []
             inv = self.initial_normal_vertices(shape)
             for i in range(6):
-                arrow = NormalArrow(select_parent, points=inv[i])
+                arrow = NormalArrow(select_parent, points=inv[i], mod_factor=1 / (3 * shape[int(i/2)]))
                 # self.add_subvisual(arrow)
                 self.normals.append(arrow)
 

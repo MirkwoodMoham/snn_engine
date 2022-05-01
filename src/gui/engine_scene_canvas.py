@@ -9,6 +9,7 @@ from vispy.gloo.context import GLContext
 from vispy import scene
 from vispy.visuals.transforms import STTransform
 from vispy.scene.cameras import PanZoomCamera
+from vispy.util import keys
 
 from network import SpikingNeuronNetwork
 from rendering import RenderedObject, RenderedObjectNode, ArrowVisual
@@ -113,7 +114,6 @@ class EngineSceneCanvas(scene.SceneCanvas):
 
             self._select(network.selector_box, True)
             # self._selected_objects.append(network.selector_box)
-
 
     @property
     def _window_id(self):
@@ -251,12 +251,19 @@ class EngineSceneCanvas(scene.SceneCanvas):
         self.network_view.camera.interactive = True
         if event.button == 1:
             if isinstance(self._clicked_obj, RenderedObject) and self._clicked_obj.draggable:
+                print(keys.SHIFT in event.modifiers)
                 self.network_view.camera.interactive = False
                 self._last_mouse_pos[:2] = self.mouse_pos(event)
-                dist = np.linalg.norm(self._last_mouse_pos - self._click_pos)
-                dist = self._last_mouse_pos - self._click_pos
-                print(dist)
-                self._clicked_obj.on_drag_callback(dist/100)
+                # dist = np.linalg.norm(self._last_mouse_pos - self._click_pos)
+                diff = self._last_mouse_pos - self._click_pos
+                # print('diff:', diff)
+                if keys.SHIFT in event.modifiers:
+                    mode = 0
+                elif keys.CONTROL in event.modifiers:
+                    mode = 1
+                else:
+                    mode = 2
+                self._clicked_obj.on_drag_callback(diff/100, mode=mode)
                 # self._clicked_obj.
 
 

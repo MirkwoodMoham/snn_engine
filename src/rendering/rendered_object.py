@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import numpy as np
 from typing import Optional, Union
 
+import pandas as pd
 from vispy.visuals import CompoundVisual, Visual, BaseVisual
 from vispy.scene import visuals, Node
 from vispy.gloo.context import get_current_canvas
@@ -144,7 +145,7 @@ class RenderedObject:
     def on_select_callback(self, v: bool):
         raise NotImplementedError
 
-    def on_drag_callback(self, v: bool):
+    def on_drag_callback(self, v: bool, mode: int):
         raise NotImplementedError
 
     def select(self, v):
@@ -246,16 +247,30 @@ class _STR:
 
     spin_box_sliders: Optional[XTZ] = None
 
-    min_value: Optional[int] = None
-    max_value: Optional[int] = None
+    value_ranges: Optional[XTZ] = None
+
+    _min_value: Optional[Union[int, float]] = None
+    _max_value: Optional[Union[int, float]] = None
 
     def __post_init__(self):
         if self.spin_box_sliders is None:
             self.spin_box_sliders = XTZ()
 
+        if (self._min_value is not None) or (self._max_value is not None):
+            if self.value_ranges is not None:
+                raise ValueError('multiple values for self.value_intervals.')
+            self.value_ranges = XTZ(
+                x=pd.Interval(self._min_value, self._max_value, closed='both'),
+                y=pd.Interval(self._min_value, self._max_value, closed='both'),
+                z=pd.Interval(self._min_value, self._max_value, closed='both'))
+
     def change_prop(self, i, v):
+        if self.value_ranges is not None:
+            interval = self.value_ranges[i]
+            v = min(interval.right, max(interval.left, v))
         p = getattr(self.transform, self.prop_id)
         p[i] = v
+        print(v)
         setattr(self.transform, self.prop_id, p)
         if self.parent.transform_connected is True:
             self.parent.transform_changed()

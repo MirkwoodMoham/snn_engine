@@ -82,8 +82,8 @@ class SelectorBox(RenderedCudaObjectNode):
         self.unfreeze()
         SelectorBox.count += 1
         self.interactive = True
-        self.scale = Scale(self)
-        self.translate = Translate(self, _grid_unit_shape=self.shape)
+        self.scale = Scale(self, _min_value=0, _max_value=int(3 * 1 / min(self.shape)))
+        self.translate = Translate(self, _grid_unit_shape=self.shape, _min_value=-5, _max_value=5)
         # self.translate = Translate(self)
 
         self.states_gpu: Optional[LocationGroupProperties] = None
@@ -127,6 +127,10 @@ class SelectorBox(RenderedCudaObjectNode):
         return (self.visual._initial_selection_vertices
                 * self.transform.scale[:3]
                 + self.transform.translate[:3])
+
+    @property
+    def edge_lengths(self):
+        return np.array(self.shape) * self.transform.scale[:3]
 
     def transform_changed(self):
         g_pos = self.g_pos

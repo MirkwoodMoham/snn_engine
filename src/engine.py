@@ -9,12 +9,13 @@ from gui import (
     BackendApp,
     RenderedObjectSliders
 )
-from simulation import vbodata2host
+# from simulation import vbodata2host
+from pycuda import autoinit
 
 
 class EngineConfig:
 
-    N: int = 3 * 10 ** 2
+    N: int = 3 * 10 ** 5
     T: int = 2000  # Max simulation duration
 
     device: int = 0
