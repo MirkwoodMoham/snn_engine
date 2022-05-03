@@ -14,6 +14,25 @@ from .objects import Box
 # from .rendered_object import RenderedObjectNode, RenderedObject
 
 
+def initial_normal_vertices(shape):
+    # isv = self._initial_selection_vertices
+
+    points = np.zeros((6, 4, 3), dtype=np.float32)
+
+    x0 = shape[0] / 2
+    y0 = shape[1] / 2
+    z0 = shape[2] / 2
+
+    points[0] = np.array([[x0, 0, 0], [x0 + x0 / 2, 0, 0], [x0 + x0 / 2, 0, 0], [x0 + 2 * x0 / 3, 0, 0]])
+    points[1] = -1 * points[0]
+    points[2] = np.array([[0, y0, 0], [0, y0 + y0 / 2, 0], [0, y0 + y0 / 2, 0], [0, y0 + 2 * y0 / 3, 0]])
+    points[3] = -1 * points[2]
+    points[4] = np.array([[0, 0, z0], [0, 0, z0 + z0 / 2], [0, 0, z0 + z0 / 2], [0, 0, z0 + 2 * z0 / 3]])
+    points[5] = -1 * points[4]
+
+    return points
+
+
 class ArrowVisual(visuals.Tube, CudaObject):
 
     def __init__(self, points, color=None, name=None, parent: Optional[Node] = None,
@@ -138,7 +157,6 @@ class NormalArrow(RenderedCudaObjectNode):
 
 class CudaBox(Box, CudaObject):
 
-    # noinspection PyUnresolvedReferences
     def __init__(self,
                  select_parent,
                  shape: tuple,
@@ -166,7 +184,7 @@ class CudaBox(Box, CudaObject):
         if init_normals:
             assert segments == (1, 1, 1)
             self.normals = []
-            inv = self.initial_normal_vertices(shape)
+            inv = initial_normal_vertices(shape)
             for i in range(6):
                 arrow = NormalArrow(select_parent, points=inv[i], mod_factor=1 / (3 * shape[int(i/2)]))
                 # self.add_subvisual(arrow)
@@ -175,22 +193,5 @@ class CudaBox(Box, CudaObject):
         CudaObject.__init__(self)
         # self.interactive = True
 
-    @staticmethod
-    def initial_normal_vertices(shape):
-        # isv = self._initial_selection_vertices
 
-        points = np.zeros((6, 4, 3), dtype=np.float32)
-
-        x0 = shape[0]/2
-        y0 = shape[1]/2
-        z0 = shape[2]/2
-
-        points[0] = np.array([[x0, 0, 0], [x0 + x0/2, 0, 0], [x0 + x0/2, 0, 0], [x0 + 2 * x0/3, 0, 0]])
-        points[1] = -1 * points[0]
-        points[2] = np.array([[0, y0, 0], [0, y0 + y0/2, 0], [0, y0 + y0/2, 0], [0, y0 + 2 * y0/3, 0]])
-        points[3] = -1 * points[2]
-        points[4] = np.array([[0, 0, z0], [0, 0, z0 + z0/2], [0, 0, z0 + z0/2], [0, 0, z0 + 2 * z0/3]])
-        points[5] = -1 * points[4]
-
-        return points
 

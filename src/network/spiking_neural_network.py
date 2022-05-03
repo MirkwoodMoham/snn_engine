@@ -18,6 +18,7 @@ from .network_structures import (
 from rendering import RenderedObjectNode
 from .rendered_objects import (
     BoxSystem,
+    InputCells,
     RenderedNeurons,
     SelectorBox,
     VoltagePlot,
@@ -607,18 +608,12 @@ class NetworkGPUArrays(GPUArrayCollection):
         del G_autapse_indices
         del G_relative_autapse_indices
         torch.cuda.empty_cache()
-        # df_unsorted = self.to_dataframe(N_rep)
-        # print(df_unsorted)
-        # print(sort_keys)
-        snn_construction_gpu.sort_N_rep(N=N, S=S, sort_keys=sort_keys.data_ptr(), N_rep=N_rep.data_ptr())
-        # df_sorted = self.to_dataframe(N_rep)
 
-        # print(df_sorted)
+        snn_construction_gpu.sort_N_rep(N=N, S=S, sort_keys=sort_keys.data_ptr(), N_rep=N_rep.data_ptr())
+
         for i, gc in enumerate(self.type_group_conns):
 
             ct_row = (gc.snk_type_value - 1) * D + 2
-            # slice_ = self.G_neuron_counts[cn_row, :]
-            # counts = torch.repeat_interleave(self.G_neuron_counts[ct_row: ct_row+D, :].T, slice_, dim=0)
 
             ccn_idx_src = G * (gc.src_type_value - 1)
             ccn_idx_snk = G * (gc.snk_type_value - 1)
@@ -666,7 +661,7 @@ class NetworkGPUArrays(GPUArrayCollection):
 
             idcs1 = (N_G[:, self._config.N_G_group_id_col].diff() < 0).nonzero()
             df = pd.DataFrame(self.N_pos.tensor[:, :3].cpu().numpy())
-            df[['0g', '1g', '2g']] = self._config.grid_pos
+            df[['0g', '1g', '2g']] = self._config.N_grid_pos
             df['N_G'] = N_G[:, 1].cpu().numpy()
             # print(G_pos)
             print(df)
@@ -739,6 +734,7 @@ class SpikingNeuronNetwork:
         self._voltage_plot: Optional[VoltagePlot] = None
         self._firing_scatter_plot: Optional[VoltagePlot] = None
         self._selected_group_boxes: Optional[BoxSystem] = None
+        self._input_system: Optional[InputCells] = None
 
         self._all_rendered_objects_initialized = False
 
@@ -774,62 +770,31 @@ class SpikingNeuronNetwork:
         return c
 
     @property
+    def input_system(self):
+        return self._input_system
+
+    @property
     def neurons(self) -> RenderedNeurons:
         return self._neurons
 
     @property
     def outer_grid(self) -> visuals.Box:
-        if self._outer_grid is None:
-            self._outer_grid: visuals.Box = Box(shape=self.config.N_pos_shape,
-                                                scale=[.99, .99, .99],
-                                                segments=self.config.G_shape,
-                                                depth_test=False,
-                                                use_parent_transform=False)
-            # self._outer_grid.set_gl_state('translucent', blend=True, depth_test=True)
-            # self._outer_grid.mesh.set_gl_state('translucent', blend=True, depth_test=True)
-            self._outer_grid.visible = False
-            self.rendered_3d_objs.append(self._outer_grid)
-
         return self._outer_grid
 
     @property
     def selector_box(self) -> SelectorBox:
-        if self._selector_box is None:
-            self._selector_box = SelectorBox(self.config)
-            self.rendered_3d_objs.append(self._selector_box)
         return self._selector_box
 
     @property
     def voltage_plot(self):
-        if self._voltage_plot is None:
-            self._voltage_plot = VoltagePlot(n_plots=self.plotting_config.n_voltage_plots,
-                                             plot_length=self.plotting_config.voltage_plot_length)
-            # self.rendered_objs.append(self._voltage_plot)
         return self._voltage_plot
 
     @property
     def firing_scatter_plot(self):
-        if self._firing_scatter_plot is None:
-            self._firing_scatter_plot = FiringScatterPlot(n_plots=self.plotting_config.n_scatter_plots,
-                                                          plot_length=self.plotting_config.scatter_plot_length)
-            # self.rendered_objs.append(self._firing_scatter_plot)
         return self._firing_scatter_plot
 
     @property
     def selected_group_boxes(self):
-        if self._selected_group_boxes is None:
-            # noinspection PyPep8Naming
-            G = self._network_config.G
-            connect = np.zeros((G+1, 2)) + G
-            # connect = np.ones(G).astype(np.bool)
-            self._selected_group_boxes = BoxSystem(pos=self._network_config.g_pos,
-                                                   connect=connect,
-                                                   # connect='strip',
-                                                   max_z=self.config.max_z,
-                                                   grid_unit_shape=self.config.grid_unit_shape)
-
-            # print(g_pos)
-            self.rendered_3d_objs.append(self._selected_group_boxes)
         return self._selected_group_boxes
 
     # noinspection PyPep8Naming
@@ -855,6 +820,9 @@ class SpikingNeuronNetwork:
             buffers=buffers)
 
         self.selector_box.init_cuda_attributes(self.GPU.device, self.GPU.G_props)
+        self.input_system.init_cuda_attributes(self.GPU.device, self.GPU.G_props)
+        for n in self.input_system.normals:
+            n.visible = False
 
     def sort_pos(self):
         """
@@ -863,13 +831,13 @@ class SpikingNeuronNetwork:
 
         for g in self.type_groups:
 
-            grid_pos = self.config.grid_pos[g.start_idx: g.end_idx + 1]
+            grid_pos = self.config.N_grid_pos[g.start_idx: g.end_idx + 1]
 
             p0 = grid_pos[:, 0].argsort(kind='stable')
             p1 = grid_pos[p0][:, 1].argsort(kind='stable')
             p2 = grid_pos[p0][p1][:, 2].argsort(kind='stable')
 
-            self.config.grid_pos[g.start_idx: g.end_idx + 1] = grid_pos[p0][p1][p2]
+            self.config.N_grid_pos[g.start_idx: g.end_idx + 1] = grid_pos[p0][p1][p2]
             self.config.pos[g.start_idx: g.end_idx + 1] = self.config.pos[g.start_idx: g.end_idx + 1][p0][p1][p2]
             if self.config.N <= 100:
                 print('\n', self.config.pos[g.start_idx:g.end_idx+1])
@@ -879,14 +847,46 @@ class SpikingNeuronNetwork:
     def update(self):
         self.GPU.update()
 
-    # noinspection PyStatementEffect
+    # noinspection PyStatementEffect,PyTypeChecker
     def initialize_rendered_objs(self):
-        self.voltage_plot
-        self.firing_scatter_plot
-        self.outer_grid
-        self.selector_box
-        # self.selector_box.obj.parent = self.selector_box
-        self.selected_group_boxes
+        self._voltage_plot = VoltagePlot(n_plots=self.plotting_config.n_voltage_plots,
+                                         plot_length=self.plotting_config.voltage_plot_length)
+        self._firing_scatter_plot = FiringScatterPlot(n_plots=self.plotting_config.n_scatter_plots,
+                                                      plot_length=self.plotting_config.scatter_plot_length)
+        self._outer_grid: visuals.Box = Box(shape=self.config.N_pos_shape,
+                                            scale=[.99, .99, .99],
+                                            segments=self.config.G_shape,
+                                            depth_test=False,
+                                            use_parent_transform=False)
+        self._outer_grid.visible = False
+
+        self._selector_box = SelectorBox(self.config)
+        g = self.config.G
+        self._selected_group_boxes = BoxSystem(pos=self._network_config.g_pos,
+                                               connect=np.zeros((g + 1, 2)) + g,
+                                               max_z=self.config.max_z,
+                                               grid_unit_shape=self.config.grid_unit_shape)
+
+        self._input_system = InputCells(
+            pos=np.array([[0., 0., 0.],
+                          # [0.3, 0., 0.],
+                          [0., 0., self.config.max_z + 1]]),
+            network_config=self.config,
+            segmentation=(3, 1, 1),
+            quad_colors=np.array([
+                [0., 0., 0., 1.],
+                [1., 1., 1., 1.],
+                [0., 0., 0., 1.],
+            ]),
+            max_z=self.config.max_z,
+            unit_shape=(.3, 0.1, 0.1)
+            # unit_shape=self.config.grid_unit_shape
+        )
+
+        self.rendered_3d_objs.append(self._outer_grid)
+        self.rendered_3d_objs.append(self._selector_box)
+        self.rendered_3d_objs.append(self._selected_group_boxes)
+        self.rendered_3d_objs.append(self._input_system)
 
         self._all_rendered_objects_initialized = True
 
@@ -900,6 +900,8 @@ class SpikingNeuronNetwork:
 
         # add the normals separately, because otherwise it does not work as expected.
         for o in self.selector_box.visual.normals:
+            view_3d.add(o)
+        for o in self.input_system.normals:
             view_3d.add(o)
 
         # self.selector_box.obj.parent = view_3d.scene

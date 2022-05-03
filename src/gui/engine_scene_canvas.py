@@ -213,6 +213,7 @@ class EngineSceneCanvas(scene.SceneCanvas):
             self.network_view.camera.interactive = False
             self.network_view.interactive = False
             self._clicked_obj = self.visual_at(event.pos)
+            print('\nCLICKED:', self._clicked_obj)
             self.network_view.interactive = True
             self._click_pos[:2] = self.mouse_pos(event)
 

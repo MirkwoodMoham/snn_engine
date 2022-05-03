@@ -24,15 +24,14 @@ class RenderedObject:
             self._select_parent = None
         if not hasattr(self, 'original_color'):
             self.original_color = None
+        if not hasattr(self, '_shape'):
+            self._shape = None
 
         self._vbo = None
         self._pos_vbo = None
         self._color_vbo = None
         self._ibo = None
         # self._parent = None
-
-        self._shape = None
-
         self._glir = None
 
         self.transform_connected = False
@@ -210,11 +209,12 @@ class RenderedObjectNode(visuals.VisualNode, RenderedObjectVisual):
     def __init__(self, *args, **kwargs):
         parent = kwargs.pop('parent', None)
         name = kwargs.pop('name', None)
-        self.name = name  # to allow __str__ before Node.__init__
+        if not hasattr(self, 'name'):
+            self.name = name  # to allow __str__ before Node.__init__
         self._visual_superclass = RenderedObjectVisual
         RenderedObjectVisual.__init__(self, *args, **kwargs)
         self.unfreeze()
-        visuals.VisualNode.__init__(self, parent=parent, name=name)
+        visuals.VisualNode.__init__(self, parent=parent, name=self.name)
         self.freeze()
 
 

@@ -9,7 +9,7 @@ from gpu import (
     RegisteredGPUArray,
     GPUArrayConfig
 )
-
+from network.network_config import NetworkConfig
 
 class PropertyTensor:
 
@@ -205,11 +205,11 @@ class LocationGroupProperties(PropertyTensor):
     @dataclass(frozen=True)
     class Rows:
 
-        prop0: int = 0
+        sensory_input_type: int = 0
         thalamic_input: int = 1
         thalamic_inh_input_current: int = 2
         thalamic_exc_input_current: int = 3
-        prop4: int = 4
+        sensory_group: int = 4
         prop5: int = 5
         prop6: int = 6
         prop7: int = 7
@@ -238,7 +238,7 @@ class LocationGroupProperties(PropertyTensor):
 
         self.spin_box_sliders = Sliders(self.Rows())
 
-    def set_tensor(self, shape, device, config):
+    def set_tensor(self, shape, device, config: NetworkConfig):
         self.tensor = torch.zeros(shape, dtype=torch.float32, device=device)
         thalamic_input_arr = torch.zeros(self._G)
         thalamic_input_arr[: int(self._G/2)] = 1
@@ -246,6 +246,8 @@ class LocationGroupProperties(PropertyTensor):
         # self.thalamic_input = 1
         self.thalamic_inh_input_current = config.DefaultValues.ThalamicInput.inh_current
         self.thalamic_exc_input_current = config.DefaultValues.ThalamicInput.exc_current
+
+        self.sensory_group = torch.from_numpy(config.sensory_group_mask).to(device)
 
     @property
     def selected(self):
@@ -256,6 +258,14 @@ class LocationGroupProperties(PropertyTensor):
         self.selected_array.tensor[:] = v
         if self.selection_property is not None:
             setattr(self, self.selection_property, v.flatten() != self._G)
+
+    @property
+    def sensory_input_type(self):
+        return self._row(self.rows.sensory_input_type)
+
+    @sensory_input_type.setter
+    def sensory_input_type(self, v):
+        self._set_row(self.rows.sensory_input_type, v)
 
     @property
     def thalamic_input(self):
@@ -280,3 +290,11 @@ class LocationGroupProperties(PropertyTensor):
     @thalamic_exc_input_current.setter
     def thalamic_exc_input_current(self, v):
         self._set_row(self.rows.thalamic_exc_input_current, v)
+
+    @property
+    def sensory_group(self):
+        return self._row(self.rows.sensory_group)
+
+    @sensory_group.setter
+    def sensory_group(self, v):
+        self._set_row(self.rows.sensory_group, v)

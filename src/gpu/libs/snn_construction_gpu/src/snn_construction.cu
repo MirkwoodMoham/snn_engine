@@ -24,9 +24,9 @@ void __global__ fill_N_G_group_id_and_G_neuron_count_per_type_(
 	
 	if (n < N)
 	{
-		const int x = __float2int_rd(((N_pos[n * N_pos_n_cols] / N_pos_shape_x) * min_G_shape));  
-		const int y = __float2int_rd(((N_pos[n * N_pos_n_cols + 1] / N_pos_shape_y) * min_G_shape));
-		const int z = __float2int_rd(((N_pos[n * N_pos_n_cols + 2] / N_pos_shape_z) * min_G_shape));
+		const int x = __float2int_rd(((N_pos[n * N_pos_n_cols] / N_pos_shape_x) * G_shape_x));  
+		const int y = __float2int_rd(((N_pos[n * N_pos_n_cols + 1] / N_pos_shape_y) * G_shape_y));
+		const int z = __float2int_rd(((N_pos[n * N_pos_n_cols + 2] / N_pos_shape_z) * G_shape_z));
 
 		const int group = x + G_shape_x * y + G_shape_x * G_shape_y * z;
         

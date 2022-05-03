@@ -12,14 +12,6 @@ class CudaObject:
             self._cuda_device = None
             self._gpu_array = None
 
-    @property
-    def cuda_device(self):
-        return self._cuda_device
-
-    @cuda_device.setter
-    def cuda_device(self, v):
-        self._cuda_device = v
-
         # for child in self.children:
         #     child.cuda_device = v
         # try:
@@ -42,7 +34,7 @@ class CudaObject:
                 pass
 
     def init_cuda_attributes(self, device):
-        self.cuda_device = device
+        self._cuda_device = device
         self.init_cuda_arrays()
         self._init_cuda_attributes(device, attr_list=['children', '_subvisuals', 'normals'])
 

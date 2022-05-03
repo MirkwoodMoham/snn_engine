@@ -47,6 +47,8 @@ class NetworkConfig:
     N_G_neuron_type_col: int = 0
     N_G_group_id_col: int = 1
 
+    sensory_groups: Optional[list[int]] = None
+
     max_z: float = 999.
 
     class DefaultValues:
@@ -111,9 +113,10 @@ class NetworkConfig:
         assert all([isinstance(s, int)
                     and (s / min_g_shape == int(s / min_g_shape)) for s in self.G_shape])
 
-        self.grid_pos = (np.floor((self.pos
-                                   / np.array(self.N_pos_shape, dtype=np.float32))
-                                  * np.array(min_g_shape, dtype=np.float32)).astype(int))
+        self.N_grid_pos = (np.floor((self.pos
+                                     / np.array(self.N_pos_shape, dtype=np.float32))
+                                    * np.array(self.G_shape, dtype=np.float32)).astype(int))
+
         self.grid_unit_shape = (float(self.N_pos_shape[0] / self.G_shape[0]),
                                 float(self.N_pos_shape[1] / self.G_shape[1]),
                                 float(self.N_pos_shape[2] / self.G_shape[2]))
@@ -126,32 +129,55 @@ class NetworkConfig:
 
         assert np.max(self.pos[:, 2]) < self.max_z
 
-        self._g_pos = None
+        self._g_pos = self.init_g_pos()
+        self.G_grid_pos = (np.floor((self.g_pos
+                                     / np.array(self.N_pos_shape, dtype=np.float32))
+                                    * np.array(self.G_shape, dtype=np.float32)).astype(int))
+        self._g_pos_end = None
+
+        if self.sensory_groups is None:
+            groups = np.arange(self.G + 1)
+            sensory_group_mask = self.G_grid_pos[:, 1] == 0
+            sensory_group_mask[-1] = False
+            self.sensory_groups = groups[sensory_group_mask]
+            self.sensory_group_mask = np.zeros(self.G)
+            self.sensory_group_mask[self.sensory_groups] = 1
+
+    def init_g_pos(self):
+        groups = np.arange(self.G)
+        z = np.floor(groups / (self.G_shape[0] * self.G_shape[1]))
+        r = groups - z * (self.G_shape[0] * self.G_shape[1])
+        y = np.floor(r / self.G_shape[0])
+        x = r - y * self.G_shape[0]
+        g_pos = np.zeros((self.G + 1, 3), dtype=np.float32)
+
+        # The last entry will be ignored by the geometry shader (i.e. invisible).
+        # We could also use a primitive restart index instead.
+        # The current solution is simpler w.r.t. vispy.
+        g_pos[:, 2] = self.max_z + 1
+
+        g_pos[:self.G, 0] = x * self.grid_unit_shape[0]
+        g_pos[:self.G, 1] = y * self.grid_unit_shape[1]
+        g_pos[:self.G, 2] = z * self.grid_unit_shape[2]
+
+        assert np.max(g_pos[:self.G, 2]) < self.max_z
+        self.validate_pos(g_pos[:self.G, :])
+        # noinspection PyAttributeOutsideInit
+        return g_pos
 
     @property
     def g_pos(self):
-        if self._g_pos is None:
-            groups = np.arange(self.G)
-            z = np.floor(groups / (self.G_shape[0] * self.G_shape[1]))
-            r = groups - z * (self.G_shape[0] * self.G_shape[1])
-            y = np.floor(r / self.G_shape[0])
-            x = r - y * self.G_shape[0]
-            g_pos = np.zeros((self.G + 1, 3), dtype=np.float32)
-
-            # The last entry will be ignored by the geometry shader (i.e. invisible).
-            # We could also use a primitive restart index instead.
-            # The current solution is simpler w.r.t. vispy.
-            g_pos[:, 2] = self.max_z + 1
-
-            g_pos[:self.G, 0] = x * self.grid_unit_shape[0]
-            g_pos[:self.G, 1] = y * self.grid_unit_shape[1]
-            g_pos[:self.G, 2] = z * self.grid_unit_shape[2]
-
-            assert np.max(g_pos[:self.G, 2]) < self.max_z
-            self.validate_pos(g_pos[:self.G, :])
-            # noinspection PyAttributeOutsideInit
-            self._g_pos = g_pos
         return self._g_pos
+
+    @property
+    def g_pos_end(self):
+        if self._g_pos_end is None:
+            # noinspection PyAttributeOutsideInit
+            self._g_pos_end = self.g_pos.copy()
+            self._g_pos_end[:, 0] = self._g_pos_end[:, 0] + self.grid_unit_shape[0]
+            self._g_pos_end[:, 1] = self.g_pos_end[:, 1] + self.grid_unit_shape[1]
+            self._g_pos_end[:, 2] = self.g_pos_end[:, 2] + self.grid_unit_shape[2]
+        return self._g_pos_end
 
     def validate_pos(self, pos):
         for i in range(3):
