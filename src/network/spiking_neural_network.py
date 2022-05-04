@@ -704,7 +704,7 @@ class SpikingNeuronNetwork:
         RenderedObjectNode._grid_unit_shape = network_config.grid_unit_shape
 
         self.T = T
-        self._network_config: NetworkConfig = network_config
+        self.network_config: NetworkConfig = network_config
         self._plotting_config: PlottingConfig = plotting_config
         self.model = model
         self.max_batch_size_mb = max_batch_size_mb
@@ -713,44 +713,41 @@ class SpikingNeuronNetwork:
         self.type_group_conn_dict: Dict[tuple[int, int], NeuronTypeGroupConnection] = {}
         self.next_group_id = 0
 
-        g_inh = self.add_type_group(count=int(.2 * self.config.N), neuron_type=NeuronTypes.INHIBITORY)
-        g_exc = self.add_type_group(count=self.config.N - len(g_inh), neuron_type=NeuronTypes.EXCITATORY)
+        g_inh = self.add_type_group(count=int(.2 * self.network_config.N), neuron_type=NeuronTypes.INHIBITORY)
+        g_exc = self.add_type_group(count=self.network_config.N - len(g_inh), neuron_type=NeuronTypes.EXCITATORY)
 
-        self.add_type_group_conn(g_inh, g_exc, w0=-.49, exp_syn_counts=self.config.S)
-        c_exc_inh = self.add_type_group_conn(g_exc, g_inh, w0=.51,
-                                             exp_syn_counts=max(int((len(g_inh) / self.config.N) * self.config.S), 1))
-        self.add_type_group_conn(g_exc, g_exc, w0=.5, exp_syn_counts=self.config.S - len(c_exc_inh))
+        self.add_type_group_conn(g_inh, g_exc, w0=-.49, exp_syn_counts=self.network_config.S)
+        c_exc_inh = self.add_type_group_conn(
+            g_exc, g_inh, w0=.51,
+            exp_syn_counts=max(int((len(g_inh) / self.network_config.N) * self.network_config.S), 1))
+        self.add_type_group_conn(g_exc, g_exc, w0=.5, exp_syn_counts=self.network_config.S - len(c_exc_inh))
 
         self.sort_pos()
 
-        self._neurons = RenderedNeurons(self.config)
+        self._neurons = RenderedNeurons(self.network_config)
 
         self.GPU: Optional[NetworkGPUArrays] = None
 
         self.rendered_3d_objs = [self._neurons]
 
-        self._outer_grid: Optional[visuals.Box] = None
-        self._selector_box: Optional[SelectorBox] = None
-        self._voltage_plot: Optional[VoltagePlot] = None
-        self._firing_scatter_plot: Optional[VoltagePlot] = None
-        self._selected_group_boxes: Optional[BoxSystem] = None
-        self._input_system: Optional[InputCells] = None
+        self.outer_grid: Optional[visuals.Box] = None
+        self.selector_box: Optional[SelectorBox] = None
+        self.voltage_plot: Optional[VoltagePlot] = None
+        self.firing_scatter_plot: Optional[VoltagePlot] = None
+        self.selected_group_boxes: Optional[BoxSystem] = None
+        self.input_system: Optional[InputCells] = None
 
         self._all_rendered_objects_initialized = False
 
         self.validate()
 
     @property
-    def config(self):
-        return self._network_config
-
-    @property
     def plotting_config(self):
         return self._plotting_config
 
     def validate(self):
-        NeuronTypeGroup.validate(self.type_group_dct, N=self.config.N)
-        NeuronTypeGroupConnection.validate(self.type_group_conn_dict, S=self.config.S)
+        NeuronTypeGroup.validate(self.type_group_dct, N=self.network_config.N)
+        NeuronTypeGroupConnection.validate(self.type_group_conn_dict, S=self.network_config.S)
 
     @property
     def type_groups(self):
@@ -758,44 +755,17 @@ class SpikingNeuronNetwork:
 
     # noinspection PyPep8Naming
     def add_type_group(self, count, neuron_type):
-        g = NeuronTypeGroup.from_count(self.next_group_id, count, self.config.S, neuron_type, self.type_group_dct)
+        g = NeuronTypeGroup.from_count(self.next_group_id, count, self.network_config.S,
+                                       neuron_type, self.type_group_dct)
         self.next_group_id += 1
         return g
 
     def add_type_group_conn(self, src, snk, w0, exp_syn_counts):
-        c = NeuronTypeGroupConnection(src, snk, w0=w0, S=self.config.S,
+        c = NeuronTypeGroupConnection(src, snk, w0=w0, S=self.network_config.S,
                                       exp_syn_counts=exp_syn_counts,
                                       max_batch_size_mb=self.max_batch_size_mb,
                                       conn_dict=self.type_group_conn_dict)
         return c
-
-    @property
-    def input_system(self):
-        return self._input_system
-
-    @property
-    def neurons(self) -> RenderedNeurons:
-        return self._neurons
-
-    @property
-    def outer_grid(self) -> visuals.Box:
-        return self._outer_grid
-
-    @property
-    def selector_box(self) -> SelectorBox:
-        return self._selector_box
-
-    @property
-    def voltage_plot(self):
-        return self._voltage_plot
-
-    @property
-    def firing_scatter_plot(self):
-        return self._firing_scatter_plot
-
-    @property
-    def selected_group_boxes(self):
-        return self._selected_group_boxes
 
     # noinspection PyPep8Naming
     def initialize_GPU_arrays(self, device):
@@ -810,7 +780,7 @@ class SpikingNeuronNetwork:
             selected_group_boxes_ibo=self.selected_group_boxes.ibo,
         )
         self.GPU = NetworkGPUArrays(
-            config=self.config,
+            config=self.network_config,
             type_group_dct=self.type_group_dct,
             type_group_conn_dct=self.type_group_conn_dict,
             device=device,
@@ -821,6 +791,7 @@ class SpikingNeuronNetwork:
 
         self.selector_box.init_cuda_attributes(self.GPU.device, self.GPU.G_props)
         self.input_system.init_cuda_attributes(self.GPU.device, self.GPU.G_props)
+        self.selected_group_boxes.init_cuda_attributes(self.GPU.device, self.GPU.G_props)
         for n in self.input_system.normals:
             n.visible = False
 
@@ -831,17 +802,18 @@ class SpikingNeuronNetwork:
 
         for g in self.type_groups:
 
-            grid_pos = self.config.N_grid_pos[g.start_idx: g.end_idx + 1]
+            grid_pos = self.network_config.N_grid_pos[g.start_idx: g.end_idx + 1]
 
             p0 = grid_pos[:, 0].argsort(kind='stable')
             p1 = grid_pos[p0][:, 1].argsort(kind='stable')
             p2 = grid_pos[p0][p1][:, 2].argsort(kind='stable')
 
-            self.config.N_grid_pos[g.start_idx: g.end_idx + 1] = grid_pos[p0][p1][p2]
-            self.config.pos[g.start_idx: g.end_idx + 1] = self.config.pos[g.start_idx: g.end_idx + 1][p0][p1][p2]
-            if self.config.N <= 100:
-                print('\n', self.config.pos[g.start_idx:g.end_idx+1])
-        if self.config.N <= 100:
+            self.network_config.N_grid_pos[g.start_idx: g.end_idx + 1] = grid_pos[p0][p1][p2]
+            self.network_config.pos[g.start_idx: g.end_idx + 1] = \
+                self.network_config.pos[g.start_idx: g.end_idx + 1][p0][p1][p2]
+            if self.network_config.N <= 100:
+                print('\n', self.network_config.pos[g.start_idx:g.end_idx+1])
+        if self.network_config.N <= 100:
             print()
 
     def update(self):
@@ -849,44 +821,45 @@ class SpikingNeuronNetwork:
 
     # noinspection PyStatementEffect,PyTypeChecker
     def initialize_rendered_objs(self):
-        self._voltage_plot = VoltagePlot(n_plots=self.plotting_config.n_voltage_plots,
-                                         plot_length=self.plotting_config.voltage_plot_length)
-        self._firing_scatter_plot = FiringScatterPlot(n_plots=self.plotting_config.n_scatter_plots,
-                                                      plot_length=self.plotting_config.scatter_plot_length)
-        self._outer_grid: visuals.Box = Box(shape=self.config.N_pos_shape,
-                                            scale=[.99, .99, .99],
-                                            segments=self.config.G_shape,
-                                            depth_test=False,
-                                            use_parent_transform=False)
-        self._outer_grid.visible = False
+        self.voltage_plot = VoltagePlot(n_plots=self.plotting_config.n_voltage_plots,
+                                        plot_length=self.plotting_config.voltage_plot_length)
+        self.firing_scatter_plot = FiringScatterPlot(n_plots=self.plotting_config.n_scatter_plots,
+                                                     plot_length=self.plotting_config.scatter_plot_length)
+        self.outer_grid: visuals.Box = Box(shape=self.network_config.N_pos_shape,
+                                           scale=[.99, .99, .99],
+                                           segments=self.network_config.G_shape,
+                                           depth_test=False,
+                                           use_parent_transform=False)
+        self.outer_grid.visible = False
 
-        self._selector_box = SelectorBox(self.config)
-        g = self.config.G
-        self._selected_group_boxes = BoxSystem(pos=self._network_config.g_pos,
-                                               connect=np.zeros((g + 1, 2)) + g,
-                                               max_z=self.config.max_z,
-                                               grid_unit_shape=self.config.grid_unit_shape)
+        self.selector_box = SelectorBox(self.network_config)
+        g = self.network_config.G
+        self.selected_group_boxes = BoxSystem(network_config=self.network_config,
+                                              pos=self.network_config.g_pos,
+                                              connect=np.zeros((g + 1, 2)) + g,
+                                              max_z=self.network_config.max_z,
+                                              grid_unit_shape=self.network_config.grid_unit_shape)
 
-        self._input_system = InputCells(
+        self.input_system = InputCells(
             pos=np.array([[0., 0., 0.],
                           # [0.3, 0., 0.],
-                          [0., 0., self.config.max_z + 1]]),
-            network_config=self.config,
+                          [0., 0., self.network_config.max_z + 1]]),
+            network_config=self.network_config,
             segmentation=(3, 1, 1),
             quad_colors=np.array([
                 [0., 0., 0., 1.],
                 [1., 1., 1., 1.],
                 [0., 0., 0., 1.],
             ]),
-            max_z=self.config.max_z,
-            unit_shape=(.3, 0.1, 0.1)
+            max_z=self.network_config.max_z,
+            unit_shape=(1., 0.1, 0.1)
             # unit_shape=self.config.grid_unit_shape
         )
 
-        self.rendered_3d_objs.append(self._outer_grid)
-        self.rendered_3d_objs.append(self._selector_box)
-        self.rendered_3d_objs.append(self._selected_group_boxes)
-        self.rendered_3d_objs.append(self._input_system)
+        self.rendered_3d_objs.append(self.outer_grid)
+        self.rendered_3d_objs.append(self.selector_box)
+        self.rendered_3d_objs.append(self.selected_group_boxes)
+        self.rendered_3d_objs.append(self.input_system)
 
         self._all_rendered_objects_initialized = True
 
@@ -905,5 +878,3 @@ class SpikingNeuronNetwork:
             view_3d.add(o)
 
         # self.selector_box.obj.parent = view_3d.scene
-
-

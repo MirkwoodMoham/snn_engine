@@ -33,7 +33,7 @@ class CudaObject:
             except AttributeError:
                 pass
 
-    def init_cuda_attributes(self, device):
+    def init_cuda_attributes(self, device, *args, **kwargs):
         self._cuda_device = device
         self.init_cuda_arrays()
         self._init_cuda_attributes(device, attr_list=['children', '_subvisuals', 'normals'])

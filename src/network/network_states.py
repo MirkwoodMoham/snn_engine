@@ -11,6 +11,7 @@ from gpu import (
 )
 from network.network_config import NetworkConfig
 
+
 class PropertyTensor:
 
     @dataclass(frozen=True)

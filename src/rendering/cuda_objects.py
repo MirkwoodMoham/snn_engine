@@ -150,7 +150,7 @@ class NormalArrow(RenderedCudaObjectNode):
         # print('shape:', shape)
         b = RegisteredGPUArray.from_buffer(
             self.color_vbo, config=GPUArrayConfig(shape=shape, strides=(shape[1] * nbytes, nbytes),
-                                                  dtype=np.float32, device=self.cuda_device))
+                                                  dtype=np.float32, device=self._cuda_device))
         # return b
         self._gpu_array = b
 

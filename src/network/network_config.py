@@ -140,8 +140,8 @@ class NetworkConfig:
             sensory_group_mask = self.G_grid_pos[:, 1] == 0
             sensory_group_mask[-1] = False
             self.sensory_groups = groups[sensory_group_mask]
-            self.sensory_group_mask = np.zeros(self.G)
-            self.sensory_group_mask[self.sensory_groups] = 1
+            self.sensory_group_mask = np.zeros(self.G).astype(bool)
+            self.sensory_group_mask[self.sensory_groups] = True
 
     def init_g_pos(self):
         groups = np.arange(self.G)
@@ -178,6 +178,10 @@ class NetworkConfig:
             self._g_pos_end[:, 1] = self.g_pos_end[:, 1] + self.grid_unit_shape[1]
             self._g_pos_end[:, 2] = self.g_pos_end[:, 2] + self.grid_unit_shape[2]
         return self._g_pos_end
+
+    @property
+    def sensory_grid_pos(self):
+        return self.G_grid_pos[self.sensory_groups]
 
     def validate_pos(self, pos):
         for i in range(3):
