@@ -112,7 +112,7 @@ class EngineSceneCanvas(scene.SceneCanvas):
         if network is not None:
             network.add_rendered_objects(self.network_view, self.voltage_plot_view, self.scatter_plot_view)
 
-            self._select(network.selector_box, True)
+            # self._select(network.selector_box, True)
             # self._selected_objects.append(network.selector_box)
 
     @property

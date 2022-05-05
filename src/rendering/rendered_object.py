@@ -156,31 +156,18 @@ class RenderedObject:
         self.visual.update()
 
 
+# noinspection PyAbstractClass
 class RenderedObjectVisual(CompoundVisual, RenderedObject):
 
-    # def __init__(self, parent=None, name=None, transforms=None, selectable=False):
     def __init__(self, subvisuals, parent=None, selectable=False, draggable=False):
 
-        # super().__init__(parent=parent, name=name, transforms=transforms)
-
         self.unfreeze()
-        # self._obj: Optional[Union[visuals.visuals.MarkersVisual,
-        #                           visuals.visuals.LineVisual]] = None
         RenderedObject.__init__(self, selectable=selectable, draggable=draggable)
-
         CompoundVisual.__init__(self, subvisuals)
-        # for v in subvisuals:
-        #     v.parent = self
-
         self.freeze()
-        # self.unfreeze()
 
         if parent is not None:
             self.parent = parent
-
-        # self.set_transform('st')
-
-        # self._transform = STTransform()
 
 
 def add_children(parent: Node, children: list):
@@ -252,6 +239,10 @@ class _STR:
     _min_value: Optional[Union[int, float]] = None
     _max_value: Optional[Union[int, float]] = None
 
+    def __call__(self):
+        return getattr(self.parent.transform, self.prop_id)
+
+    # noinspection PyArgumentList
     def __post_init__(self):
         if self.spin_box_sliders is None:
             self.spin_box_sliders = XTZ()

@@ -1,29 +1,20 @@
+import numpy as np
 from .rendered_object import RenderedObjectNode
+from gpu import GPUArrayConfig, RegisteredGPUArray
 
 
 class CudaObject:
     def __init__(self):
         try:
+            # noinspection PyUnresolvedReferences
             self.unfreeze()
             self._cuda_device = None
             self._gpu_array = None
+            # noinspection PyUnresolvedReferences
             self.freeze()
         except AttributeError:
             self._cuda_device = None
             self._gpu_array = None
-
-        # for child in self.children:
-        #     child.cuda_device = v
-        # try:
-        #     for subvisual in self._subvisuals:
-        #         subvisual.cuda_device = v
-        # except AttributeError:
-        #     pass
-        # try:
-        #     for normal in self.normals:
-        #         normal.cuda_device = v
-        # except AttributeError:
-        #     pass
 
     def _init_cuda_attributes(self, device, attr_list):
         for a in attr_list:
@@ -33,7 +24,7 @@ class CudaObject:
             except AttributeError:
                 pass
 
-    def init_cuda_attributes(self, device, *args, **kwargs):
+    def init_cuda_attributes(self, device):
         self._cuda_device = device
         self.init_cuda_arrays()
         self._init_cuda_attributes(device, attr_list=['children', '_subvisuals', 'normals'])
@@ -53,15 +44,20 @@ class RenderedCudaObjectNode(RenderedObjectNode, CudaObject):
                  subvisuals,
                  parent=None,
                  name=None,
-                 # transforms=None,
                  selectable=False,
                  draggable=False):
         RenderedObjectNode.__init__(self,
                                     subvisuals,
                                     parent=parent,
                                     name=name,
-                                    # transforms=transforms,
                                     selectable=selectable,
                                     draggable=draggable)
 
         CudaObject.__init__(self)
+
+    def face_color_array(self, meshvisual):
+        nbytes = 4
+        shape = (meshvisual._meshdata.n_faces * 3, 4)
+        return RegisteredGPUArray.from_buffer(
+            self.color_vbo, config=GPUArrayConfig(shape=shape, strides=(shape[1] * nbytes, nbytes),
+                                                  dtype=np.float32, device=self._cuda_device))

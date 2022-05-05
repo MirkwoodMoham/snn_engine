@@ -841,18 +841,18 @@ class SpikingNeuronNetwork:
                                               grid_unit_shape=self.network_config.grid_unit_shape)
 
         self.input_system = InputCells(
+            input_data=np.array([0., 1., 0.]),
             pos=np.array([[0., 0., 0.],
                           # [0.3, 0., 0.],
                           [0., 0., self.network_config.max_z + 1]]),
             network_config=self.network_config,
             segmentation=(3, 1, 1),
-            quad_colors=np.array([
-                [0., 0., 0., 1.],
-                [1., 1., 1., 1.],
-                [0., 0., 0., 1.],
+            input_color_coding=np.array([
+                [0., 0., 0., .4],
+                [1., 1., 1., .4],
             ]),
             max_z=self.network_config.max_z,
-            unit_shape=(1., 0.1, 0.1)
+            unit_shape=(1., 0.2, 0.5)
             # unit_shape=self.config.grid_unit_shape
         )
 

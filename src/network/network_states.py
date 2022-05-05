@@ -227,15 +227,12 @@ class LocationGroupProperties(PropertyTensor):
         self.selected_array = RegisteredGPUArray.from_buffer(
             select_ibo, config=GPUArrayConfig(shape=(self._G, 1),
                                               strides=(2 * nbytes, nbytes),
-                                              # strides=(nbytes, nbytes * (self._G + 1)),
                                               dtype=np.int32, device=device))
-        # pd.options.display.max_columns = 29
-        # print(self.selected_array.to_dataframe)
-        # self.selected[:, :] = self._G
-        # self.selected[0] = 2
-        # self.selected.tensor[0, 1] = 0
+
+        self.input_face_colors = None
+
         self.set_tensor(shape, device, config)
-        self.selection_property = 'thalamic_input'
+        self.selection_property = None
 
         self.spin_box_sliders = Sliders(self.Rows())
 
@@ -249,6 +246,7 @@ class LocationGroupProperties(PropertyTensor):
         self.thalamic_exc_input_current = config.DefaultValues.ThalamicInput.exc_current
 
         self.sensory_group = torch.from_numpy(config.sensory_group_mask).to(device)
+        self.sensory_input_type = -1.
 
     @property
     def selected(self):
@@ -267,6 +265,8 @@ class LocationGroupProperties(PropertyTensor):
     @sensory_input_type.setter
     def sensory_input_type(self, v):
         self._set_row(self.rows.sensory_input_type, v)
+
+        print()
 
     @property
     def thalamic_input(self):

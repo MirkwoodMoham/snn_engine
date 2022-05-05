@@ -145,14 +145,7 @@ class NormalArrow(RenderedCudaObjectNode):
         return self._visual.shared_program.vert['base_color'].id
 
     def init_cuda_arrays(self):
-        nbytes = 4
-        shape = (self.visual._meshdata.n_faces * 3, 4)
-        # print('shape:', shape)
-        b = RegisteredGPUArray.from_buffer(
-            self.color_vbo, config=GPUArrayConfig(shape=shape, strides=(shape[1] * nbytes, nbytes),
-                                                  dtype=np.float32, device=self._cuda_device))
-        # return b
-        self._gpu_array = b
+        self._gpu_array = self.face_color_array(self.visual)
 
 
 class CudaBox(Box, CudaObject):
