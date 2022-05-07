@@ -51,12 +51,8 @@ class ArrowVisual(visuals.Tube, CudaObject):
 class NormalArrow(RenderedCudaObjectNode):
 
     def __init__(self, select_parent, points, color=None, name=None, tube_points=4,
-                 radius=np.array([.01, .01, .025, .0]), parent: Optional[Node] = None,
+                 radius=np.array([.012, .012, .05, .0]), parent: Optional[Node] = None,
                  selectable=True, draggable=True, mod_factor=1):
-        # super().__init__(parent=parent, selectable=selectable,
-        #                  # name=name or parent.name + f'.{self.__class__.__name__}'
-        #                  )
-        # self.transform: STTransform = STTransform()
 
         self.last_scale = None
         self.last_translate = None
@@ -64,8 +60,6 @@ class NormalArrow(RenderedCudaObjectNode):
         self._mod_factor = mod_factor
 
         self.select_parent = select_parent
-        # super().__init__(parent=parent, selectable=selectable)
-
         self._translate_dir = 1
         for i, d in enumerate(['x', 'y', 'z']):
             if (points[:, i] != 0).any():
@@ -83,17 +77,19 @@ class NormalArrow(RenderedCudaObjectNode):
             self._modifier_dir *= -1
             # self._translate_dir *= -1
 
+        self.default_alpha = .5
+
         if name is None:
             name = (f"{self._select_parent.name}.{self.__class__.__name__}:{self._dim}"
                     f"{'+' if self._modifier_dir > 0 else '-'}")
 
         if color is None:
             if points[:, 0].any():
-                color = np.array([1, 0, 0, 0.3], dtype=np.float32)
+                color = np.array([1., 0., 0., self.default_alpha], dtype=np.float32)
             elif points[:, 1].any():
-                color = np.array([0, 1, 0, 0.3], dtype=np.float32)
+                color = np.array([0., 1., 0., self.default_alpha], dtype=np.float32)
             else:
-                color = np.array([0, 0, 1, 0.3], dtype=np.float32)
+                color = np.array([0., 0., 1., self.default_alpha], dtype=np.float32)
 
         self._visual = ArrowVisual(points=points,
                                    name=name + '.obj',
@@ -105,20 +101,15 @@ class NormalArrow(RenderedCudaObjectNode):
 
     def on_select_callback(self, v):
         print(f'\nselected arrow({v}):', self, '\n')
-        # print(self.gpu_array.tensor[:, 3][:6], '...')
-        self.gpu_array.tensor[:, 3] = 1. if v is True else .3
+        self.gpu_array.tensor[:, 3] = 1. if v is True else self.default_alpha
 
         self.last_scale = getattr(self.select_parent.scale, self._dim)
         self.last_translate = getattr(self.select_parent.translate, self._dim)
-        # print('last_scale:', self.last_scale)
-        # print(self.gpu_array.tensor[:, 3][:6], '...')
 
     def on_drag_callback(self, v: np.ndarray, mode: int):
         v = v[self._modifier_dim] * self._modifier_dir * self._mod_factor
-        print(f'\ndragged arrow({v}):', self, '')
+        print(f'\ndragged arrow({round(v, 3)}):', self, '')
 
-        # self.select_parent.scale.x += v * self.scale_extraction_factor
-        # current_scale = getattr(self.select_parent.scale, 'x')
         if mode == 0:
             setattr(self.select_parent.scale, self._dim, self.last_scale + v)
         elif mode == 1:
@@ -162,7 +153,6 @@ class CudaBox(Box, CudaObject):
                  depth_test=True, border_width=1, parent=None,
                  init_normals=True):
 
-        # self._parent = parent
         Box.__init__(self, shape=shape,
                      segments=segments,
                      scale=scale,
@@ -180,11 +170,6 @@ class CudaBox(Box, CudaObject):
             inv = initial_normal_vertices(shape)
             for i in range(6):
                 arrow = NormalArrow(select_parent, points=inv[i], mod_factor=1 / (3 * shape[int(i/2)]))
-                # self.add_subvisual(arrow)
                 self.normals.append(arrow)
 
         CudaObject.__init__(self)
-        # self.interactive = True
-
-
-

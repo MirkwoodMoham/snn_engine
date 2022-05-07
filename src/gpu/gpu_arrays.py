@@ -176,7 +176,6 @@ class GPUArrayCollection:
 
     def __init__(self, device, bprint_allocated_memory=False):
         torch.set_printoptions(precision=2)
-        # nbcuda.select_device(device)
         self.device = torch.device(device)
         self.last_allocated_memory = 0
         self.bprint_allocated_memory = bprint_allocated_memory

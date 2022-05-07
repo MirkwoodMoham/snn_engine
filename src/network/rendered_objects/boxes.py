@@ -19,6 +19,7 @@ from rendering import (
     NormalArrow,
     initial_normal_vertices
 )
+from gpu import RegisteredGPUArray
 
 
 # noinspection PyAbstractClass
@@ -125,10 +126,14 @@ class SelectorBox(RenderedCudaObjectNode):
         for c in self.visual.normals:
             c.visual.visible = v
 
+    # noinspection PyMethodOverriding
     def init_cuda_attributes(self, device, property_tensor):
         super().init_cuda_attributes(device)
         self.states_gpu = property_tensor
         self.transform_connected = True
+
+        for c in self.visual.normals:
+            c.visual.visible = False
 
     # @property
     # def color_vbo_glir_id(self):
@@ -157,13 +162,22 @@ class BoxSystem(RenderedCudaObjectNode):
         self.network_config = network_config
         self._visual = BoxSystemLineVisual(grid_unit_shape=grid_unit_shape, max_z=max_z, pos=pos, color=color, **kwargs)
 
-        self._sensory_input_planes: MeshVisual = self.create_sensory_input_mesh()
-        super().__init__([self.visual, self._sensory_input_planes])
+        self._output_planes: MeshVisual = self.create_mesh('+z', self.network_config.output_grid_pos)
+        self._sensory_input_planes: MeshVisual = self.create_mesh('-y', self.network_config.sensory_grid_pos)
+
+        super().__init__([self.visual, self._sensory_input_planes, self._output_planes])
+        # noinspection PyTypeChecker
+
+        # noinspection PyTypeChecker
+        self.set_gl_state(polygon_offset_fill=True,
+                          polygon_offset=(1, 1), depth_test=False, blend=True)
 
         self.transform = STTransform(translate=(0, 0, 0), scale=(1, 1, 1))
 
         self.unfreeze()
         self.states_gpu: Optional[LocationGroupProperties] = None
+        self._input_color_array: Optional[RegisteredGPUArray] = None
+        self._output_color_array: Optional[RegisteredGPUArray] = None
         self.freeze()
 
     @property
@@ -174,24 +188,43 @@ class BoxSystem(RenderedCudaObjectNode):
     def ibo_glir_id(self):
         return self.visual._line_visual._connect_ibo.id
 
-    def create_sensory_input_planes(self, plane_y, height=None, width=None, width_segments=None, height_segments=None):
+    def create_planes(self, dir_, grid_pos, height=None, width=None, width_segments=None, height_segments=None):
 
-        n_planes = len(plane_y)
+        if 'y' in dir_:
+            i = 1
+        elif 'z' in dir_:
+            i = 2
+        else:
+            i = 0
+        i_planes = np.unique(grid_pos[:, i]) * self.network_config.grid_unit_shape[i]
+        # i_planes = np.nunique(grid_pos[:, (i + 1) % 3])
 
-        height = height or [self.network_config.N_pos_shape[2]] * n_planes
-        width = width or [self.network_config.N_pos_shape[0]] * n_planes
+        n_planes = len(i_planes)
 
-        width_segments = width_segments or [self.network_config.G_shape[2]] * n_planes
-        height_segments = height_segments or [self.network_config.G_shape[0]] * n_planes
+        j = (i + 1) % 3
+        j_segments = np.unique(grid_pos[:, j])
+        n_j_segments = len(j_segments)
+        j_pos_shape = self.network_config.N_pos_shape[j]
+        k = (i + 2) % 3
+        k_segments = np.unique(grid_pos[:, k])
+        n_k_segments = len(k_segments)
+        k_pos_shape = self.network_config.N_pos_shape[k]
+
+        height = height or [n_j_segments * self.network_config.grid_unit_shape[j]] * n_planes
+        width = width or [n_k_segments * self.network_config.grid_unit_shape[k]] * n_planes
+        width_segments = width_segments or [n_j_segments] * n_planes
+        height_segments = height_segments or [n_k_segments] * n_planes
 
         planes_m = []
 
-        for i, y in enumerate(plane_y):
-            vertices_p, faces_p, outline_p = create_plane(height[i], width[i],
-                                                          width_segments[i], height_segments[i], '+y')
-            vertices_p['position'][:, 0] += self.network_config.N_pos_shape[0]/2.
-            vertices_p['position'][:, 2] += self.network_config.N_pos_shape[2]/2
-            vertices_p['position'][:, 1] = y
+        for idx, y in enumerate(i_planes):
+            vertices_p, faces_p, outline_p = create_plane(height[idx], width[idx],
+                                                          width_segments[idx], height_segments[idx], dir_)
+            vertices_p['position'][:, k] += ((np.min(k_segments) * self.network_config.grid_unit_shape[k] + k_pos_shape)
+                                             / 2)
+            vertices_p['position'][:, j] += ((np.min(j_segments) * self.network_config.grid_unit_shape[j] + j_pos_shape)
+                                             / 2)
+            vertices_p['position'][:, i] = y + self.network_config.grid_unit_shape[i] * int('+' in dir_)
             planes_m.append((vertices_p, faces_p, outline_p))
 
         # noinspection DuplicatedCode
@@ -232,100 +265,132 @@ class BoxSystem(RenderedCudaObjectNode):
 
         return vertices, faces, outline
 
-    def create_sensory_input_mesh(self):
-        grid_pos = self.network_config.sensory_grid_pos
-        planes_y = np.unique(grid_pos[:, 1])
-        vertices, faces, outline = self.create_sensory_input_planes(planes_y)
-        face_colors = np.repeat(np.array([[1., 1., 1., 1.]]), len(faces), axis=0)
+    def create_mesh(self, dir_, grid_pos) -> MeshVisual:
+        vertices, faces, outline = self.create_planes(dir_, grid_pos)
+        face_colors = np.repeat(np.array([[0., 0., 0., 1.]]), len(faces), axis=0)
         return MeshVisual(vertices['position'], faces, None, face_colors, None)
 
     def init_cuda_arrays(self):
-        self._gpu_array = self.face_color_array(self._sensory_input_planes)
-        self._gpu_array.tensor[:, 3] = .5
+        self._input_color_array = self.face_color_array(self._sensory_input_planes)
+        self._input_color_array.tensor[:, 3] = .5
+        self._output_color_array = self.face_color_array(self._output_planes, self.output_color_vbo)
+        self._output_color_array.tensor[:, 3] = .5
 
     # noinspection PyMethodOverriding
     def init_cuda_attributes(self, device, property_tensor):
         self.states_gpu: LocationGroupProperties = property_tensor
         super().init_cuda_attributes(device)
-        self.states_gpu.input_face_colors = self._gpu_array.tensor
-        # self.transform_connected = True
+        self.states_gpu.input_face_colors = self._input_color_array.tensor
+        self.states_gpu.output_face_colors = self._output_color_array.tensor
 
     @property
     def color_vbo_glir_id(self):
         return self._sensory_input_planes.shared_program.vert['base_color'].id
+    
+    @property
+    def output_color_vbo(self):
+        return self.buffer_id(self._output_planes.shared_program.vert['base_color'].id)
 
 
 # noinspection PyAbstractClass
-class InputCells(RenderedCudaObjectNode):
+class IOCells(RenderedCudaObjectNode):
 
     count: int = 0
 
     def __init__(self, pos,
-                 input_data: np.array,
+                 data: np.array,
                  network_config: NetworkConfig,
-                 unit_shape, max_z,
-                 input_color_coding,
+                 compatible_groups,
+                 data_color_coding=None,
+                 face_dir='-y',
                  segmentation=(3, 1, 1),
+                 unit_shape=None,
                  color=(1., 1., 1., 1.), name=None, **kwargs):
 
-        if segmentation[1] != 1:
+        if 'x' in face_dir:
+            i = 0
+        elif 'y' in face_dir:
+            i = 1
+        else:
+            i = 2
+
+        if segmentation[i] != 1:
             raise ValueError
-        if len(pos) != 2:
+        if len(pos) != 1:
             raise ValueError
 
-        self.pos = pos
         self.network_config = network_config
-        self._shape = unit_shape
+        pos = np.vstack((pos, np.array([0., 0., self.network_config.max_z + 1])))
+        init_pos = pos[0]
+        self.pos = pos - init_pos
+        self._shape = (segmentation[0] * self.network_config.grid_unit_shape[0],
+                       segmentation[1] * self.network_config.grid_unit_shape[1],
+                       segmentation[2] * self.network_config.grid_unit_shape[2]) if unit_shape is None else unit_shape
         self._segment_shape = (self._shape[0]/segmentation[0],
                                self._shape[1]/segmentation[1],
                                self._shape[2]/segmentation[2])
+        self.compatible_groups = compatible_groups
 
-        self.input_data_shape = np.zeros(segmentation).squeeze().shape
-        if input_data.shape != self.input_data_shape:
-            input_data = input_data.squeeze()
-            if input_data.shape != self.input_data_shape:
+        self.data_shape = np.zeros(segmentation).squeeze().shape
+        if data.shape != self.data_shape:
+            data = data.squeeze()
+            if data.shape != self.data_shape:
                 raise ValueError
-        self.input_data_cpu = input_data.astype(np.float32)
-        self.input_color_coding_cpu = input_color_coding.astype(np.float32)
+        self.data_cpu = data.astype(np.float32)
+        if data_color_coding is None:
+            data_color_coding = np.array([
+                [0., 0., 0., .4],
+                [1., 1., 1., .4],
+            ])
+        if len(np.unique(data[data != -1.])) != len(data_color_coding):
+            raise ValueError
+        self.data_color_coding_cpu = data_color_coding.astype(np.float32)
         self.segmentation = segmentation
-        self.n_input_cells = len(self.pos[: -1]) * self.segmentation[0] * self.segmentation[1] * self.segmentation[2]
-        self.collision_shape = (self.n_input_cells, len(self.network_config.sensory_groups))
+        self.n_cells = len(self.pos[: -1]) * self.segmentation[0] * self.segmentation[1] * self.segmentation[2]
+        self.collision_shape = (self.n_cells, len(self.compatible_groups))
 
         center = np.array([self.shape[0] / 2, self.shape[1] / 2, self.shape[2] / 2])
-
-        self._initial_selection_vertices = np.zeros((4, 3))
-        self._initial_selection_vertices[0] = self.pos[0]
-        self._initial_selection_vertices[1] = self.pos[0] + np.array([self.shape[0], 0, 0])
-        self._initial_selection_vertices[2] = self.pos[0] + np.array([0, self.shape[1], 0])
-        self._initial_selection_vertices[3] = self.pos[0] + np.array([0, 0, self.shape[2]])
-        self._initial_selection_vertices -= center
-        self.selected_masks = np.zeros((self.network_config.G, 4), dtype=np.int32, )
-        self.group_numbers = np.arange(self.network_config.G)
 
         self.pos[:-1] -= center
 
         self.name = name or f'{self.__class__.__name__}{InputCells.count}'
 
-        filled_indices, vertices = self.create_input_cell_mesh(center)
+        filled_indices, vertices = self.create_input_cell_mesh(center, face_dir)
 
         self._mesh = MeshVisual(vertices['position'], filled_indices, None, self.face_colors_cpu, None)
         # noinspection PyTypeChecker
-        self._mesh.set_gl_state(polygon_offset_fill=True,
-                                polygon_offset=(1, 1), depth_test=True)
         self._visual = BoxSystemLineVisual(grid_unit_shape=self._segment_shape,
-                                           max_z=max_z, pos=self.pos, color=color, **kwargs)
+                                           max_z=self.network_config.max_z, pos=self.pos, color=color, **kwargs)
 
         super().__init__([self._visual, self._mesh], selectable=True)
+        # noinspection PyTypeChecker
+        self.set_gl_state(polygon_offset_fill=True, cull_face=False,
+                          polygon_offset=(1, 1), depth_test=False, blend=True)
 
         self.interactive = True
         self.transform = STTransform(translate=center, scale=(1, 1, 1))
-        self.transform.move(np.array([0., -.1, 0.]))
+        move = np.zeros(3)
+
+        move[i] = .1
+        if '-' in face_dir:
+            move *= -1
+        # self.transform.move(np.array([0., -.1, 0.]))
+        self.transform.move(init_pos)
+        self.transform.move(move)
         self.unfreeze()
+        j = (i + 1) % 3
+        j_segments = np.unique(self.network_config.G_grid_pos[self.compatible_groups][:, j])
+        self.n_j_segments = len(j_segments)
+        j_pos_shape = self.network_config.N_pos_shape[j]
+        k = (i + 2) % 3
+        k_segments = np.unique(self.network_config.G_grid_pos[self.compatible_groups][:, k])
+        self.n_k_segments = len(k_segments)
+        k_pos_shape = self.network_config.N_pos_shape[k]
 
         self.normals = []
         inv = initial_normal_vertices(self.shape)
         for i in range(6):
-            arrow = NormalArrow(self, points=inv[i], mod_factor=1 / (3 * self.shape[int(i / 2)]))
+            arrow = NormalArrow(self, points=inv[i], mod_factor=1 / (self.shape[int(i / 2)]))
             self.normals.append(arrow)
 
         self.scale = Scale(self, _min_value=0, _max_value=int(3 * 1 / max(self.shape)))
@@ -334,18 +399,19 @@ class InputCells(RenderedCudaObjectNode):
         self.states_gpu: Optional[LocationGroupProperties] = None
 
         self._collision_tensor_gpu: Optional[torch.Tensor] = None
-        self._input_cell_pos_start_xx_gpu: Optional[torch.Tensor] = None
-        self._input_cell_pos_end_xx_gpu: Optional[torch.Tensor] = None
-        self._sensory_group_pos_start_yy_gpu: Optional[torch.Tensor] = None
-        self._sensory_group_pos_end_yy_gpu: Optional[torch.Tensor] = None
+        self._cell_pos_start_xx_gpu: Optional[torch.Tensor] = None
+        self._cell_pos_end_xx_gpu: Optional[torch.Tensor] = None
+        self._neuron_groups_pos_start_yy_gpu: Optional[torch.Tensor] = None
+        self._neuron_groups_pos_end_yy_gpu: Optional[torch.Tensor] = None
         self._segment_shape_gpu: Optional[torch.Tensor] = None
-        self._sensory_group_shape_gpu: Optional[torch.Tensor] = None
-        self.sensory_input_indices_gpu: Optional[torch.Tensor] = None
-        self.sensory_input_values_gpu: Optional[torch.Tensor] = None
-        self.input_data_gpu: Optional[torch.Tensor] = None
-        self.input_color_coding_gpu: Optional[torch.Tensor] = None
+        self._neuron_groups_shape_gpu: Optional[torch.Tensor] = None
+        self.io_neuron_group_indices_gpu: Optional[torch.Tensor] = None
+        self.io_neuron_group_values_gpu: Optional[torch.Tensor] = None
+        self.data_gpu: Optional[torch.Tensor] = None
+        self.data_color_coding_gpu: Optional[torch.Tensor] = None
         self.face_color_indices_gpu: Optional[torch.Tensor] = None
         self.scale_gpu: Optional[torch.Tensor] = None
+        self.group_numbers_gpu: Optional[torch.Tensor] = None
 
         self.g_pos = self.network_config.g_pos[:self.network_config.G, :]
         self.g_pos_end = self.network_config.g_pos_end[:self.network_config.G, :]
@@ -353,14 +419,13 @@ class InputCells(RenderedCudaObjectNode):
 
         for normal in self.normals:
             normal.transform = self.transform
-            # normal.visible = False
 
     @property
     def quad_colors_cpu(self):
-        quad_colors = np.zeros((self.n_input_cells, 4))
+        quad_colors = np.zeros((self.n_cells, 4))
 
-        for i in range(len(self.input_color_coding_cpu)):
-            quad_colors[self.input_data_cpu == i, :] = self.input_color_coding_cpu[i]
+        for i in range(len(self.data_color_coding_cpu)):
+            quad_colors[self.data_cpu == i, :] = self.data_color_coding_cpu[i]
 
         return quad_colors
 
@@ -368,20 +433,14 @@ class InputCells(RenderedCudaObjectNode):
     def face_colors_cpu(self):
         quad_colors = self.quad_colors_cpu
         if self.quad_colors_cpu is None:
-            face_colors = np.repeat(np.array([[1., 1., 1., 1.]]), self.n_input_cells, axis=0)
+            face_colors = np.repeat(np.array([[1., 1., 1., 1.]]), self.n_cells, axis=0)
             face_colors[0] = np.array([1., 0., 0., 1.])
             face_colors[-1] = np.array([0., .75, 0., 1.])
         else:
             if len(quad_colors) == 1 and (self.segmentation != (1, 1, 1)):
-                quad_colors = np.repeat(np.array([quad_colors]), self.n_input_cells, axis=0)
+                quad_colors = np.repeat(np.array([quad_colors]), self.n_cells, axis=0)
             face_colors = np.repeat(quad_colors, 2, axis=0)
         return face_colors
-
-    @property
-    def selection_vertices(self):
-        return (self._initial_selection_vertices
-                * self.transform.scale[:3]
-                + self.transform.translate[:3])
 
     @property
     def input_vertices(self):
@@ -389,7 +448,7 @@ class InputCells(RenderedCudaObjectNode):
                 * self.transform.scale[:3]
                 + self.transform.translate[:3])
 
-    def create_input_cell_mesh(self, center):
+    def create_input_cell_mesh(self, center, dir_):
         init_pos = self.pos.copy()
         for i in range(3):
             if self.segmentation[i] > 1:
@@ -404,7 +463,7 @@ class InputCells(RenderedCudaObjectNode):
             vertices_, filled_indices_, _ = create_box(
                 self._shape[0], self._shape[2], self._shape[1],
                 self.segmentation[0], self.segmentation[2], self.segmentation[1],
-                planes=('-y',))
+                planes=(dir_,))
             vertices_['position'] += center + init_pos[i]
             vertices_list.append(vertices_)
             filled_indices_list.append(filled_indices_)
@@ -421,44 +480,11 @@ class InputCells(RenderedCudaObjectNode):
         self.states_gpu.selection_property = None
         for c in self.normals:
             c.visible = v
-
-    def init_cuda_arrays(self):
-
-        self._segment_shape_gpu = torch.from_numpy(np.array(self._segment_shape,
-                                                            dtype=np.float32)).to(self._cuda_device)
-        self._sensory_group_shape_gpu = torch.from_numpy(np.array(self.network_config.grid_unit_shape,
-                                                                  dtype=np.float32)).to(self._cuda_device)
-
-        self._collision_tensor_gpu = torch.zeros(self.collision_shape, dtype=torch.float32, device=self._cuda_device)
-        sensory_group_pos = np.repeat(self.g_pos[self.network_config.sensory_groups]
-                                      .reshape((1, self.collision_shape[1], 3)),
-                                      self.collision_shape[0], axis=0)
-
-        self._sensory_group_pos_start_yy_gpu = torch.from_numpy(sensory_group_pos).to(self._cuda_device)
-        self._sensory_group_pos_end_yy_gpu = self._sensory_group_pos_start_yy_gpu + self._sensory_group_shape_gpu
-        shape = (self.collision_shape[0], self.collision_shape[1], 3)
-        self._input_cell_pos_start_xx_gpu = torch.zeros(shape, dtype=torch.float32, device=self._cuda_device)
-        self._input_cell_pos_end_xx_gpu = torch.zeros(shape, dtype=torch.float32, device=self._cuda_device)
-        self.sensory_input_indices_gpu = torch.zeros(self.collision_shape[1],
-                                                     dtype=torch.float32, device=self._cuda_device)
-        self.sensory_input_values_gpu = torch.zeros(self.collision_shape[1],
-                                                    dtype=torch.float32, device=self._cuda_device)
-        self.input_data_gpu = torch.from_numpy(self.input_data_cpu).to(device=self._cuda_device)
-        self.input_color_coding_gpu = torch.from_numpy(self.input_color_coding_cpu).to(self._cuda_device)
-
-        n_sens_gr = len(self.network_config.sensory_groups)
-        self.face_color_indices_gpu = torch.arange(n_sens_gr * 2 * 3,
-                                                   device=self._cuda_device).reshape((self.network_config.G_shape[0],
-                                                                                      self.network_config.G_shape[2],
-                                                                                      2, 3))
-        self.face_color_indices_gpu = self.face_color_indices_gpu.flip(0).transpose(0, 1).reshape(n_sens_gr, 2, 3)
-        self.scale_gpu = torch.from_numpy(np.array(self.transform.scale)).to(self._cuda_device)
-
-        self.assign_sensory_input()
+        self.transform_changed()
 
     def collision_volume(self):
-        start = torch.maximum(self._input_cell_pos_start_xx_gpu, self._sensory_group_pos_start_yy_gpu)
-        end = torch.minimum(self._input_cell_pos_end_xx_gpu, self._sensory_group_pos_end_yy_gpu)
+        start = torch.maximum(self._cell_pos_start_xx_gpu, self._neuron_groups_pos_start_yy_gpu)
+        end = torch.minimum(self._cell_pos_end_xx_gpu, self._neuron_groups_pos_end_yy_gpu)
         dist = end - start
         dist = (dist > 0).all(axis=2) * dist.abs_().prod(2)
         return dist.where(dist > 0, torch.tensor([-1], dtype=torch.float32, device=self._cuda_device))
@@ -474,40 +500,101 @@ class InputCells(RenderedCudaObjectNode):
         self.scale_gpu[:] = torch.from_numpy(self.transform.scale).to(self._cuda_device)
         cell_pos = np.repeat(self.input_vertices.reshape((self.collision_shape[0], 1, 3)),
                              self.collision_shape[1], axis=1)
-        self._input_cell_pos_start_xx_gpu[:] = torch.from_numpy(np.round(cell_pos, 6)).to(self._cuda_device)
-        self._input_cell_pos_end_xx_gpu[:] = (self._input_cell_pos_start_xx_gpu
+        self._cell_pos_start_xx_gpu[:] = torch.from_numpy(np.round(cell_pos, 6)).to(self._cuda_device)
+        self._cell_pos_end_xx_gpu[:] = (self._cell_pos_start_xx_gpu
                                               + self._segment_shape_gpu * self.scale_gpu[:3])
-        self.sensory_input_indices_gpu[:] = self.get_sensory_input_indices()
-        valid_indices_mask = self.sensory_input_indices_gpu >= 0
-        valid_input_data_indices = self.sensory_input_indices_gpu[valid_indices_mask].type(torch.int64)
-        self.sensory_input_values_gpu[:] = -1
-        self.sensory_input_values_gpu[valid_indices_mask] = self.input_data_gpu[valid_input_data_indices]
+        self.io_neuron_group_indices_gpu[:] = self.get_sensory_input_indices()
+        valid_indices_mask = self.io_neuron_group_indices_gpu >= 0
+        valid_input_data_indices = self.io_neuron_group_indices_gpu[valid_indices_mask].type(torch.int64)
+        self.io_neuron_group_values_gpu[:] = -1
+        self.io_neuron_group_values_gpu[valid_indices_mask] = self.data_gpu[valid_input_data_indices]
 
-    def transform_changed(self):
-        v = self.selection_vertices
-        self.selected_masks[:, 0] = (self.g_pos[:, 0] <= v[1, 0]) & (self.g_pos_end[:, 0] >= v[0, 0])
-        self.selected_masks[:, 1] = (self.g_pos[:, 1] <= v[2, 1]) & (self.g_pos_end[:, 1] >= v[0, 1])
-        self.selected_masks[:, 2] = (self.g_pos[:, 2] <= v[3, 2]) & (self.g_pos_end[:, 2] >= v[0, 2])
-        self.selected_masks[:, 3] = self.network_config.G
-        self.selected_masks[:, 3] = np.where(~self.selected_masks[:, :3].all(axis=1)
-                                             | ~self.network_config.sensory_group_mask,
-                                             self.selected_masks[:, 3], self.group_numbers)
-        selected_mask = torch.from_numpy(self.selected_masks[:, [3]]).to(self._cuda_device)
-        self.assign_sensory_input()
-        self.states_gpu.selected = selected_mask
-        self.states_gpu.sensory_input_type[:] = -1
-        self.states_gpu.sensory_input_type[self.network_config.sensory_groups] = self.sensory_input_values_gpu
+    def init_cuda_arrays(self):
 
-        self.states_gpu.input_face_colors[:, 3] = 0
-        for i in range(len(self.input_color_coding_cpu)):
+        self.group_numbers_gpu = (torch.arange(self.network_config.G).to(device=self._cuda_device)
+                                  .reshape((self.network_config.G, 1)))
+        self._segment_shape_gpu = torch.from_numpy(np.array(self._segment_shape,
+                                                            dtype=np.float32)).to(self._cuda_device)
+        self._neuron_groups_shape_gpu = torch.from_numpy(np.array(self.network_config.grid_unit_shape,
+                                                                  dtype=np.float32)).to(self._cuda_device)
 
-            indices = self.face_color_indices_gpu[self.sensory_input_values_gpu == i].flatten()
-            self.states_gpu.input_face_colors[indices, :3] = self.input_color_coding_gpu[i][:3]
-            self.states_gpu.input_face_colors[indices, 3] = .5
+        self._collision_tensor_gpu = torch.zeros(self.collision_shape, dtype=torch.float32, device=self._cuda_device)
+        group_pos = np.repeat(self.g_pos[self.compatible_groups]
+                              .reshape((1, self.collision_shape[1], 3)),
+                              self.collision_shape[0], axis=0)
+
+        self._neuron_groups_pos_start_yy_gpu = torch.from_numpy(group_pos).to(self._cuda_device)
+        self._neuron_groups_pos_end_yy_gpu = self._neuron_groups_pos_start_yy_gpu + self._neuron_groups_shape_gpu
+        shape = (self.collision_shape[0], self.collision_shape[1], 3)
+        self._cell_pos_start_xx_gpu = torch.zeros(shape, dtype=torch.float32, device=self._cuda_device)
+        self._cell_pos_end_xx_gpu = torch.zeros(shape, dtype=torch.float32, device=self._cuda_device)
+        self.io_neuron_group_indices_gpu = torch.zeros(self.collision_shape[1],
+                                                       dtype=torch.float32, device=self._cuda_device)
+        self.io_neuron_group_values_gpu = torch.zeros(self.collision_shape[1],
+                                                      dtype=torch.float32, device=self._cuda_device)
+        self.data_gpu = torch.from_numpy(self.data_cpu).to(device=self._cuda_device)
+        self.data_color_coding_gpu = torch.from_numpy(self.data_color_coding_cpu).to(self._cuda_device)
+
+        n_sens_gr = len(self.compatible_groups)
+        self.face_color_indices_gpu = torch.arange(n_sens_gr * 2 * 3,
+                                                   device=self._cuda_device).reshape((self.n_k_segments,
+                                                                                      self.n_j_segments,
+                                                                                      2, 3))
+        self.face_color_indices_gpu = self.face_color_indices_gpu.flip(0).transpose(0, 1).reshape(n_sens_gr, 2, 3)
+        self.scale_gpu = torch.from_numpy(np.array(self.transform.scale)).to(self._cuda_device)
+
+        self.transform_changed()
 
     # noinspection PyMethodOverriding
     def init_cuda_attributes(self, device, property_tensor):
         self.states_gpu: LocationGroupProperties = property_tensor
         super().init_cuda_attributes(device)
-        # self.states_gpu.input_color_coding = torch.from_numpy(self.input_color_coding).to(device=self._cuda_device)
         self.transform_connected = True
+
+        for n in self.normals:
+            n.visible = False
+
+
+# noinspection PyAbstractClass
+class InputCells(IOCells):
+
+    def transform_changed(self):
+        self.assign_sensory_input()
+        # noinspection PyPep8Naming
+        G = self.network_config.G
+        self.states_gpu.sensory_input_type[:] = -1
+        self.states_gpu.sensory_input_type[self.network_config.sensory_groups] = self.io_neuron_group_values_gpu
+        self.states_gpu.selected[:] = self.states_gpu.sensory_input_type.reshape((G, 1))
+        self.states_gpu.selected[:] = torch.where(self.states_gpu.selected == -1, G, self.group_numbers_gpu)
+
+        self.states_gpu.input_face_colors[:, 3] = 0
+        # self.states_gpu.b_thalamic_input = 0
+
+        self.states_gpu.b_sensory_input[(self.states_gpu.selected != G).flatten()] = 1
+
+        for i in range(len(self.data_color_coding_cpu)):
+
+            indices = self.face_color_indices_gpu[self.io_neuron_group_values_gpu == i].flatten()
+
+            self.states_gpu.input_face_colors[indices, :] = self.data_color_coding_gpu[i]
+            # self.states_gpu.input_face_colors[indices, 3] = .5
+
+
+# noinspection PyAbstractClass
+class OutputCells(IOCells):
+
+    def transform_changed(self):
+        self.assign_sensory_input()
+        # noinspection PyPep8Naming
+        G = self.network_config.G
+        self.states_gpu.output_type[:] = -1
+        self.states_gpu.output_type[self.network_config.output_groups] = self.io_neuron_group_values_gpu
+        self.states_gpu.selected[:] = self.states_gpu.output_type.reshape((G, 1))
+        self.states_gpu.selected[:] = torch.where(self.states_gpu.selected == -1, G, self.group_numbers_gpu)
+
+        self.states_gpu.output_face_colors[:, 3] = 0
+        for i in range(len(self.data_color_coding_cpu)):
+
+            indices = self.face_color_indices_gpu[self.io_neuron_group_values_gpu == i].flatten()
+            self.states_gpu.output_face_colors[indices, :] = self.data_color_coding_gpu[i]
+            # self.states_gpu.output_face_colors[indices, 3] = .5

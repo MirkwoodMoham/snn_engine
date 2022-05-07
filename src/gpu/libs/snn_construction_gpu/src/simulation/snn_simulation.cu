@@ -42,10 +42,14 @@ __global__ void update_N_state_(
 		if ((G_props[src_G + G] > 0.f) && (pt > 0.f) && (curand_uniform(&local_state) < pt))
 		{
 			const float rt = curand_uniform(&local_state);
-			// i += (G_props[src_G + 3 * G] * ntype + G_props[src_G + 2 * G] * (1.f - ntype)) * rt;
 			i += (G_props[src_G + 3 * G] * ntype + G_props[src_G + 2 * G] * (1.f - ntype)) * rt;
 			// printf("G_props[src_G + 3 * G]=%f, G_props[src_G + 2 * G]=%f \n", 
 			// 	   G_props[src_G + 3 * G], G_props[src_G + 2 * G]);
+		}
+
+		if (G_props[src_G + 7 * G] > 0.f)
+		{
+			i += G_props[src_G + 8 * G] * ntype + G_props[src_G + 9 * G] * (1.f - ntype);
 		}
 
 		if (v > 30.f)

@@ -48,6 +48,7 @@ class NetworkConfig:
     N_G_group_id_col: int = 1
 
     sensory_groups: Optional[list[int]] = None
+    output_groups: Optional[list[int]] = None
 
     max_z: float = 999.
 
@@ -55,6 +56,10 @@ class NetworkConfig:
         class ThalamicInput:
             inh_current: float = 25.
             exc_current: float = 15.
+
+        class SensoryInput:
+            input_current0: float = 0.
+            input_current1: float = 25.
 
     def __str__(self):
         name = self.__class__.__name__
@@ -135,13 +140,16 @@ class NetworkConfig:
                                     * np.array(self.G_shape, dtype=np.float32)).astype(int))
         self._g_pos_end = None
 
+        groups = np.arange(self.G)
         if self.sensory_groups is None:
-            groups = np.arange(self.G + 1)
-            sensory_group_mask = self.G_grid_pos[:, 1] == 0
-            sensory_group_mask[-1] = False
-            self.sensory_groups = groups[sensory_group_mask]
-            self.sensory_group_mask = np.zeros(self.G).astype(bool)
-            self.sensory_group_mask[self.sensory_groups] = True
+            # self.sensory_group_mask = (self.G_grid_pos[:, 1] == self.G_shape[1] - 1)[:-1]
+            self.sensory_group_mask = (self.G_grid_pos[:, 1] == 0)[:-1]
+            self.sensory_groups = groups[self.sensory_group_mask]
+
+        if self.output_groups is None:
+            self.output_group_mask = ((self.G_grid_pos[:, 1] == self.G_shape[1] - 1)
+                                      & (self.G_grid_pos[:, 2] == self.G_shape[2] - 1))[:-1]
+            self.output_groups = groups[self.output_group_mask]
 
     def init_g_pos(self):
         groups = np.arange(self.G)
@@ -182,6 +190,10 @@ class NetworkConfig:
     @property
     def sensory_grid_pos(self):
         return self.G_grid_pos[self.sensory_groups]
+
+    @property
+    def output_grid_pos(self):
+        return self.G_grid_pos[self.output_groups]
 
     def validate_pos(self, pos):
         for i in range(3):

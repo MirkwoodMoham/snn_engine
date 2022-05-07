@@ -392,11 +392,8 @@ class SpinBoxSlider(GUIElement):
 
     def actualize_values(self):
         v = getattr(self.property_container, self.prop_id)
-        # print(v)
-        # print(self.spin_box.value())
         self.spin_box.setValue(v)
         self.set_slider_value(v)
-        # print(self.spin_box.value())
 
 
 class RenderedObjectPropertyFrame(QFrame):

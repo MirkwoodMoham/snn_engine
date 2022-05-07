@@ -15,14 +15,14 @@ from pycuda import autoinit
 
 class EngineConfig:
 
-    N: int = 3 * 10 ** 4
+    N: int = 3 * 10 ** 5
     T: int = 2000  # Max simulation duration
 
     device: int = 0
 
     max_batch_size_mb: int = 3000
 
-    network_config = NetworkConfig(N=N, N_pos_shape=(3, 3, 1))
+    network_config = NetworkConfig(N=N, N_pos_shape=(4, 4, 1))
     plotting_config = PlottingConfig(N=N,
                                      n_voltage_plots=100, voltage_plot_length=100,
                                      n_scatter_plots=1000, scatter_plot_length=1000)
@@ -63,10 +63,12 @@ class Engine:
         })
 
         selector_box_collapsible = RenderedObjectSliders(self.network.selector_box, self.window)
-        input_system_collapsible = RenderedObjectSliders(self.network.input_system, self.window)
+        input_cell_collapsible = RenderedObjectSliders(self.network.input_cells, self.window)
+        output_cell_collapsible = RenderedObjectSliders(self.network.output_cells, self.window)
 
         self.ui_left.objects_collapsible.add(selector_box_collapsible)
-        self.ui_left.objects_collapsible.add(input_system_collapsible)
+        self.ui_left.objects_collapsible.add(input_cell_collapsible)
+        self.ui_left.objects_collapsible.add(output_cell_collapsible)
 
         self.ui_left.objects_collapsible.toggle_collapsed()
         selector_box_collapsible.toggle_collapsed()
@@ -168,5 +170,7 @@ if __name__ == '__main__':
     gloo.gl.use_gl('gl+')
 
     eng = Engine()
+
+    # gloo.set_state(cull_face=True, depth_test=True, blend=True)
     if sys.flags.interactive != 1:
         eng.run()

@@ -55,9 +55,10 @@ class RenderedCudaObjectNode(RenderedObjectNode, CudaObject):
 
         CudaObject.__init__(self)
 
-    def face_color_array(self, meshvisual):
+    def face_color_array(self, meshvisual, vbo=None):
         nbytes = 4
         shape = (meshvisual._meshdata.n_faces * 3, 4)
         return RegisteredGPUArray.from_buffer(
-            self.color_vbo, config=GPUArrayConfig(shape=shape, strides=(shape[1] * nbytes, nbytes),
-                                                  dtype=np.float32, device=self._cuda_device))
+            self.color_vbo if vbo is None else vbo,
+            config=GPUArrayConfig(shape=shape, strides=(shape[1] * nbytes, nbytes),
+                                  dtype=np.float32, device=self._cuda_device))

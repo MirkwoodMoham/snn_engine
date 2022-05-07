@@ -261,11 +261,9 @@ class _STR:
             v = min(interval.right, max(interval.left, v))
         p = getattr(self.transform, self.prop_id)
         p[i] = v
-        print(v)
         setattr(self.transform, self.prop_id, p)
         if self.parent.transform_connected is True:
             self.parent.transform_changed()
-        # self.spin_box_sliders[i].actualize_values()
 
     @property
     def transform(self) -> STTransform:

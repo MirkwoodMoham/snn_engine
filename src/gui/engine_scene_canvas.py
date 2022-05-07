@@ -50,6 +50,7 @@ class EngineSceneCanvas(scene.SceneCanvas):
         super().__init__(**asdict(conf), app=app)
 
         self.unfreeze()
+        self.network = network
         self.n_voltage_plots = network.plotting_config.n_voltage_plots
         self.voltage_plot_length = network.plotting_config.voltage_plot_length
         self.n_scatter_plots = network.plotting_config.n_scatter_plots
@@ -193,6 +194,11 @@ class EngineSceneCanvas(scene.SceneCanvas):
     def _select_clicked_obj(self):
 
         if self._clicked_obj is not self._last_selected_obj:
+
+            self.network.GPU._N_pos_edge_color[:, 3] = 0.05
+            self.network.GPU._N_pos_face_color[:, 3] = 0.05
+            self.network._neurons.set_gl_state(depth_test=False)
+
             for o in copy(self._selected_objects):
                 if ((not (o is self._clicked_obj))
                         and ((self._clicked_obj is None) or (not o.is_select_child(self._clicked_obj)))):
@@ -221,6 +227,8 @@ class EngineSceneCanvas(scene.SceneCanvas):
                 self._select_clicked_obj()
             # else:
 
+            # else:
+
     def _mouse_moved(self, event):
         self._last_mouse_pos[:2] = self.mouse_pos(event)
         return (self._last_mouse_pos[:2] - self._click_pos[:2]).any()
@@ -247,12 +255,16 @@ class EngineSceneCanvas(scene.SceneCanvas):
             # self._last_selected_obj = None
 
             print(f'currently selected ({len(self._selected_objects)}):', self._selected_objects)
+            if len(self._selected_objects) == 0:
+                self.network.GPU._N_pos_face_color[:, 3] = 0.3
+                self.network.GPU._N_pos_edge_color[:, 3] = 0.5
+                self.network._neurons.set_gl_state(depth_test=True)
 
     def on_mouse_move(self, event):
         self.network_view.camera.interactive = True
         if event.button == 1:
             if isinstance(self._clicked_obj, RenderedObject) and self._clicked_obj.draggable:
-                print(keys.SHIFT in event.modifiers)
+                # print(keys.SHIFT in event.modifiers)
                 self.network_view.camera.interactive = False
                 self._last_mouse_pos[:2] = self.mouse_pos(event)
                 # dist = np.linalg.norm(self._last_mouse_pos - self._click_pos)

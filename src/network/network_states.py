@@ -21,10 +21,12 @@ class PropertyTensor:
 
     _rows = None
 
-    def __init__(self, tensor: Optional[torch.Tensor] = None):
+    def __init__(self, shape, tensor: Optional[torch.Tensor] = None):
         self._tensor: Optional[torch.Tensor] = None
         if tensor is not None:
             self.tensor: Optional[torch.Tensor] = tensor
+        if shape[0] != len(self.rows):
+            raise ValueError
 
     @classmethod
     def __len__(cls):
@@ -59,12 +61,6 @@ class PropertyTensor:
 
     def data_ptr(self):
         return self.tensor.data_ptr()
-
-    def _row(self, row):
-        return self._tensor[row, :]
-
-    def _set_row(self, row, v):
-        self._tensor[row, :] = v
 
     @property
     def to_dataframe(self) -> pd.DataFrame:
@@ -106,7 +102,8 @@ class IzhikevichModel(PropertyTensor):
         i: int = 7
 
     def __init__(self, shape, device, types_tensor):
-        super().__init__()
+        self._rows = self.Rows()
+        super().__init__(shape)
         self._N = shape[1]
         self.set_tensor(shape, device, types_tensor)
 
@@ -132,67 +129,67 @@ class IzhikevichModel(PropertyTensor):
 
     @property
     def pt(self):
-        return self._row(self.rows.pt)
+        return self._tensor[self._rows.pt, :]
 
     @pt.setter
     def pt(self, v):
-        self._set_row(self.rows.pt, v)
+        self._tensor[self._rows.pt, :] = v
 
     @property
     def u(self):
-        return self._row(self.rows.u)
+        return self._tensor[self._rows.u, :]
 
     @u.setter
     def u(self, v):
-        self._set_row(self.rows.u, v)
+        self._tensor[self._rows.u, :] = v
 
     @property
     def v(self):
-        return self._row(self.rows.v)
+        return self._tensor[self._rows.u, :]
 
     @v.setter
     def v(self, v):
-        self._set_row(self.rows.v, v)
+        self._tensor[self._rows.v, :] = v
 
     @property
     def a(self):
-        return self._row(self.rows.a)
+        return self._tensor[self._rows.a, :]
 
     @a.setter
     def a(self, v):
-        self._set_row(self.rows.a, v)
+        self._tensor[self._rows.a, :] = v
 
     @property
     def b(self):
-        return self._row(self.rows.b)
+        return self._tensor[self._rows.b, :]
 
     @b.setter
     def b(self, v):
-        self._set_row(self.rows.b, v)
+        self._tensor[self._rows.b, :] = v
 
     @property
     def c(self):
-        return self._row(self.rows.c)
+        return self._tensor[self._rows.c, :]
 
     @c.setter
     def c(self, v):
-        self._set_row(self.rows.c, v)
+        self._tensor[self._rows.c, :] = v
 
     @property
     def d(self):
-        return self._row(self.rows.d)
+        return self._tensor[self._rows.d, :]
 
     @d.setter
     def d(self, v):
-        self._set_row(self.rows.d, v)
+        self._tensor[self._rows.d, :] = v
 
     @property
     def i(self):
-        return self._row(self.rows.i)
+        return self._tensor[self._rows.i, :]
 
     @i.setter
     def i(self, v):
-        self._set_row(self.rows.i, v)
+        self._tensor[self._rows.i, :] = v
 
 
 class Sliders:
@@ -207,21 +204,22 @@ class LocationGroupProperties(PropertyTensor):
     class Rows:
 
         sensory_input_type: int = 0
-        thalamic_input: int = 1
+        b_thalamic_input: int = 1
         thalamic_inh_input_current: int = 2
         thalamic_exc_input_current: int = 3
-        sensory_group: int = 4
-        prop5: int = 5
-        prop6: int = 6
-        prop7: int = 7
-        prop8: int = 8
-        prop9: int = 9
+        b_sensory_group: int = 4
+        b_output_group: int = 5
+        output_type: int = 6
+        b_sensory_input: int = 7
+        sensory_input_current0: int = 8
+        sensory_input_current1: int = 9
 
         def __len__(self):
             return 10
 
     def __init__(self, shape, device, config, select_ibo):
-        super().__init__()
+        self._rows = self.Rows()
+        super().__init__(shape)
         self._G = shape[1]
         nbytes = 4
         self.selected_array = RegisteredGPUArray.from_buffer(
@@ -229,7 +227,8 @@ class LocationGroupProperties(PropertyTensor):
                                               strides=(2 * nbytes, nbytes),
                                               dtype=np.int32, device=device))
 
-        self.input_face_colors = None
+        self.input_face_colors: Optional[torch.Tensor] = None
+        self.output_face_colors: Optional[torch.Tensor] = None
 
         self.set_tensor(shape, device, config)
         self.selection_property = None
@@ -240,12 +239,15 @@ class LocationGroupProperties(PropertyTensor):
         self.tensor = torch.zeros(shape, dtype=torch.float32, device=device)
         thalamic_input_arr = torch.zeros(self._G)
         thalamic_input_arr[: int(self._G/2)] = 1
-        self.thalamic_input = thalamic_input_arr
+        # self.b_thalamic_input = thalamic_input_arr
+        self.b_thalamic_input = 0
         # self.thalamic_input = 1
         self.thalamic_inh_input_current = config.DefaultValues.ThalamicInput.inh_current
         self.thalamic_exc_input_current = config.DefaultValues.ThalamicInput.exc_current
+        self.sensory_input_current0 = config.DefaultValues.SensoryInput.input_current0
+        self.sensory_input_current1 = config.DefaultValues.SensoryInput.input_current1
 
-        self.sensory_group = torch.from_numpy(config.sensory_group_mask).to(device)
+        self.b_sensory_group = torch.from_numpy(config.sensory_group_mask).to(device)
         self.sensory_input_type = -1.
 
     @property
@@ -260,42 +262,80 @@ class LocationGroupProperties(PropertyTensor):
 
     @property
     def sensory_input_type(self):
-        return self._row(self.rows.sensory_input_type)
+        return self._tensor[self._rows.sensory_input_type, :]
 
     @sensory_input_type.setter
     def sensory_input_type(self, v):
-        self._set_row(self.rows.sensory_input_type, v)
-
-        print()
+        self._tensor[self._rows.sensory_input_type, :] = v
 
     @property
-    def thalamic_input(self):
-        return self._row(self.rows.thalamic_input)
+    def b_thalamic_input(self):
+        return self._tensor[self._rows.b_thalamic_input, :]
 
-    @thalamic_input.setter
-    def thalamic_input(self, v):
-        self._set_row(self.rows.thalamic_input, v)
+    @b_thalamic_input.setter
+    def b_thalamic_input(self, v):
+        self._tensor[self._rows.b_thalamic_input, :] = v
 
     @property
     def thalamic_inh_input_current(self):
-        return self._row(self.rows.thalamic_inh_input_current)
+        return self._tensor[self._rows.thalamic_inh_input_current, :]
 
     @thalamic_inh_input_current.setter
     def thalamic_inh_input_current(self, v):
-        self._set_row(self.rows.thalamic_inh_input_current, v)
+        self._tensor[self._rows.thalamic_inh_input_current, :] = v
 
     @property
     def thalamic_exc_input_current(self):
-        return self._row(self.rows.thalamic_exc_input_current)
+        return self._tensor[self._rows.thalamic_exc_input_current, :]
 
     @thalamic_exc_input_current.setter
     def thalamic_exc_input_current(self, v):
-        self._set_row(self.rows.thalamic_exc_input_current, v)
+        self._tensor[self._rows.thalamic_exc_input_current, :] = v
 
     @property
-    def sensory_group(self):
-        return self._row(self.rows.sensory_group)
+    def b_sensory_group(self):
+        return self._tensor[self._rows.b_sensory_group, :]
 
-    @sensory_group.setter
-    def sensory_group(self, v):
-        self._set_row(self.rows.sensory_group, v)
+    @b_sensory_group.setter
+    def b_sensory_group(self, v):
+        self._tensor[self._rows.b_sensory_group, :] = v
+
+    @property
+    def b_output_group(self):
+        return self._tensor[self._rows.b_output_group, :]
+
+    @b_output_group.setter
+    def b_output_group(self, v):
+        self._tensor[self._rows.b_output_group, :] = v
+
+    @property
+    def output_type(self):
+        return self._tensor[self._rows.output_type, :]
+
+    @output_type.setter
+    def output_type(self, v):
+        self._tensor[self._rows.output_type, :] = v
+
+    @property
+    def b_sensory_input(self):
+        return self._tensor[self._rows.b_sensory_input, :]
+
+    @b_sensory_input.setter
+    def b_sensory_input(self, v):
+        self._tensor[self._rows.b_sensory_input, :] = v
+
+    @property
+    def sensory_input_current0(self):
+        return self._tensor[self._rows.sensory_input_current0, :]
+
+    @sensory_input_current0.setter
+    def sensory_input_current0(self, v):
+        self._tensor[self._rows.sensory_input_current0, :] = v
+
+    @property
+    def sensory_input_current1(self):
+        return self._tensor[self._rows.sensory_input_current1, :]
+
+    @sensory_input_current1.setter
+    def sensory_input_current1(self, v):
+        self._tensor[self._rows.sensory_input_current1, :] = v

@@ -19,6 +19,7 @@ from rendering import RenderedObjectNode
 from .rendered_objects import (
     BoxSystem,
     InputCells,
+    OutputCells,
     RenderedNeurons,
     SelectorBox,
     VoltagePlot,
@@ -222,25 +223,25 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.N_weights = self._N_weights(shapes.N_weights)
 
         self.N_states = model(shape=shapes.N_states, device=self.device,
-                              types_tensor=self.N_G[:, self.config.N_G_neuron_type_col])
+                              types_tensor=self.N_G[:, self._config.N_G_neuron_type_col])
 
-        self.G_props = LocationGroupProperties(shape=shapes.G_props, device=self.device, config=self.config,
+        self.G_props = LocationGroupProperties(shape=shapes.G_props, device=self.device, config=self._config,
                                                select_ibo=buffers.selected_group_boxes_ibo)
 
         self.print_allocated_memory('end')
 
-        self.Fired = self.fzeros(self.N)
-        self.Firing_times = self.fzeros((15, self.N))
-        self.Firing_idcs = self.izeros((15, self.N))
+        self.Fired = self.fzeros(self._config.N)
+        self.Firing_times = self.fzeros((15, self._config.N))
+        self.Firing_idcs = self.izeros((15, self._config.N))
         self.Firing_counts = self.izeros((1, T * 2))
         # print()
         # print(self.N_states)
 
         self.Simulation = snn_simulation_gpu.SnnSimulation(
-            N=self.N,
-            G=self.config.G,
-            S=self.S,
-            D=self.config.D,
+            N=self._config.N,
+            G=self._config.G,
+            S=self._config.S,
+            D=self._config.D,
             T=T,
             n_voltage_plots=plotting_config.n_voltage_plots,
             voltage_plot_length=plotting_config.voltage_plot_length,
@@ -281,18 +282,6 @@ class NetworkGPUArrays(GPUArrayCollection):
         print('Firing_counts:\n', self.Firing_counts)
 
     @property
-    def config(self) -> NetworkConfig:
-        return self._config
-
-    @property
-    def N(self):
-        return self.config.N
-
-    @property
-    def S(self):
-        return self.config.S
-
-    @property
     def type_groups(self) -> list[NeuronTypeGroup]:
         return list(self._type_group_dct.values())
 
@@ -304,48 +293,56 @@ class NetworkGPUArrays(GPUArrayCollection):
         N_G = self.izeros(shapes.N_G)
         # t_neurons_ids = torch.arange(self.N_G.shape[0], device='cuda')  # Neuron Id
         for g in self.type_groups:
-            N_G[g.start_idx:g.end_idx + 1, self.config.N_G_neuron_type_col] = g.ntype.value  # Set Neuron Type
+            N_G[g.start_idx:g.end_idx + 1, self._config.N_G_neuron_type_col] = g.ntype.value  # Set Neuron Type
 
         # rows[0, 1]: inhibitory count, excitatory count,
         # rows[2 * D]: number of neurons per delay (post_synaptic type: inhibitory, excitatory)
         G_neuron_counts = self.izeros(shapes.G_neuron_counts)
         snn_construction_gpu.fill_N_G_group_id_and_G_neuron_count_per_type(
-            N=self.config.N, G=self.config.G,
+            N=self._config.N, G=self._config.G,
             N_pos=self.N_pos.data_ptr(),
-            N_pos_shape=self.config.N_pos_shape,
+            N_pos_shape=self._config.N_pos_shape,
             N_G=N_G.data_ptr(),
-            N_G_n_cols=self.config.N_G_n_cols,
-            N_G_neuron_type_col=self.config.N_G_neuron_type_col,
-            N_G_group_id_col=self.config.N_G_group_id_col,
-            G_shape=self.config.G_shape,
+            N_G_n_cols=self._config.N_G_n_cols,
+            N_G_neuron_type_col=self._config.N_G_neuron_type_col,
+            N_G_group_id_col=self._config.N_G_group_id_col,
+            G_shape=self._config.G_shape,
             G_neuron_counts=G_neuron_counts.data_ptr())
 
-        G_neuron_typed_ccount = self.izeros((2 * self.config.G + 1))
+        G_neuron_typed_ccount = self.izeros((2 * self._config.G + 1))
         G_neuron_typed_ccount[1:] = G_neuron_counts[: 2, :].ravel().cumsum(dim=0)
         self.validate_N_G(N_G)
         return N_G, G_neuron_counts, G_neuron_typed_ccount
 
     def _G_group_delay_counts(self, shape, G_delay_distance):
         G_group_delay_counts = self.izeros(shape)
-        for d in range(self.config.D):
+        for d in range(self._config.D):
             G_group_delay_counts[:, d + 1] = (G_group_delay_counts[:, d] + G_delay_distance.eq(d).sum(dim=1))
         return G_group_delay_counts
 
     def _G_neuron_counts_2of2(self, G_delay_distance, G_neuron_counts):
         snn_construction_gpu.fill_G_neuron_count_per_delay(
-            S=self.config.S, D=self.config.D, G=self.config.G,
+            S=self._config.S, D=self._config.D, G=self._config.G,
             G_delay_distance=G_delay_distance.data_ptr(),
             G_neuron_counts=G_neuron_counts.data_ptr())
         self.validate_G_neuron_counts()
 
     def _G_delay_distance(self, G_pos: RegisteredGPUArray):
         G_pos_distance = torch.cdist(G_pos.tensor, G_pos.tensor)
-        return ((self.config.D - 1) * G_pos_distance / G_pos_distance.max()).round().int()
+        return ((self._config.D - 1) * G_pos_distance / G_pos_distance.max()).round().int()
 
     def _curand_states(self):
-        cu = snn_construction_gpu.CuRandStates(self.config.N).ptr()
+        cu = snn_construction_gpu.CuRandStates(self._config.N).ptr()
         self.print_allocated_memory('curand_states')
         return cu
+
+    @property
+    def _N_pos_face_color(self):
+        return self.N_pos.tensor[:, 7:11]
+
+    @property
+    def _N_pos_edge_color(self):
+        return self.N_pos.tensor[:, 3:7]
 
     def _N_pos(self, shape, vbo):
         nbytes_float32 = 4
@@ -388,7 +385,7 @@ class NetworkGPUArrays(GPUArrayCollection):
 
     def _fill_syn_counts(self, shapes, G_neuron_counts):
 
-        S, D, G = self.config.S, self.config.D, self.config.G
+        S, D, G = self._config.S, self._config.D, self._config.G
 
         G_conn_probs = self.fzeros(shapes.G_conn_probs)
         G_exp_ccsyn_per_src_type_and_delay = self.izeros(shapes.G_exp_ccsyn_per_src_type_and_delay)
@@ -537,7 +534,7 @@ class NetworkGPUArrays(GPUArrayCollection):
 
     def _N_rep_and_N_delays(self, shapes, curand_states):
 
-        N, S, D, G = self.config.N, self.config.S, self.config.D, self.config.G
+        N, S, D, G = self._config.N, self._config.S, self._config.D, self._config.G
 
         torch.cuda.empty_cache()
         self.print_allocated_memory('syn_counts')
@@ -672,7 +669,7 @@ class NetworkGPUArrays(GPUArrayCollection):
             raise AssertionError
 
     def validate_G_neuron_counts(self):
-        D, G = self.config.D, self.config.G
+        D, G = self._config.D, self._config.G
         max_ntype = 0
         for ntype_group in self.type_groups:
             ntype = ntype_group.ntype.value
@@ -689,6 +686,13 @@ class NetworkGPUArrays(GPUArrayCollection):
                  - expected_result).sum() != 0):
                 print(self.G_neuron_counts)
                 raise AssertionError
+
+    # def set_neuron_property(self, groups, value, neuron_mask=None):
+    #     if neuron_mask is None:
+    #         neuron_mask = torch.zeros(self._config.N, dtype=torch.bool, device=self.device)
+    #     for g in groups:
+    #         neuron_mask += [self.N_G[:, self._config.N_G_group_id_col] == g]
+    #     self.G_props._set_row(neuron_property_row, value)
 
 
 class SpikingNeuronNetwork:
@@ -735,7 +739,8 @@ class SpikingNeuronNetwork:
         self.voltage_plot: Optional[VoltagePlot] = None
         self.firing_scatter_plot: Optional[VoltagePlot] = None
         self.selected_group_boxes: Optional[BoxSystem] = None
-        self.input_system: Optional[InputCells] = None
+        self.input_cells: Optional[InputCells] = None
+        self.output_cells: Optional[OutputCells] = None
 
         self._all_rendered_objects_initialized = False
 
@@ -766,34 +771,6 @@ class SpikingNeuronNetwork:
                                       max_batch_size_mb=self.max_batch_size_mb,
                                       conn_dict=self.type_group_conn_dict)
         return c
-
-    # noinspection PyPep8Naming
-    def initialize_GPU_arrays(self, device):
-        if not self._all_rendered_objects_initialized:
-            raise AssertionError('not self._all_rendered_objects_initialized')
-
-        buffers = BufferCollection(
-            N_pos=self._neurons.vbo,
-            voltage=self.voltage_plot.vbo,
-            firings=self.firing_scatter_plot.vbo,
-            selected_group_boxes_vbo=self.selected_group_boxes.vbo,
-            selected_group_boxes_ibo=self.selected_group_boxes.ibo,
-        )
-        self.GPU = NetworkGPUArrays(
-            config=self.network_config,
-            type_group_dct=self.type_group_dct,
-            type_group_conn_dct=self.type_group_conn_dict,
-            device=device,
-            T=self.T,
-            plotting_config=self.plotting_config,
-            model=self.model,
-            buffers=buffers)
-
-        self.selector_box.init_cuda_attributes(self.GPU.device, self.GPU.G_props)
-        self.input_system.init_cuda_attributes(self.GPU.device, self.GPU.G_props)
-        self.selected_group_boxes.init_cuda_attributes(self.GPU.device, self.GPU.G_props)
-        for n in self.input_system.normals:
-            n.visible = False
 
     def sort_pos(self):
         """
@@ -828,7 +805,7 @@ class SpikingNeuronNetwork:
         self.outer_grid: visuals.Box = Box(shape=self.network_config.N_pos_shape,
                                            scale=[.99, .99, .99],
                                            segments=self.network_config.G_shape,
-                                           depth_test=False,
+                                           depth_test=True,
                                            use_parent_transform=False)
         self.outer_grid.visible = False
 
@@ -840,26 +817,34 @@ class SpikingNeuronNetwork:
                                               max_z=self.network_config.max_z,
                                               grid_unit_shape=self.network_config.grid_unit_shape)
 
-        self.input_system = InputCells(
-            input_data=np.array([0., 1., 0.]),
-            pos=np.array([[0., 0., 0.],
-                          # [0.3, 0., 0.],
-                          [0., 0., self.network_config.max_z + 1]]),
+        self.input_cells = InputCells(
+            data=np.array([0., 1., 0.]),
+            pos=np.array([[int(self.network_config.N_pos_shape[0]/2 + 1) * self.network_config.grid_unit_shape[1],
+                           0.,
+                           self.network_config.N_pos_shape[2] - self.network_config.grid_unit_shape[2]]]),
             network_config=self.network_config,
-            segmentation=(3, 1, 1),
-            input_color_coding=np.array([
-                [0., 0., 0., .4],
-                [1., 1., 1., .4],
+            compatible_groups=self.network_config.sensory_groups
+        )
+        self.output_cells = OutputCells(
+            data=np.array([0., -1., 1.]),
+            pos=np.array([[int(self.network_config.N_pos_shape[0]/2 + 1) * self.network_config.grid_unit_shape[1],
+                           self.network_config.N_pos_shape[1] - self.network_config.grid_unit_shape[1],
+                           self.network_config.N_pos_shape[2] - self.network_config.grid_unit_shape[2]]]),
+            network_config=self.network_config,
+            data_color_coding=np.array([
+                [1., 0., 0., .4],
+                [0., 1., 0., .4],
+                # [0., 0., 0., .0],
             ]),
-            max_z=self.network_config.max_z,
-            unit_shape=(1., 0.2, 0.5)
-            # unit_shape=self.config.grid_unit_shape
+            compatible_groups=self.network_config.output_groups,
+            face_dir='+z',
         )
 
         self.rendered_3d_objs.append(self.outer_grid)
         self.rendered_3d_objs.append(self.selector_box)
         self.rendered_3d_objs.append(self.selected_group_boxes)
-        self.rendered_3d_objs.append(self.input_system)
+        self.rendered_3d_objs.append(self.output_cells)
+        self.rendered_3d_objs.append(self.input_cells)
 
         self._all_rendered_objects_initialized = True
 
@@ -871,10 +856,37 @@ class SpikingNeuronNetwork:
         for o in self.rendered_3d_objs:
             view_3d.add(o)
 
-        # add the normals separately, because otherwise it does not work as expected.
+        # normals must be added separately
         for o in self.selector_box.visual.normals:
             view_3d.add(o)
-        for o in self.input_system.normals:
+        for o in self.output_cells.normals:
+            view_3d.add(o)
+        for o in self.input_cells.normals:
             view_3d.add(o)
 
-        # self.selector_box.obj.parent = view_3d.scene
+    # noinspection PyPep8Naming
+    def initialize_GPU_arrays(self, device):
+        if not self._all_rendered_objects_initialized:
+            raise AssertionError('not self._all_rendered_objects_initialized')
+
+        buffers = BufferCollection(
+            N_pos=self._neurons.vbo,
+            voltage=self.voltage_plot.vbo,
+            firings=self.firing_scatter_plot.vbo,
+            selected_group_boxes_vbo=self.selected_group_boxes.vbo,
+            selected_group_boxes_ibo=self.selected_group_boxes.ibo,
+        )
+        self.GPU = NetworkGPUArrays(
+            config=self.network_config,
+            type_group_dct=self.type_group_dct,
+            type_group_conn_dct=self.type_group_conn_dict,
+            device=device,
+            T=self.T,
+            plotting_config=self.plotting_config,
+            model=self.model,
+            buffers=buffers)
+
+        self.selector_box.init_cuda_attributes(self.GPU.device, self.GPU.G_props)
+        self.selected_group_boxes.init_cuda_attributes(self.GPU.device, self.GPU.G_props)
+        self.input_cells.init_cuda_attributes(self.GPU.device, self.GPU.G_props)
+        self.output_cells.init_cuda_attributes(self.GPU.device, self.GPU.G_props)
