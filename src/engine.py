@@ -24,7 +24,7 @@ class EngineConfig:
 
     network_config = NetworkConfig(N=N, N_pos_shape=(4, 4, 1))
     plotting_config = PlottingConfig(N=N,
-                                     n_voltage_plots=100, voltage_plot_length=100,
+                                     n_voltage_plots=10, voltage_plot_length=100,
                                      n_scatter_plots=1000, scatter_plot_length=1000)
 
 
@@ -70,9 +70,10 @@ class Engine:
         self.ui_left.objects_collapsible.add(input_cell_collapsible)
         self.ui_left.objects_collapsible.add(output_cell_collapsible)
 
+        self.ui_left.sensory_input_collapsible.toggle_collapsed()
         self.ui_left.objects_collapsible.toggle_collapsed()
         selector_box_collapsible.toggle_collapsed()
-        self.ui_left.thalamic_input_collapsible.toggle_collapsed()
+        # self.ui_left.thalamic_input_collapsible.toggle_collapsed()
 
         self.time_elapsed_until_last_off = 0
         # self.set_scale(0)
@@ -95,6 +96,14 @@ class Engine:
         self.sliders.thalamic_exc_input_current.connect_property(
             self.network.GPU.G_props,
             EngineConfig.network_config.DefaultValues.ThalamicInput.exc_current)
+
+        self.sliders.sensory_input_current0.connect_property(
+            self.network.GPU.G_props,
+            EngineConfig.network_config.DefaultValues.SensoryInput.input_current0)
+
+        self.sliders.sensory_input_current1.connect_property(
+            self.network.GPU.G_props,
+            EngineConfig.network_config.DefaultValues.SensoryInput.input_current1)
 
     @property
     def actions(self):

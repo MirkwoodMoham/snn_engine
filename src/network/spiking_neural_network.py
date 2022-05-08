@@ -135,8 +135,8 @@ class NetworkDataShapes:
         self.firings_scatter_plot = (plotting_config.n_scatter_plots * plotting_config.scatter_plot_length,
                                      config.vispy_scatter_plot_stride)
 
-        self.voltage_plot_map = (plotting_config.n_voltage_plots, 1)
-        self.firings_scatter_plot_map = (plotting_config.n_scatter_plots, 1)
+        self.voltage_plot_map = plotting_config.n_voltage_plots
+        self.firings_scatter_plot_map = plotting_config.n_scatter_plots
 
         assert config.G == self.G_props[1]
         assert config.N == self.N_states[1]
@@ -166,10 +166,10 @@ class NetworkGPUArrays(GPUArrayCollection):
                                                                dtype=np.float32, device=self.device))
 
             self.voltage_map = self.izeros(shapes.voltage_plot_map)
-            self.voltage_map[:, 0] = torch.arange(shapes.voltage_plot_map[0])
+            self.voltage_map[:] = torch.arange(shapes.voltage_plot_map)
 
             self.firings_map = self.izeros(shapes.firings_scatter_plot_map)
-            self.firings_map[:, 0] = torch.arange(shapes.firings_scatter_plot_map[0])
+            self.firings_map[:] = torch.arange(shapes.firings_scatter_plot_map)
 
             # print(self.voltage.to_dataframe)
 
@@ -187,6 +187,7 @@ class NetworkGPUArrays(GPUArrayCollection):
         super(NetworkGPUArrays, self).__init__(device=device, bprint_allocated_memory=config.N > 1000)
 
         self._config: NetworkConfig = config
+        self._plotting_config: PlottingConfig = plotting_config
         self._type_group_dct = type_group_dct
         self._type_group_conn_dct = type_group_conn_dct
 
@@ -265,10 +266,10 @@ class NetworkGPUArrays(GPUArrayCollection):
             firing_counts=self.Firing_counts.data_ptr()
         )
 
-        # print(self.Firing_idcs)
+        self.neuron_ids = torch.arange(config.N).to(device=self.device)
 
-        # for i in range(2):
-        #     self.update()
+        self.N_states.use_preset('rs', self.neuron_mask(self._config.sensory_groups))
+        # self.N_weights[self.N_states.selected, ] =
 
     def update(self):
         self.plotting_arrays.voltage.map()
@@ -687,12 +688,28 @@ class NetworkGPUArrays(GPUArrayCollection):
                 print(self.G_neuron_counts)
                 raise AssertionError
 
-    # def set_neuron_property(self, groups, value, neuron_mask=None):
-    #     if neuron_mask is None:
-    #         neuron_mask = torch.zeros(self._config.N, dtype=torch.bool, device=self.device)
-    #     for g in groups:
-    #         neuron_mask += [self.N_G[:, self._config.N_G_group_id_col] == g]
-    #     self.G_props._set_row(neuron_property_row, value)
+    def neuron_mask(self, groups):
+        self.N_states.selected[:] = 0
+        for g in groups:
+            self.N_states.selected += (self.N_G[:, self._config.N_G_group_id_col] == g)
+        self.N_states.selected = self.N_states.selected > 0
+        return self.N_states.selected
+
+    def actualize_plot_map(self, groups):
+        selected_neurons = self.neuron_ids[self.neuron_mask(groups)]
+
+        n_selected = len(selected_neurons)
+
+        n_voltage_plots = min(n_selected, self._plotting_config.n_voltage_plots)
+        self.plotting_arrays.voltage_map[: n_voltage_plots] = selected_neurons[: n_voltage_plots]
+
+        n_scatter_plots = min(n_selected, self._plotting_config.n_scatter_plots)
+        self.plotting_arrays.firings_map[: n_scatter_plots] = selected_neurons[: n_scatter_plots]
+
+        if n_selected < self._plotting_config.n_voltage_plots:
+            pass
+        if n_selected < self._plotting_config.n_scatter_plots:
+            pass
 
 
 class SpikingNeuronNetwork:
@@ -822,7 +839,7 @@ class SpikingNeuronNetwork:
             pos=np.array([[int(self.network_config.N_pos_shape[0]/2 + 1) * self.network_config.grid_unit_shape[1],
                            0.,
                            self.network_config.N_pos_shape[2] - self.network_config.grid_unit_shape[2]]]),
-            network_config=self.network_config,
+            network=self,
             compatible_groups=self.network_config.sensory_groups
         )
         self.output_cells = OutputCells(
@@ -830,7 +847,7 @@ class SpikingNeuronNetwork:
             pos=np.array([[int(self.network_config.N_pos_shape[0]/2 + 1) * self.network_config.grid_unit_shape[1],
                            self.network_config.N_pos_shape[1] - self.network_config.grid_unit_shape[1],
                            self.network_config.N_pos_shape[2] - self.network_config.grid_unit_shape[2]]]),
-            network_config=self.network_config,
+            network=self,
             data_color_coding=np.array([
                 [1., 0., 0., .4],
                 [0., 1., 0., .4],

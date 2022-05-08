@@ -58,7 +58,7 @@ class NetworkConfig:
             exc_current: float = 15.
 
         class SensoryInput:
-            input_current0: float = 0.
+            input_current0: float = 65.
             input_current1: float = 25.
 
     def __str__(self):

@@ -371,7 +371,7 @@ class SpinBoxSlider(GUIElement):
                          property_container: Union[Scale, Translate, LocationGroupProperties],
                          value=None):
         self.property_container = property_container
-        self.value = getattr(property_container, self.prop_id) if not value else value
+        self.value = getattr(property_container, self.prop_id) if value is None else value
         self.previous_applied_value = self.value
         self.change_from_text = False
         self.change_from_slider = False

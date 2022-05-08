@@ -118,13 +118,26 @@ class UI(object):
                                                                 status_tip='Thalamic Inhibitory Input Current [I]',
                                                                 prop_id='thalamic_inh_input_current',
                                                                 maximum_width=300,
-                                                                _min_value=0, _max_value=10000)
+                                                                _min_value=0, _max_value=1000)
                 self.thalamic_exc_input_current = SpinBoxSlider(name='Excitatory Current [I]',
                                                                 window=window,
                                                                 status_tip='Thalamic Excitatory Input Current [I]',
                                                                 prop_id='thalamic_exc_input_current',
                                                                 maximum_width=300,
-                                                                _min_value=0, _max_value=10000)
+                                                                _min_value=0, _max_value=1000)
+
+                self.sensory_input_current0 = SpinBoxSlider(name='Input Current 0 [I]',
+                                                            window=window,
+                                                            status_tip='Sensory Input Current 0 [I]',
+                                                            prop_id='sensory_input_current0',
+                                                            maximum_width=300,
+                                                            _min_value=0, _max_value=1000)
+                self.sensory_input_current1 = SpinBoxSlider(name='Input Current 1 [I]',
+                                                            window=window,
+                                                            status_tip='Sensory Input Current 1 [I]',
+                                                            prop_id='sensory_input_current1',
+                                                            maximum_width=300,
+                                                            _min_value=0, _max_value=1000)
 
         def __init__(self, window, central_widget):
 
@@ -136,18 +149,14 @@ class UI(object):
 
             widget = QWidget()
             self.frame.setWidget(widget)
-            # central_widget.add(widget)
             self.buttons = self.Buttons()
             self.sliders = self.Sliders(window)
             self.layout = QVBoxLayout()
             widget.setLayout(self.layout)
 
-            # self.vbox.addStretch(1)
             self.layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
             self.layout.setSpacing(2)
 
-            # splitter.setSizes([125, 150])
-            # hbox.addStretch(1)
             play_pause_widget = QWidget(central_widget)
             play_pause_widget.setFixedSize(95, 45)
             play_pause_hbox = QHBoxLayout(play_pause_widget)
@@ -156,23 +165,24 @@ class UI(object):
             play_pause_hbox.addWidget(self.buttons.start)
             play_pause_hbox.addWidget(self.buttons.pause)
 
+            self.sensory_input_collapsible = CollapsibleWidget(title='Sensory Input')
+            self.sensory_input_collapsible.add(self.sliders.sensory_input_current0.widget)
+            self.sensory_input_collapsible.add(self.sliders.sensory_input_current1.widget)
+
             self.thalamic_input_collapsible = CollapsibleWidget(title='Thalamic Input')
             self.thalamic_input_collapsible.add(self.sliders.thalamic_inh_input_current.widget)
             self.thalamic_input_collapsible.add(self.sliders.thalamic_exc_input_current.widget)
-            # self.thalamic_input_collapsible._content_layout.setSpacing(0)
-            # self.thalamic_input_collapsible._content.setFixedHeight(2 * 84)
+
             self.objects_collapsible = CollapsibleWidget(title='Objects')
-            # self.objects_collapsible._content_layout.setSpacing(0)
-            # self.objects_collapsible.toggle_collapsed()
 
             self.layout.addWidget(play_pause_widget)
             self.layout.addWidget(self.buttons.toggle_outergrid)
+            self.layout.addWidget(self.sensory_input_collapsible, 1)
             self.layout.addWidget(self.thalamic_input_collapsible, 1)
 
             self.layout.addWidget(self.objects_collapsible, 1)
 
             self.layout.addWidget(self.buttons.exit)
-            # self.layout.width_max = 100
 
     def __init__(self, window, scene):
 

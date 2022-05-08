@@ -2,7 +2,7 @@ from dataclasses import asdict, dataclass
 import numpy as np
 import pandas as pd
 import torch
-from typing import Optional
+from typing import Optional, Union
 
 from .network_structures import NeuronTypes
 from gpu import (
@@ -68,7 +68,7 @@ class PropertyTensor:
 
 
 @dataclass(frozen=True)
-class NeuronStatesRows:
+class StateRows:
 
     pt: int = 0
     v: int = 1
@@ -87,10 +87,49 @@ class NeuronStatesRows:
 
 
 # noinspection PyPep8Naming
+class IzhikevichPresets(PropertyTensor):
+
+    @dataclass(frozen=True)
+    class Preset:
+        a: float
+        b: float
+        c: float
+        d: float
+
+    @dataclass(frozen=True)
+    class Rows:
+
+        rs: int = 0
+        ib: int = 1
+        ch: int = 2
+        fs: int = 3
+        tc: int = 4
+        rz: int = 5
+        lts: int = 6
+
+        def __len__(self):
+            return 7
+
+    def __init__(self, shape=(7, 4), device=None):
+        self._rows = self.Rows()
+        super().__init__(shape)
+
+        # self.tensor = torch.zeros(shape, dtype=torch.float32, device=device)
+
+        self.rs = self.Preset(a=0.02, b=0.2, c=-65., d=8.)
+        self.ib = self.Preset(a=0.02, b=0.2, c=-55., d=4.)
+        self.ch = self.Preset(a=0.02, b=0.2, c=-50., d=2.)
+        self.fs = self.Preset(a=0.1, b=0.2, c=-65., d=2.)
+        self.fs25 = self.Preset(a=0.09, b=0.24, c=-65., d=2.)
+        self.tc = self.Preset(a=0.02, b=0.25, c=-65., d=0.05)
+        self.rz = self.Preset(a=0.1, b=0.26, c=-65., d=2.)
+        self.lts = self.Preset(a=0.02, b=0.25, c=-65., d=2.)
+
+
 class IzhikevichModel(PropertyTensor):
 
     @dataclass(frozen=True)
-    class Rows(NeuronStatesRows):
+    class Rows(StateRows):
 
         pt: int = 0
         u: int = 1
@@ -105,7 +144,10 @@ class IzhikevichModel(PropertyTensor):
         self._rows = self.Rows()
         super().__init__(shape)
         self._N = shape[1]
+        self.selected = None
         self.set_tensor(shape, device, types_tensor)
+        self.presets = IzhikevichPresets()
+
 
     def set_tensor(self, shape, device, types_tensor):
 
@@ -113,9 +155,9 @@ class IzhikevichModel(PropertyTensor):
 
         mask_inh = types_tensor == NeuronTypes.INHIBITORY.value
         mask_exc = types_tensor == NeuronTypes.EXCITATORY.value
-        r = torch.rand(self.N, dtype=torch.float32, device=device)
+        r = torch.rand(self._N, dtype=torch.float32, device=device)
 
-        self.pt = torch.rand(self.N, dtype=torch.float32, device=device)
+        self.pt = torch.rand(self._N, dtype=torch.float32, device=device)
         self.v = -65
         self.a = .02 + .08 * r * mask_inh
         self.b = .2 + .05 * (1. - r) * mask_inh
@@ -123,9 +165,20 @@ class IzhikevichModel(PropertyTensor):
         self.d = 2 * mask_inh + (8 - 6 * (r ** 2)) * mask_exc
         self.u = self.b * self.v
 
-    @property
-    def N(self):
-        return self._N
+        self.selected = torch.zeros(self._N, dtype=torch.int32, device=device)
+
+    def use_preset(self, preset: Union[IzhikevichPresets.Preset, str], mask=None):
+
+        if isinstance(preset, str):
+            preset = getattr(self.presets, preset)
+
+        if mask is None:
+            mask = self.selected
+
+        self.a[mask] = preset.a
+        self.b[mask] = preset.b
+        self.c[mask] = preset.c
+        self.d[mask] = preset.d
 
     @property
     def pt(self):
@@ -229,6 +282,7 @@ class LocationGroupProperties(PropertyTensor):
 
         self.input_face_colors: Optional[torch.Tensor] = None
         self.output_face_colors: Optional[torch.Tensor] = None
+        self.group_numbers_gpu: Optional[torch.Tensor] = None
 
         self.set_tensor(shape, device, config)
         self.selection_property = None
@@ -250,15 +304,20 @@ class LocationGroupProperties(PropertyTensor):
         self.b_sensory_group = torch.from_numpy(config.sensory_group_mask).to(device)
         self.sensory_input_type = -1.
 
+        self.group_numbers_gpu = (torch.arange(self._G).to(device=device)
+                                  .reshape((self._G, 1)))
+
     @property
     def selected(self):
-        return self.selected_array.tensor
+        # noinspection PyUnresolvedReferences
+        return (self.selected_array.tensor != self._G).flatten()
 
     @selected.setter
-    def selected(self, v):
-        self.selected_array.tensor[:] = v
+    def selected(self, mask):
+        self.selected_array.tensor[:] = torch.where(mask.reshape((self._G, 1)),
+                                                    self.group_numbers_gpu, self._G)
         if self.selection_property is not None:
-            setattr(self, self.selection_property, v.flatten() != self._G)
+            setattr(self, self.selection_property, mask)
 
     @property
     def sensory_input_type(self):

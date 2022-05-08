@@ -46,10 +46,13 @@ __global__ void update_N_state_(
 			// printf("G_props[src_G + 3 * G]=%f, G_props[src_G + 2 * G]=%f \n", 
 			// 	   G_props[src_G + 3 * G], G_props[src_G + 2 * G]);
 		}
-
+		
 		if (G_props[src_G + 7 * G] > 0.f)
 		{
-			i += G_props[src_G + 8 * G] * ntype + G_props[src_G + 9 * G] * (1.f - ntype);
+			float input_type = G_props[src_G];	
+			if (input_type >= 0.){
+				i += G_props[src_G + 9 * G] * input_type + G_props[src_G + 8 * G] * (1.f - input_type);
+			}
 		}
 
 		if (v > 30.f)
@@ -238,12 +241,15 @@ SnnSimulation::SnnSimulation(
 
 __global__ void update_current_(
 	const int N,
+	const int G,
 	const int S,
 	const int D,
 	const int* fired_idcs_read, 
 	const int* fired_idcs, 
 	const float* firing_times_read,
 	const float* firing_times,
+	const int* N_G,
+	const float* G_props,
 	const int* N_rep, 
 	const float* N_weights, 
 	float* N_states,
@@ -310,7 +316,11 @@ __global__ void update_current_(
 		// 	// }
 	 	// }
 
-
+		int snk_neuron;
+		int snk_G;
+		const int src_G = N_G[n * 2 + 1];
+		bool snk_G_is_sensory = false;
+		bool src_G_is_sensory = G_props[src_G + 7 * G] > 0.f;
 	
 		for (int s = syn_idx_start; s < syn_idx_end; s++)
 		{
@@ -321,7 +331,14 @@ __global__ void update_current_(
 			// atomicAdd(&debug_i[N_rep[s]], N_weights[s]);
 			
 			// if (s < N * S) 
-			atomicAdd(&N_states[N_rep[s] + 7 * N], N_weights[s]);
+			snk_neuron = N_rep[s];
+			snk_G = N_G[snk_neuron * 2 + 1];
+			snk_G_is_sensory = G_props[snk_G + 7 * G] > 0.f;
+			if (!snk_G_is_sensory)
+			{
+				atomicAdd(&N_states[snk_neuron + 7 * N], N_weights[s]);
+			}
+			// atomicAdd(&N_states[N_rep[s] + 7 * N], N_weights[s]);
 			// if (s >= N * S)
 			// 	printf("\n (%d)->(%d) [I] = %f", n, N_rep[s], N_states[N_rep[s] + 7 * N]);
 
@@ -567,12 +584,15 @@ void SnnSimulation::update(const bool verbose)
 	
 	update_current_ KERNEL_ARGS2(grid_dim_x, block_dim_x)(
 		N,
+		G,
 		S,
 		D,
 		firing_idcs_read,
 		firing_idcs,
 		firing_times_read,
 		firing_times,
+		N_G,
+		G_props,
 		N_rep,
 		N_weights,
 		N_states,
