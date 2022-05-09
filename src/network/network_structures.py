@@ -1,4 +1,4 @@
-from enum import Enum, unique
+from enum import IntEnum, unique
 
 from gpu.gpu_arrays import (
     reshape_wrt_size,
@@ -7,7 +7,7 @@ from gpu.gpu_arrays import (
 
 
 @unique
-class NeuronTypes(Enum):
+class NeuronTypes(IntEnum):
     INHIBITORY = 1
     EXCITATORY = 2
 

@@ -1,5 +1,5 @@
 # import ctypes
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 import numpy as np
 from typing import Optional
 
@@ -52,7 +52,7 @@ class NetworkConfig:
 
     max_z: float = 999.
 
-    class DefaultValues:
+    class InitValues:
         class ThalamicInput:
             inh_current: float = 25.
             exc_current: float = 15.
@@ -60,6 +60,12 @@ class NetworkConfig:
         class SensoryInput:
             input_current0: float = 65.
             input_current1: float = 25.
+
+        class Weights:
+            Inh2Exc: float = -.49
+            Exc2Inh: float = .5
+            Exc2Exc: float = .51
+            SensorySource: float = .52
 
     def __str__(self):
         name = self.__class__.__name__
@@ -215,3 +221,16 @@ def pos_cloud(size=100000):
     pos += centers[indexes]
 
     return pos
+
+
+@dataclass
+class BufferCollection:
+    N_pos: int
+    voltage: int
+    firings: int
+    selected_group_boxes_vbo: int
+    selected_group_boxes_ibo: int
+
+    def __post_init__(self):
+        for k, v in asdict(self).items():
+            setattr(self, k, int(v))

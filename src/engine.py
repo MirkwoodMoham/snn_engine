@@ -15,7 +15,7 @@ from pycuda import autoinit
 
 class EngineConfig:
 
-    N: int = 3 * 10 ** 5
+    N: int = 10 * 10 ** 2
     T: int = 2000  # Max simulation duration
 
     device: int = 0
@@ -91,19 +91,23 @@ class Engine:
 
         self.sliders.thalamic_inh_input_current.connect_property(
             self.network.GPU.G_props,
-            EngineConfig.network_config.DefaultValues.ThalamicInput.inh_current)
+            EngineConfig.network_config.InitValues.ThalamicInput.inh_current)
 
         self.sliders.thalamic_exc_input_current.connect_property(
             self.network.GPU.G_props,
-            EngineConfig.network_config.DefaultValues.ThalamicInput.exc_current)
+            EngineConfig.network_config.InitValues.ThalamicInput.exc_current)
 
         self.sliders.sensory_input_current0.connect_property(
             self.network.GPU.G_props,
-            EngineConfig.network_config.DefaultValues.SensoryInput.input_current0)
+            EngineConfig.network_config.InitValues.SensoryInput.input_current0)
 
         self.sliders.sensory_input_current1.connect_property(
             self.network.GPU.G_props,
-            EngineConfig.network_config.DefaultValues.SensoryInput.input_current1)
+            EngineConfig.network_config.InitValues.SensoryInput.input_current1)
+
+        self.sliders.sensory_weight.connect_property(
+            self.network.input_cells,
+            self.network.input_cells.src_weight)
 
     @property
     def actions(self):

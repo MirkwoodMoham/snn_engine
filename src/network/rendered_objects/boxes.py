@@ -558,6 +558,23 @@ class IOCells(RenderedCudaObjectNode):
 # noinspection PyAbstractClass
 class InputCells(IOCells):
 
+    def __init__(self, pos,
+                 data: np.array,
+                 network,
+                 compatible_groups: np.array,
+                 data_color_coding=None,
+                 face_dir='-y',
+                 segmentation=(3, 1, 1),
+                 unit_shape=None,
+                 color=(1., 1., 1., 1.), name=None, **kwargs):
+
+        super().__init__(pos=pos, data=data, network=network, compatible_groups=compatible_groups,
+                         data_color_coding=data_color_coding, face_dir=face_dir, segmentation=segmentation,
+                         unit_shape=unit_shape, color=color, name=name, **kwargs)
+        self.unfreeze()
+        self._src_weight = None
+        self.freeze()
+
     def transform_changed(self):
         self.assign_sensory_input()
         self.states_gpu.sensory_input_type[:] = -1.
@@ -566,7 +583,6 @@ class InputCells(IOCells):
         self.states_gpu.selected = mask
         self.states_gpu.b_thalamic_input = 0
         self.states_gpu.b_sensory_input = torch.where(mask, 1., 0.)
-
         self.states_gpu.input_face_colors[:, 3] = 0
 
         for i in range(len(self.data_color_coding_cpu)):
@@ -577,6 +593,15 @@ class InputCells(IOCells):
             # self.states_gpu.input_face_colors[indices, 3] = .5
 
         self.network.GPU.actualize_plot_map(self.network_config.sensory_groups[self.io_neuron_group_values_gpu.cpu() != -1.])
+
+    @property
+    def src_weight(self):
+        return self._src_weight
+
+    @src_weight.setter
+    def src_weight(self, value):
+        self._src_weight = value
+        self.network.GPU.set_src_group_weights(self.network_config.sensory_groups, value)
 
 
 # noinspection PyAbstractClass

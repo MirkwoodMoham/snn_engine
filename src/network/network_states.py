@@ -148,7 +148,6 @@ class IzhikevichModel(PropertyTensor):
         self.set_tensor(shape, device, types_tensor)
         self.presets = IzhikevichPresets()
 
-
     def set_tensor(self, shape, device, types_tensor):
 
         self.tensor = torch.zeros(shape, dtype=torch.float32, device=device)
@@ -296,10 +295,10 @@ class LocationGroupProperties(PropertyTensor):
         # self.b_thalamic_input = thalamic_input_arr
         self.b_thalamic_input = 0
         # self.thalamic_input = 1
-        self.thalamic_inh_input_current = config.DefaultValues.ThalamicInput.inh_current
-        self.thalamic_exc_input_current = config.DefaultValues.ThalamicInput.exc_current
-        self.sensory_input_current0 = config.DefaultValues.SensoryInput.input_current0
-        self.sensory_input_current1 = config.DefaultValues.SensoryInput.input_current1
+        self.thalamic_inh_input_current = config.InitValues.ThalamicInput.inh_current
+        self.thalamic_exc_input_current = config.InitValues.ThalamicInput.exc_current
+        self.sensory_input_current0 = config.InitValues.SensoryInput.input_current0
+        self.sensory_input_current1 = config.InitValues.SensoryInput.input_current1
 
         self.b_sensory_group = torch.from_numpy(config.sensory_group_mask).to(device)
         self.sensory_input_type = -1.

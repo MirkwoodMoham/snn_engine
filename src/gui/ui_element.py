@@ -220,7 +220,7 @@ class SpinBoxSlider(GUIElement):
             self.widget.setFixedHeight(84)
         else:
             self.layout_box = QHBoxLayout(self.widget)
-            self.widget.setFixedHeight(28)
+            self.widget.setFixedHeight(35)
 
         self.label = QLabel(self.name)
         self.spin_box = CustomQDoubleSpinBox(ui_element=self)
@@ -383,7 +383,8 @@ class SpinBoxSlider(GUIElement):
         # self.line_edit.returnPressed.connect(self.changed_line_edit)
         self.spin_box.lineEdit().returnPressed.connect(self.changed_spinbox)
 
-        setattr(self.property_container.spin_box_sliders, self.prop_id, self)
+        if hasattr(self.property_container, 'spin_box_sliders'):
+            setattr(self.property_container.spin_box_sliders, self.prop_id, self)
 
         if hasattr(self.property_container, 'value_ranges'):
             interval: pd.Interval = self.property_container.value_ranges[self.prop_id]
@@ -437,7 +438,7 @@ class RenderedObjectPropertyFrame(QFrame):
                                 single_step_spin_box=0.01,
                                 single_step_slider=10)
             setattr(self.sliders, i, sbs)
-            sbs.widget.setFixedHeight(35)
+            # sbs.widget.setFixedHeight(35)
             sliders_layout.addWidget(sbs.widget)
             sliders.append(sbs)
 

@@ -66,7 +66,7 @@ CuRandStates::CuRandStates(
 	
 	if (verbose) printf("(curand) (4/5) copying ..\n");
 
-	if (n_states <= 500 * 1000)
+	if (n_states <= 300 * 1000)
 	{
 		cudaMemcpy(d_seeds, &seeds[0], n_states * sizeof(unsigned long long int), cudaMemcpyHostToDevice);
 	} 
@@ -74,7 +74,7 @@ CuRandStates::CuRandStates(
 	{
 		std::uint32_t* ptr = &seeds[0];
 		int n_copied = 0;
-		int batch_size = 400 * 1000;
+		int batch_size = 200 * 1000;
 
 		std::string msg;
 		if (verbose) {

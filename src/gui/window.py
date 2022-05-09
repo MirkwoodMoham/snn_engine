@@ -118,26 +118,38 @@ class UI(object):
                                                                 status_tip='Thalamic Inhibitory Input Current [I]',
                                                                 prop_id='thalamic_inh_input_current',
                                                                 maximum_width=300,
-                                                                _min_value=0, _max_value=1000)
+                                                                _min_value=0, _max_value=250)
                 self.thalamic_exc_input_current = SpinBoxSlider(name='Excitatory Current [I]',
                                                                 window=window,
                                                                 status_tip='Thalamic Excitatory Input Current [I]',
                                                                 prop_id='thalamic_exc_input_current',
                                                                 maximum_width=300,
-                                                                _min_value=0, _max_value=1000)
+                                                                _min_value=0, _max_value=250)
 
                 self.sensory_input_current0 = SpinBoxSlider(name='Input Current 0 [I]',
                                                             window=window,
                                                             status_tip='Sensory Input Current 0 [I]',
                                                             prop_id='sensory_input_current0',
                                                             maximum_width=300,
-                                                            _min_value=0, _max_value=1000)
+                                                            _min_value=0, _max_value=200)
                 self.sensory_input_current1 = SpinBoxSlider(name='Input Current 1 [I]',
                                                             window=window,
                                                             status_tip='Sensory Input Current 1 [I]',
                                                             prop_id='sensory_input_current1',
                                                             maximum_width=300,
-                                                            _min_value=0, _max_value=1000)
+                                                            _min_value=0, _max_value=200)
+
+                self.sensory_weight = SpinBoxSlider(name='Sensory',
+                                                    boxlayout_orientation=QtCore.Qt.Orientation.Horizontal,
+                                                    window=window,
+                                                    func_=lambda x: float(x) / 100000 if x is not None else x,
+                                                    func_inv_=lambda x: int(x * 100000) if x is not None else x,
+                                                    status_tip='Sensory Weight',
+                                                    prop_id='src_weight',
+                                                    maximum_width=300,
+                                                    single_step_spin_box=0.01,
+                                                    single_step_slider=100,
+                                                    _min_value=0, _max_value=5)
 
         def __init__(self, window, central_widget):
 
@@ -173,10 +185,14 @@ class UI(object):
             self.thalamic_input_collapsible.add(self.sliders.thalamic_inh_input_current.widget)
             self.thalamic_input_collapsible.add(self.sliders.thalamic_exc_input_current.widget)
 
+            self.weights_collapsible = CollapsibleWidget(title='Weights')
+            self.weights_collapsible.add(self.sliders.sensory_weight.widget)
+
             self.objects_collapsible = CollapsibleWidget(title='Objects')
 
             self.layout.addWidget(play_pause_widget)
             self.layout.addWidget(self.buttons.toggle_outergrid)
+            self.layout.addWidget(self.weights_collapsible, 1)
             self.layout.addWidget(self.sensory_input_collapsible, 1)
             self.layout.addWidget(self.thalamic_input_collapsible, 1)
 
