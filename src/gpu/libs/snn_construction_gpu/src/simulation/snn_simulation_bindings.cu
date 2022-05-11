@@ -98,6 +98,7 @@ PYBIND11_MODULE(snn_simulation_gpu, m)
     .def_readonly("t", &SnnSimulation::t)
     .def_readonly("N_G", &SnnSimulation::N_G)
     .def("update", &SnnSimulation::update)
+    .def("swap_groups", &SnnSimulation::swap_groups_python)
     // .def_readonly("p", &CuRandStates::p)
     .def("__repr__",
         [](const SnnSimulation &sim) {

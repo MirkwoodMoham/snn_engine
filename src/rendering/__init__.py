@@ -7,6 +7,8 @@ from .rendered_object import (
 )
 from .rendered_cuda_object import RenderedCudaObjectNode
 
-from .cuda_objects import ArrowVisual, NormalArrow, CudaBox, initial_normal_vertices
-from .objects import Box
+from .cuda_box import CudaBox
+from .cuda_box_arrows import ArrowVisual, GridArrow, InteractiveBoxNormals
+from geometry.grid_positions import initial_normal_vertices
+from .box import Box
 from .visuals import BoxSystemLineVisual, GSLineVisual

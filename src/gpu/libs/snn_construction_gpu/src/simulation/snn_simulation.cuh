@@ -107,4 +107,7 @@ struct SnnSimulation
     void update_voltage_plot();
     void print_info(bool bprint_idcs = false);
     void update(bool verbose);
+
+    void swap_groups(int* neurons, int* groups, int n_groups, int n_neurons);
+    void swap_groups_python(long neurons, long groups, int n_groups, int n_neurons);
 };

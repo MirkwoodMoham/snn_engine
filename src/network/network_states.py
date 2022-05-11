@@ -10,6 +10,7 @@ from gpu import (
     GPUArrayConfig
 )
 from network.network_config import NetworkConfig
+from .network_grid import NetworkGrid
 
 
 class PropertyTensor:
@@ -269,7 +270,7 @@ class LocationGroupProperties(PropertyTensor):
         def __len__(self):
             return 10
 
-    def __init__(self, shape, device, config, select_ibo):
+    def __init__(self, shape, device, config, select_ibo, grid: NetworkGrid):
         self._rows = self.Rows()
         super().__init__(shape)
         self._G = shape[1]
@@ -283,12 +284,12 @@ class LocationGroupProperties(PropertyTensor):
         self.output_face_colors: Optional[torch.Tensor] = None
         self.group_numbers_gpu: Optional[torch.Tensor] = None
 
-        self.set_tensor(shape, device, config)
+        self.set_tensor(shape, device, config, grid)
         self.selection_property = None
 
         self.spin_box_sliders = Sliders(self.Rows())
 
-    def set_tensor(self, shape, device, config: NetworkConfig):
+    def set_tensor(self, shape, device, config: NetworkConfig, grid: NetworkGrid):
         self.tensor = torch.zeros(shape, dtype=torch.float32, device=device)
         thalamic_input_arr = torch.zeros(self._G)
         thalamic_input_arr[: int(self._G/2)] = 1
@@ -300,7 +301,7 @@ class LocationGroupProperties(PropertyTensor):
         self.sensory_input_current0 = config.InitValues.SensoryInput.input_current0
         self.sensory_input_current1 = config.InitValues.SensoryInput.input_current1
 
-        self.b_sensory_group = torch.from_numpy(config.sensory_group_mask).to(device)
+        self.b_sensory_group = torch.from_numpy(grid.sensory_group_mask).to(device)
         self.sensory_input_type = -1.
 
         self.group_numbers_gpu = (torch.arange(self._G).to(device=device)

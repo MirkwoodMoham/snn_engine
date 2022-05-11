@@ -318,9 +318,9 @@ __global__ void update_current_(
 
 		int snk_neuron;
 		int snk_G;
-		const int src_G = N_G[n * 2 + 1];
+		// const int src_G = N_G[n * 2 + 1];
 		bool snk_G_is_sensory = false;
-		bool src_G_is_sensory = G_props[src_G + 7 * G] > 0.f;
+		//bool src_G_is_sensory = G_props[src_G + 7 * G] > 0.f;
 	
 		for (int s = syn_idx_start; s < syn_idx_end; s++)
 		{
@@ -627,4 +627,23 @@ void SnnSimulation::update(const bool verbose)
 }
 
 
+__global__ void swap_groups_(const int N){
 
+}
+
+
+void SnnSimulation::swap_groups(
+	int* neurons, int* groups, 
+	const int n_groups, const int n_neurons)
+{
+	LaunchParameters lp_swap_groups = LaunchParameters(n_neurons, (void *)swap_groups_);
+
+	printf("\nswap groups %d, %d\n", n_groups, n_neurons);
+}
+
+void SnnSimulation::swap_groups_python(
+	long neurons, long groups, 
+	const int n_groups, const int n_neurons)
+{
+	swap_groups(reinterpret_cast<int*> (neurons), reinterpret_cast<int*> (groups), n_groups, n_neurons);
+}

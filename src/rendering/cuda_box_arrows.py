@@ -1,36 +1,10 @@
+from typing import Optional
+
 import numpy as np
-from typing import Optional, Union
-
 from vispy.scene import visuals, Node
-# from vispy.visuals.transforms import STTransform
 
-from gpu import (
-    GPUArrayConfig,
-    RegisteredGPUArray
-)
-
-from .rendered_cuda_object import RenderedCudaObjectNode, CudaObject
-from .objects import Box
-# from .rendered_object import RenderedObjectNode, RenderedObject
-
-
-def initial_normal_vertices(shape):
-    # isv = self._initial_selection_vertices
-
-    points = np.zeros((6, 4, 3), dtype=np.float32)
-
-    x0 = shape[0] / 2
-    y0 = shape[1] / 2
-    z0 = shape[2] / 2
-
-    points[0] = np.array([[x0, 0, 0], [x0 + x0 / 2, 0, 0], [x0 + x0 / 2, 0, 0], [x0 + 2 * x0 / 3, 0, 0]])
-    points[1] = -1 * points[0]
-    points[2] = np.array([[0, y0, 0], [0, y0 + y0 / 2, 0], [0, y0 + y0 / 2, 0], [0, y0 + 2 * y0 / 3, 0]])
-    points[3] = -1 * points[2]
-    points[4] = np.array([[0, 0, z0], [0, 0, z0 + z0 / 2], [0, 0, z0 + z0 / 2], [0, 0, z0 + 2 * z0 / 3]])
-    points[5] = -1 * points[4]
-
-    return points
+from rendering.rendered_cuda_object import CudaObject, RenderedCudaObjectNode
+from geometry import DirectedObject, initial_normal_vertices
 
 
 class ArrowVisual(visuals.Tube, CudaObject):
@@ -48,7 +22,7 @@ class ArrowVisual(visuals.Tube, CudaObject):
 
 
 # noinspection PyAbstractClass
-class NormalArrow(RenderedCudaObjectNode):
+class GridArrow(RenderedCudaObjectNode):
 
     def __init__(self, select_parent, points, color=None, name=None, tube_points=4,
                  radius=np.array([.012, .012, .05, .0]), parent: Optional[Node] = None,
@@ -139,37 +113,35 @@ class NormalArrow(RenderedCudaObjectNode):
         self._gpu_array = self.face_color_array(self.visual)
 
 
-class CudaBox(Box, CudaObject):
+class InteractiveBoxNormals(DirectedObject):
 
-    def __init__(self,
-                 select_parent,
-                 shape: tuple,
-                 segments: tuple = (1, 1, 1),
-                 translate=None,
-                 scale=None,
-                 color: Optional[Union[str, tuple]] = None,
-                 edge_color: Union[str, tuple] = 'white',
-                 name: str = None,
-                 depth_test=True, border_width=1, parent=None,
-                 init_normals=True):
+    def __init__(self, select_parent, shape, mod_factors=None):
 
-        Box.__init__(self, shape=shape,
-                     segments=segments,
-                     scale=scale,
-                     translate=translate,
-                     name=name,
-                     color=color,
-                     edge_color=edge_color,
-                     depth_test=depth_test,
-                     border_width=border_width,
-                     parent=parent)
+        normals = []
+        inv = initial_normal_vertices(shape)
+        for i in range(6):
+            if mod_factors is None:
+                mod_factor = 1 / (3 * shape[int(i / 2)])
+            else:
+                mod_factor = mod_factors[i]
+            arrow = GridArrow(select_parent, points=inv[i], mod_factor=mod_factor)
+            normals.append(arrow)
+        super().__init__(obj=normals)
 
-        if init_normals:
-            assert segments == (1, 1, 1)
-            self.normals = []
-            inv = initial_normal_vertices(shape)
-            for i in range(6):
-                arrow = NormalArrow(select_parent, points=inv[i], mod_factor=1 / (3 * shape[int(i/2)]))
-                self.normals.append(arrow)
+    @property
+    def visible(self):
+        return self[0].visible
 
-        CudaObject.__init__(self)
+    @visible.setter
+    def visible(self, value):
+        for i in self:
+            i.visible = value
+
+    @property
+    def transform(self):
+        return self[0].transform
+
+    @transform.setter
+    def transform(self, value):
+        for i in self:
+            i.transform = value

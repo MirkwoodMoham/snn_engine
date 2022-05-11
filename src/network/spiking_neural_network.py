@@ -14,17 +14,19 @@ from .network_structures import (
     NeuronTypeGroup,
     NeuronTypeGroupConnection
 )
-from rendering import RenderedObjectNode
-from .rendered_objects import (
+from .boxes import (
     BoxSystem,
     InputCells,
     OutputCells,
-    RenderedNeurons,
     SelectorBox,
+)
+from .plots import (
     VoltagePlot,
     FiringScatterPlot
 )
+from .neurons import Neurons
 from .network_states import IzhikevichModel
+from .network_grid import NetworkGrid
 from rendering import Box
 
 
@@ -39,7 +41,7 @@ class NetworkCPUArrays:
         self.N_rep: np.array = gpu_arrays.N_rep.cpu()
         self.N_G: np.array = gpu_arrays.N_G.cpu()
 
-        self.group_indices: np.array = gpu_arrays.group_indices.clone()
+        self.group_indices: np.array = gpu_arrays.group_indices.cpu()
 
         self.N_rep_groups: np.array = self.gpu.N_rep_groups_cpu
 
@@ -60,7 +62,7 @@ class SpikingNeuronNetwork:
                  model=IzhikevichModel,
                  ):
 
-        RenderedObjectNode._grid_unit_shape = network_config.grid_unit_shape
+        # RenderedObjectNode._grid_unit_shape = network_config.grid_unit_shape
 
         self.T = T
         self.network_config: NetworkConfig = network_config
@@ -81,9 +83,8 @@ class SpikingNeuronNetwork:
             exp_syn_counts=max(int((len(g_inh) / self.network_config.N) * self.network_config.S), 1))
         self.add_type_group_conn(g_exc, g_exc, w0=.5, exp_syn_counts=self.network_config.S - len(c_exc_inh))
 
-        self.sort_pos()
-
-        self._neurons = RenderedNeurons(self.network_config)
+        self.grid = NetworkGrid(self.network_config)
+        self._neurons = Neurons(self.network_config, self.grid.segmentation, self.type_groups)
 
         self.GPU: Optional[NetworkGPUArrays] = None
         self.CPU: Optional[NetworkCPUArrays] = None
@@ -128,27 +129,6 @@ class SpikingNeuronNetwork:
                                       conn_dict=self.type_group_conn_dict)
         return c
 
-    def sort_pos(self):
-        """
-        Sort neuron positions w.r.t. location-based groups and neuron types.
-        """
-
-        for g in self.type_groups:
-
-            grid_pos = self.network_config.N_grid_pos[g.start_idx: g.end_idx + 1]
-
-            p0 = grid_pos[:, 0].argsort(kind='stable')
-            p1 = grid_pos[p0][:, 1].argsort(kind='stable')
-            p2 = grid_pos[p0][p1][:, 2].argsort(kind='stable')
-
-            self.network_config.N_grid_pos[g.start_idx: g.end_idx + 1] = grid_pos[p0][p1][p2]
-            self.network_config.pos[g.start_idx: g.end_idx + 1] = \
-                self.network_config.pos[g.start_idx: g.end_idx + 1][p0][p1][p2]
-            if self.network_config.N <= 100:
-                print('\n', self.network_config.pos[g.start_idx:g.end_idx+1])
-        if self.network_config.N <= 100:
-            print()
-
     def update(self):
         self.GPU.update()
 
@@ -160,36 +140,38 @@ class SpikingNeuronNetwork:
                                                      plot_length=self.plotting_config.scatter_plot_length)
         self.outer_grid: visuals.Box = Box(shape=self.network_config.N_pos_shape,
                                            scale=[.99, .99, .99],
-                                           segments=self.network_config.G_shape,
+                                           segments=self.network_config.grid_segmentation,
                                            depth_test=True,
                                            use_parent_transform=False)
         self.outer_grid.visible = False
+        self.outer_grid.set_gl_state(polygon_offset_fill=True, cull_face=False,
+                                     polygon_offset=(1, 1), depth_test=False, blend=True)
 
-        self.selector_box = SelectorBox(self.network_config)
+        self.selector_box = SelectorBox(self.network_config, self.grid)
         g = self.network_config.G
         self.selected_group_boxes = BoxSystem(network_config=self.network_config,
-                                              pos=self.network_config.g_pos,
-                                              connect=np.zeros((g + 1, 2)) + g,
-                                              max_z=self.network_config.max_z,
-                                              grid_unit_shape=self.network_config.grid_unit_shape)
+                                              grid=self.grid,
+                                              connect=np.zeros((g + 1, 2)) + g)
 
         self.input_cells = InputCells(
             data=np.array([0., 1., 0.]),
-            pos=np.array([[int(self.network_config.N_pos_shape[0]/2 + 1) * self.network_config.grid_unit_shape[1],
+            pos=np.array([[int(self.network_config.N_pos_shape[0]/2 + 1) * self.grid.unit_shape[1],
                            0.,
-                           self.network_config.N_pos_shape[2] - self.network_config.grid_unit_shape[2]]]),
+                           self.network_config.N_pos_shape[2] - self.grid.unit_shape[2]]]),
             network=self,
-            compatible_groups=self.network_config.sensory_groups
+            state_colors_attr='input_face_colors',
+            compatible_groups=self.network_config.sensory_groups,
         )
         self.output_cells = OutputCells(
             data=np.array([0., -1., 1.]),
-            pos=np.array([[int(self.network_config.N_pos_shape[0]/2 + 1) * self.network_config.grid_unit_shape[1],
-                           self.network_config.N_pos_shape[1] - self.network_config.grid_unit_shape[1],
-                           self.network_config.N_pos_shape[2] - self.network_config.grid_unit_shape[2]]]),
+            pos=np.array([[int(self._neurons._shape[0]/2 + 1) * self.grid.unit_shape[1],
+                           self._neurons._shape[1] - self.grid.unit_shape[1],
+                           self._neurons._shape[2] - self.grid.unit_shape[2]]]),
+            state_colors_attr='output_face_colors',
             network=self,
             data_color_coding=np.array([
-                [1., 0., 0., .4],
-                [0., 1., 0., .4],
+                [1., 0., 0., .6],
+                [0., 1., 0., .6],
                 # [0., 0., 0., .0],
             ]),
             compatible_groups=self.network_config.output_groups,
@@ -212,14 +194,6 @@ class SpikingNeuronNetwork:
         for o in self.rendered_3d_objs:
             view_3d.add(o)
 
-        # normals must be added separately
-        for o in self.selector_box.visual.normals:
-            view_3d.add(o)
-        for o in self.output_cells.normals:
-            view_3d.add(o)
-        for o in self.input_cells.normals:
-            view_3d.add(o)
-
     # noinspection PyPep8Naming
     def initialize_GPU_arrays(self, device):
         if not self._all_rendered_objects_initialized:
@@ -234,6 +208,8 @@ class SpikingNeuronNetwork:
         )
         self.GPU = NetworkGPUArrays(
             config=self.network_config,
+            grid=self.grid,
+            neurons=self._neurons,
             type_group_dct=self.type_group_dct,
             type_group_conn_dct=self.type_group_conn_dict,
             device=device,

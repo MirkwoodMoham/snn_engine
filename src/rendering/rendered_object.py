@@ -4,10 +4,13 @@ import numpy as np
 from typing import Optional, Union
 
 import pandas as pd
-from vispy.visuals import CompoundVisual, Visual, BaseVisual
+from vispy.visuals import CompoundVisual, BaseVisual
 from vispy.scene import visuals, Node
 from vispy.gloo.context import get_current_canvas
 from vispy.visuals.transforms import STTransform
+
+from geometry import XYZ
+from network.network_grid import NetworkGrid
 
 
 class RenderedObject:
@@ -26,6 +29,8 @@ class RenderedObject:
             self.original_color = None
         if not hasattr(self, '_shape'):
             self._shape = None
+        if not hasattr(self, 'grid'):
+            self.grid = None
 
         self._vbo = None
         self._pos_vbo = None
@@ -175,9 +180,6 @@ def add_children(parent: Node, children: list):
         parent._add_child(child)
 
 
-# RenderedObjectNode = visuals.create_visual_node(RenderedObjectVisual)
-
-
 # noinspection PyAbstractClass
 class RenderedObjectNode(visuals.VisualNode, RenderedObjectVisual):
 
@@ -206,35 +208,15 @@ class RenderedObjectNode(visuals.VisualNode, RenderedObjectVisual):
 
 
 @dataclass
-class XTZ:
-    x: object = None
-    y: object = None
-    z: object = None
-
-    def __post_init__(self):
-        self._tuple = (self.x, self.y, self.z)
-
-    def __getitem__(self, item):
-        if isinstance(item, int):
-            return self._tuple[item]
-        else:
-            return getattr(self, item)
-
-    def __setattr__(self, key, value):
-        super().__setattr__(key, value)
-        if key != '_tuple':
-            super().__setattr__('_tuple', (self.x, self.y, self.z))
-
-
-@dataclass
 class _STR:
 
     parent: RenderedObjectNode
+    # grid: NetworkGrid
     prop_id: str = 'some key'
 
-    spin_box_sliders: Optional[XTZ] = None
+    spin_box_sliders: Optional[XYZ] = None
 
-    value_ranges: Optional[XTZ] = None
+    value_ranges: Optional[XYZ] = None
 
     _min_value: Optional[Union[int, float]] = None
     _max_value: Optional[Union[int, float]] = None
@@ -245,12 +227,12 @@ class _STR:
     # noinspection PyArgumentList
     def __post_init__(self):
         if self.spin_box_sliders is None:
-            self.spin_box_sliders = XTZ()
+            self.spin_box_sliders = XYZ()
 
         if (self._min_value is not None) or (self._max_value is not None):
             if self.value_ranges is not None:
                 raise ValueError('multiple values for self.value_intervals.')
-            self.value_ranges = XTZ(
+            self.value_ranges = XYZ(
                 x=pd.Interval(self._min_value, self._max_value, closed='both'),
                 y=pd.Interval(self._min_value, self._max_value, closed='both'),
                 z=pd.Interval(self._min_value, self._max_value, closed='both'))
@@ -312,7 +294,7 @@ class Scale(_STR):
 
 @dataclass
 class Translate(_STR):
-    _grid_unit_shape: Optional[tuple] = (1, 1, 1)
+    _grid_unit_shape: Optional[tuple] = None
     prop_id: str = 'translate'
 
     min_value: Optional[int] = -5
@@ -322,35 +304,32 @@ class Translate(_STR):
         super().__post_init__()
         self._grid_coordinates = np.zeros(3)
 
-    def _move(self, i, d=1):
-        tr = np.zeros(3)
-        tr[i] += d * self._grid_unit_shape[i]
-
-        self.transform.move(tr)
-        self._grid_coordinates[i] += 1 * d
+    def _move(self, i):
+        self.transform.move(self.parent.grid.movements[i])
+        self._grid_coordinates += self.parent.grid.movements.coord[i]
 
         if self.parent.transform_connected is True:
             self.parent.transform_changed()
 
-        self.spin_box_sliders[i].actualize_values()
+        self.spin_box_sliders[int(i/2)].actualize_values()
 
     def mv_left(self):
         self._move(0)
 
     def mv_right(self):
-        self._move(0, -1)
-
-    def mv_fw(self):
-        self._move(1, -1)
-
-    def mv_bw(self):
         self._move(1)
 
-    def mv_up(self):
+    def mv_fw(self):
         self._move(2)
 
+    def mv_bw(self):
+        self._move(3)
+
+    def mv_up(self):
+        self._move(4)
+
     def mv_down(self):
-        self._move(2, -1)
+        self._move(5)
 
 
 

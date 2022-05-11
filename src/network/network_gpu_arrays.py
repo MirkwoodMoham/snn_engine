@@ -6,6 +6,8 @@ from network.network_array_shapes import NetworkArrayShapes
 from network.network_config import BufferCollection, NetworkConfig, PlottingConfig
 from network.network_states import IzhikevichModel, LocationGroupProperties
 from network.network_structures import NeuronTypeGroup, NeuronTypeGroupConnection, NeuronTypes
+from .network_grid import NetworkGrid
+from .neurons import Neurons
 
 # noinspection PyUnresolvedReferences
 from gpu import (
@@ -50,6 +52,8 @@ class NetworkGPUArrays(GPUArrayCollection):
 
     def __init__(self,
                  config: NetworkConfig,
+                 grid: NetworkGrid,
+                 neurons: Neurons,
                  type_group_dct: dict,
                  type_group_conn_dct: dict,
                  device: int,
@@ -66,7 +70,8 @@ class NetworkGPUArrays(GPUArrayCollection):
         self._type_group_dct = type_group_dct
         self._type_group_conn_dct = type_group_conn_dct
 
-        shapes = NetworkArrayShapes(config=config, T=T, n_N_states=model.__len__(), plotting_config=plotting_config)
+        shapes = NetworkArrayShapes(config=config, T=T, n_N_states=model.__len__(), plotting_config=plotting_config,
+                                    n_neuron_types=len(NeuronTypes))
 
         # self.selector_box = self._selector_box(())
 
@@ -79,7 +84,7 @@ class NetworkGPUArrays(GPUArrayCollection):
 
         (self.N_G,
          self.G_neuron_counts,
-         self.G_neuron_typed_ccount) = self._N_G_and_G_neuron_counts_1of2(shapes)
+         self.G_neuron_typed_ccount) = self._N_G_and_G_neuron_counts_1of2(shapes, grid, neurons)
 
         self.neuron_ids = torch.arange(config.N).to(device=self.device)
         self.group_indices = self._set_group_indices()
@@ -108,6 +113,7 @@ class NetworkGPUArrays(GPUArrayCollection):
                               types_tensor=self.N_G[:, self._config.N_G_neuron_type_col])
 
         self.G_props = LocationGroupProperties(shape=shapes.G_props, device=self.device, config=self._config,
+                                               grid=grid,
                                                select_ibo=buffers.selected_group_boxes_ibo)
 
         self.Fired = self.fzeros(self._config.N)
@@ -145,8 +151,9 @@ class NetworkGPUArrays(GPUArrayCollection):
             firing_counts=self.Firing_counts.data_ptr()
         )
 
+        self.G_swap_tensor = self._G_swap_tensor()
+        self.swap_group_synapses(torch.from_numpy(grid.forward_groups).to(device=self.device))
         self.N_states.use_preset('rs', self.selected_neuron_mask(self._config.sensory_groups))
-        # self.N_weights[self.N_states.selected, ] =
 
     def update(self):
         self.plotting_arrays.voltage.map()
@@ -167,7 +174,7 @@ class NetworkGPUArrays(GPUArrayCollection):
     def type_group_conns(self) -> list[NeuronTypeGroupConnection]:
         return list(self._type_group_conn_dct.values())
 
-    def _N_G_and_G_neuron_counts_1of2(self, shapes):
+    def _N_G_and_G_neuron_counts_1of2(self, shapes, grid: NetworkGrid, neurons: Neurons):
         N_G = self.izeros(shapes.N_G)
         # t_neurons_ids = torch.arange(self.N_G.shape[0], device='cuda')  # Neuron Id
         for g in self.type_groups:
@@ -184,12 +191,12 @@ class NetworkGPUArrays(GPUArrayCollection):
             N_G_n_cols=self._config.N_G_n_cols,
             N_G_neuron_type_col=self._config.N_G_neuron_type_col,
             N_G_group_id_col=self._config.N_G_group_id_col,
-            G_shape=self._config.G_shape,
+            G_shape=grid.segmentation,
             G_neuron_counts=G_neuron_counts.data_ptr())
 
         G_neuron_typed_ccount = self.izeros((2 * self._config.G + 1))
         G_neuron_typed_ccount[1:] = G_neuron_counts[: 2, :].ravel().cumsum(dim=0)
-        self.validate_N_G(N_G)
+        self.validate_N_G(N_G, neurons)
         return N_G, G_neuron_counts, G_neuron_typed_ccount
 
     def _G_group_delay_counts(self, shape, G_delay_distance):
@@ -526,7 +533,6 @@ class NetworkGPUArrays(GPUArrayCollection):
                 N_rep_groups[mask] = g
         return N_rep_groups.cpu()
 
-
     def _N_weights(self, shape):
         weights = self.fzeros(shape)
         for gc in self.type_group_conns:
@@ -555,7 +561,7 @@ class NetworkGPUArrays(GPUArrayCollection):
                     indices[g, col + 1] = ids[-1]
         return indices
 
-    def validate_N_G(self, N_G):
+    def validate_N_G(self, N_G, neurons: Neurons):
         if (N_G[:, self._config.N_G_neuron_type_col] == 0).sum() > 0:
             raise AssertionError
 
@@ -567,7 +573,7 @@ class NetworkGPUArrays(GPUArrayCollection):
 
             idcs1 = (N_G[:, self._config.N_G_group_id_col].diff() < 0).nonzero()
             df = pd.DataFrame(self.N_pos.tensor[:, :3].cpu().numpy())
-            df[['0g', '1g', '2g']] = self._config.N_grid_pos
+            df[['0g', '1g', '2g']] = neurons.shape
             df['N_G'] = N_G[:, 1].cpu().numpy()
             # print(G_pos)
             print(df)
@@ -601,6 +607,9 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.N_states.selected = self.N_states.selected > 0
         return self.N_states.selected
 
+    def select(self, groups):
+        return self.neuron_ids[self.selected_neuron_mask(groups)]
+
     def actualize_plot_map(self, groups):
         selected_neurons = self.neuron_ids[self.selected_neuron_mask(groups)]
 
@@ -619,3 +628,14 @@ class NetworkGPUArrays(GPUArrayCollection):
 
     def redirect_synapses(self, groups, direction, rate):
         pass
+
+    def _G_swap_tensor(self):
+        max_neurons_per_group = self.G_neuron_counts[:len(NeuronTypes)].sum(axis=0).max().item()
+        return self.izeros((10 * max_neurons_per_group, max_neurons_per_group)) - 1
+
+    def swap_group_synapses(self, groups):
+        n_groups = groups.shape[1]
+        if n_groups > 10:
+            raise ValueError
+        neurons = self.select(groups=groups[0])
+        self.Simulation.swap_groups(neurons.data_ptr(), groups.data_ptr(), 3, 2)
