@@ -12,7 +12,7 @@ from vispy.scene.cameras import PanZoomCamera
 from vispy.util import keys
 
 from network import SpikingNeuronNetwork
-from rendering import RenderedObject, RenderedObjectNode, ArrowVisual
+from rendering import RenderedObject
 
 
 @dataclass
@@ -182,10 +182,10 @@ class EngineSceneCanvas(scene.SceneCanvas):
                                n_plots=self.n_scatter_plots, plot_length=self.scatter_plot_length, cam_yscale=1,
                                height_min=200, height_max=500)
 
-    def set_keys(self, keys):
+    def set_keys(self, keys_):
         self.unfreeze()
         # noinspection PyProtectedMember
-        self._set_keys(keys)
+        self._set_keys(keys_)
         self.freeze()
 
     def mouse_pos(self, event):
@@ -210,7 +210,7 @@ class EngineSceneCanvas(scene.SceneCanvas):
                     self._clicked_obj.update()
                     self._last_selected_obj = self._clicked_obj
                 else:
-                    print('\nSELECTED:', self._clicked_obj)
+                    # print('\nSELECTED:', self._clicked_obj)
                     self._select(self._clicked_obj, True)
 
     def on_mouse_press(self, event):
@@ -219,15 +219,12 @@ class EngineSceneCanvas(scene.SceneCanvas):
             self.network_view.camera.interactive = False
             self.network_view.interactive = False
             self._clicked_obj = self.visual_at(event.pos)
-            print('\nCLICKED:', self._clicked_obj)
+            # print('\nCLICKED:', self._clicked_obj)
             self.network_view.interactive = True
             self._click_pos[:2] = self.mouse_pos(event)
 
             if isinstance(self._clicked_obj, RenderedObject) and self._clicked_obj.draggable:
                 self._select_clicked_obj()
-            # else:
-
-            # else:
 
     def _mouse_moved(self, event):
         self._last_mouse_pos[:2] = self.mouse_pos(event)

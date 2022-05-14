@@ -74,7 +74,7 @@ class GridArrow(RenderedCudaObjectNode):
         self.interactive = True
 
     def on_select_callback(self, v):
-        print(f'\nselected arrow({v}):', self, '\n')
+        # print(f'\nselected arrow({v}):', self, '\n')
         self.gpu_array.tensor[:, 3] = 1. if v is True else self.default_alpha
 
         self.last_scale = getattr(self.select_parent.scale, self._dim)
@@ -82,7 +82,7 @@ class GridArrow(RenderedCudaObjectNode):
 
     def on_drag_callback(self, v: np.ndarray, mode: int):
         v = v[self._modifier_dim] * self._modifier_dir * self._mod_factor
-        print(f'\ndragged arrow({round(v, 3)}):', self, '')
+        # print(f'\ndragged arrow({round(v, 3)}):', self, '')
 
         if mode == 0:
             setattr(self.select_parent.scale, self._dim, self.last_scale + v)

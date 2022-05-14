@@ -15,7 +15,7 @@ from pycuda import autoinit
 
 class EngineConfig:
 
-    N: int = 3 * 10 ** 5
+    N: int = 3 * 10 ** 3
     T: int = 2000  # Max simulation duration
 
     device: int = 0
@@ -168,14 +168,6 @@ class Engine:
             self.buttons.pause.setDisabled(True)
             self.actions.pause.setDisabled(True)
             # self.buttons.start.setText('Start')
-
-    # def print_vbo_data(self):
-    #     print(vbodata2host(self.network.scatter_plot.pos_vbo))
-
-    # def set_scale(self, elapsed):
-    #     scale = [np.sin(np.pi * elapsed + np.pi/2) + 2,
-    #              np.cos(np.pi * elapsed) + 2]
-    #     self.window.central_scene.network_view.transform.scale = scale
 
 
 if __name__ == '__main__':

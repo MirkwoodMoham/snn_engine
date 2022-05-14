@@ -45,8 +45,6 @@ class NetworkCPUArrays:
 
         self.N_rep_groups: np.array = self.gpu.N_rep_groups_cpu
 
-        pass
-
     @staticmethod
     def to_dataframe(tensor: torch.Tensor):
         return pd.DataFrame(tensor.numpy())
@@ -67,6 +65,8 @@ class SpikingNeuronNetwork:
         self.T = T
         self.network_config: NetworkConfig = network_config
         self._plotting_config: PlottingConfig = plotting_config
+        self.grid = NetworkGrid(self.network_config)
+        print('\n', self.network_config, '\n')
         self.model = model
         self.max_batch_size_mb = max_batch_size_mb
 
@@ -83,7 +83,6 @@ class SpikingNeuronNetwork:
             exp_syn_counts=max(int((len(g_inh) / self.network_config.N) * self.network_config.S), 1))
         self.add_type_group_conn(g_exc, g_exc, w0=.5, exp_syn_counts=self.network_config.S - len(c_exc_inh))
 
-        self.grid = NetworkGrid(self.network_config)
         self._neurons = Neurons(self.network_config, self.grid.segmentation, self.type_groups)
 
         self.GPU: Optional[NetworkGPUArrays] = None

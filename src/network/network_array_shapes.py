@@ -13,11 +13,10 @@ class NetworkArrayShapes:
                  n_neuron_types=2):
 
         self.N_pos = (config.N, config.vispy_scatter_plot_stride)
-        self.N_rep = (config.N, config.S)
         self.N_G = (config.N, config.N_G_n_cols)
 
         # Network Representation
-        self.N_rep = (config.N, config.S)  # float
+        self.N_rep = (config.S, config.N)  # float
         self.N_weights = self.N_rep  # np.float32
         self.N_delays = (config.D + 1, config.N)  # int
         self.N_fired = (1, config.N)  # int

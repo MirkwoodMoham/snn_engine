@@ -45,7 +45,7 @@ class ButtonMenuActions:
                                                   status_tip='Close Application',
                                                   menu_short_cut='Ctrl+Q')
 
-    TOGGLE_OUTERGRID: ButtonMenuAction = ButtonMenuAction(menu_name='&Outergrid',
+    TOGGLE_OUTERGRID: ButtonMenuAction = ButtonMenuAction(menu_name='&OuterGrid',
                                                           name='Show OuterGrid',
                                                           status_tip='Show/Hide OuterGrid',
                                                           menu_short_cut='Ctrl+G', checkable=True)

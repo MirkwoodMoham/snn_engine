@@ -74,7 +74,7 @@ CuRandStates::CuRandStates(
 	{
 		std::uint32_t* ptr = &seeds[0];
 		int n_copied = 0;
-		int batch_size = 200 * 1000;
+		int batch_size = 25 * 1000;
 
 		std::string msg;
 		if (verbose) {

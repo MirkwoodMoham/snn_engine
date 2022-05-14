@@ -99,7 +99,7 @@ class NetworkConfig:
         ])
         assert self.vispy_scatter_plot_stride == 13  # enforced by the vispy scatterplot memory layout
 
-        print('\n', self, '\n')
+        self.swap_tensor_shape_multiplicators: tuple = (self.S, 10)
 
 
 @dataclass
