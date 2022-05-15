@@ -701,7 +701,15 @@ class NetworkGPUArrays(GPUArrayCollection):
                 group_neuron_counts_typed[1].data_ptr(),
                 group_neuron_counts_total.data_ptr(),
                 swap_delay,
-                self.N_relative_G_indices.data_ptr())
+                self.N_relative_G_indices.data_ptr(), self.G_neuron_typed_ccount.data_ptr())
+
+            j = 1
+            a = self.to_dataframe(self.G_swap_tensor)
+            b = a.iloc[:, j-1:j+3].copy()
+            b[2] = self.N_rep[:, neurons[j]].cpu().numpy()
+            b[3] = self.N_G[b[2], 1].cpu().numpy()
+            b[0] = self.N_rep_groups_cpu[:, neurons[j]].numpy()
+            # print('\n\n', b)
 
             group_indices_offset += len(neurons)
             self.G_swap_tensor[:] = -1
