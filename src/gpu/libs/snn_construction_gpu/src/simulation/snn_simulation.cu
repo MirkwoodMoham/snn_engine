@@ -644,6 +644,160 @@ void SnnSimulation::update(const bool verbose)
 }
 
 
+__device__ void roll_copy(
+	
+	int* write_array, int* read_array, 
+	int write_col, int read_col, 
+	int write_row_start, 
+	int n_write_array_cols, int n_read_array_cols,
+	const int copy_length, 
+	const int read_offset, bool bprint){
+	int write_idx;
+	int read_idx;
+	//int roll_mod = abs(swap_snk_N_s_start - swap_src_N_s_start);
+
+	for (int s=0; s < copy_length; s++){
+
+		write_idx = write_col + (write_row_start + s) * n_write_array_cols;
+		read_idx = read_col + (write_row_start + ((s +  read_offset) % copy_length)) * n_read_array_cols;
+
+		if (bprint){
+			printf("\nwrite_array[%d, %d]=%d -> read_array[%d, %d]=%d", 
+			write_row_start + s, write_col, 
+			write_array[write_idx], 
+			write_row_start + ((s +  read_offset) % copy_length), read_col,
+			read_array[read_idx] );
+		}
+
+		write_array[write_idx] = read_array[read_idx];
+
+	}	
+
+}
+
+
+__device__ void generate_synapses(
+	int N,
+	int n,
+	int neuron_idx,
+	int* N_rep,
+	int* G_swap_tensor,
+	int& swap_src_N_s_start, int& swap_snk_N_s_start,
+	int& swap_src_G_count, int& swap_snk_G_count,
+	const int total_src_G_count, const int total_snk_G_count,
+	curandState &local_state,
+	int G_swap_tensor_shape_1, 
+	int swap_type,
+	int max_count,
+	int index_offset,
+	int relative_index_offset,
+	bool bprint
+){
+	
+	int snk_N;
+	int min_G_swap_snk = G_swap_tensor[neuron_idx + swap_snk_N_s_start * G_swap_tensor_shape_1];
+	int max_G_swap_snk = G_swap_tensor[neuron_idx + (swap_snk_N_s_start + swap_snk_G_count - 1) * G_swap_tensor_shape_1];
+	int s_offset = 0;
+	float r;
+	// int max_count = (snk_type - 1) * total_snk_G_count_exc + (2 - snk_type) * total_snk_G_count_inh;
+
+	int s_end = swap_src_N_s_start + swap_src_G_count;
+
+	for (int s=swap_src_N_s_start; s < s_end; s++){
+		
+		r = curand_uniform(&local_state);
+
+		snk_N = -N_rep[n + (s-s_offset) * N] - total_src_G_count;
+		// snk_type = N_G[snk_N * 2];
+
+		// snk_N = __float2int_rd(r * __int2float_rn(max_count)) + (snk_type - 1) * total_snk_G_count_inh;
+		snk_N = __float2int_rd(r * __int2float_rn(max_count)) + relative_index_offset;
+			
+				
+		if (bprint) printf("\nnew=%d (%f), t=%d, s=%d-%d, [%d, %d], [offset = %d - %d]", 
+						   snk_N, r, swap_type, s, s_offset,
+						   min_G_swap_snk, max_G_swap_snk, 
+						   index_offset, relative_index_offset);
+
+		if (swap_snk_G_count < total_snk_G_count)
+		{	
+			bool found = false;
+			int i = 0;	
+			int j = 0;
+			int swap_idx = neuron_idx + (swap_snk_N_s_start)  * G_swap_tensor_shape_1;
+			int G_swap0;
+			int G_swap_m1;
+
+			int write_row;
+			int write;
+
+			while ((!found) && (j < 20)){
+				
+				write_row = s - s_offset;
+				write = -i;
+				swap_idx = neuron_idx + (swap_snk_N_s_start + i )  * G_swap_tensor_shape_1;
+				
+				G_swap0 = G_swap_tensor[swap_idx];
+				G_swap_m1 = G_swap_tensor[swap_idx - G_swap_tensor_shape_1];
+
+				if((snk_N < min_G_swap_snk) || (swap_snk_G_count == 0)){
+				
+					if (swap_snk_G_count == 0){
+						max_G_swap_snk = snk_N;
+					}
+					write = snk_N;
+					swap_snk_N_s_start -= 1;
+					write_row = swap_snk_N_s_start;
+					min_G_swap_snk = snk_N;
+					N_rep[n + (s-s_offset ) * N] = N_rep[n + write_row * N];
+					s_offset++;
+					swap_snk_G_count++;
+					found = true;
+									
+				}
+				else if(snk_N > max_G_swap_snk){
+					max_G_swap_snk = snk_N;
+					found = true;
+					write = -swap_snk_G_count;
+				}
+				else if ((G_swap_m1 < snk_N) && (snk_N < G_swap0)){
+					found = true;
+				}
+				if (found){
+					G_swap_tensor[neuron_idx + (write_row) * G_swap_tensor_shape_1] = write;
+					break;
+				}
+				i = (i + 1) % swap_snk_G_count;
+
+				if ((snk_N == G_swap0)){
+					snk_N = (snk_N + 1) % max_count;
+				}
+
+				if (bprint) printf("\n+ new=%d[%d] G_swap0=%d, max_count=%d, (%d), s=%d", 
+				snk_N, i, G_swap0, max_count, swap_type, s);
+
+				j++;
+
+				// if (j >= 10){
+				// 	printf("\nn=%d; new=%d[%d] G_swap0=%d, max_count=%d, (%d), s=%d", 
+				// 		   n, snk_N, i, G_swap0, max_count, swap_type, s);
+				//}
+			}
+				
+			N_rep[n + (write_row) * N] = snk_N + index_offset - relative_index_offset;
+			if (bprint) printf("\n(found j=%d) N_rep[%d, %d]=%d [%d (snk_N) + %d - %d]", 
+				j, 
+				write_row, n, N_rep[n + (write_row) * N], snk_N,
+				index_offset, relative_index_offset
+			);
+		} 
+
+		// 	swap_snk_G_count++;
+	}
+
+}
+
+
 __global__ void swap_groups_(
 	const long* neurons, const int n_neurons, 
 	const long* groups, const int n_groups,
@@ -659,16 +813,18 @@ __global__ void swap_groups_(
 	int* N_G,
 	int* N_rep,
 	int* N_delays,
-	curandState* randstates
+	curandState* randstates,
+	const int print_idx
 ){
 	const int neuron_idx = blockIdx.x * blockDim.x + threadIdx.x; 
 
-	int print_idx =1910;
-
 	if (neuron_idx < n_neurons){
 
-		const int n = neurons[neuron_idx];
+		bool bprint = (neuron_idx == print_idx);
 
+		const int n = neurons[neuron_idx];
+		
+		// the group index contains the 'source group'-column (src_G) of the groups[]-array.
 		const int snk_group_index = group_indices[neuron_idx] + 2 * n_groups;
 
 		const int swap_src_G = groups[snk_group_index - 2 * n_groups];
@@ -678,7 +834,7 @@ __global__ void swap_groups_(
 		const int total_src_G_count = group_neuron_counts_total[snk_group_index - 2 * n_groups];
 		const int total_snk_G_count = group_neuron_counts_total[snk_group_index];
 
-		if (neuron_idx == print_idx){
+		if (bprint){
 			
 			
 			printf("\nswap_src %d (%d), src_G %d %d (%d), swap_snk %d (%d)  group_indices[%d] = %d\n", 
@@ -688,30 +844,57 @@ __global__ void swap_groups_(
 		}
 
 		int snk_N;
-		int swap_src_N_s_start = 0;
-		int swap_snk_N_s_start = N_delays[n + (swap_delay) * N];
+		int snk_type;
 		int snk_G;
 
-		int swap_src_G_count = 0;
-		int swap_snk_G_count = 0;
 
+		int s_start = N_delays[n + (swap_delay) * N];
 		int s_end =  N_delays[n + (swap_delay + 1) * N];
 
-		for (int s=swap_snk_N_s_start; s < s_end; s++)
+		int swap_src_N_s_start_inh = s_start;
+		int swap_src_N_s_start_exc = s_start;
+		int swap_snk_N_s_start_inh = s_start;
+		int swap_snk_N_s_start_exc = s_start;
+
+		int swap_src_G_count_inh = 0;
+		int swap_src_G_count_exc = 0;
+		int swap_snk_G_count_inh = 0;
+		int swap_snk_G_count_exc = 0;
+
+
+		for (int s=s_start; s < s_end; s++)
 		{
 			snk_N = N_rep[n + s * N];
+			snk_type = N_G[snk_N * 2];
 			snk_G = N_G[snk_N * 2 + 1];
 
 			if (snk_G == swap_src_G)
 			{
-				if (swap_src_N_s_start == 0){
-					swap_src_N_s_start = s;
+				if (snk_type == 1){
+					if (swap_src_G_count_inh == 0){
+						swap_src_N_s_start_inh = s;
+					}
+					if (swap_snk_G_count_inh ==0){
+						swap_snk_N_s_start_inh = s;
+					}
+					swap_src_G_count_inh += 1;
+
 				} 
+				else if ((snk_type == 2)){
+					if (swap_src_G_count_exc == 0){
+						swap_src_N_s_start_exc = s;
+					}
+					if (swap_snk_G_count_exc ==0){
+						swap_snk_N_s_start_exc = s;
+					}
+					swap_src_G_count_exc += 1;
+				}
 				
 				G_swap_tensor[neuron_idx + s * G_swap_tensor_shape_1] = -total_src_G_count-N_rep[n + s * N]; //-2;
-				if (neuron_idx == print_idx) printf("\n(%d) n_snk=%d, (snk_G=%d)  (s=%d) %d %d, src_count=%d", 
-					n, N_rep[n + s * N], snk_G, s, snk_G == swap_src_G, snk_G == swap_snk_G, swap_src_G_count);
-				swap_src_G_count += 1;
+				if (bprint) printf("\n(%d) n_snk=%d, (snk_G=%d)  (s=%d) %d %d, src_counts=[%d, %d]", 
+					n, N_rep[n + s * N], snk_G, s, snk_G == swap_src_G, snk_G == swap_snk_G, 
+					swap_src_G_count_inh, swap_src_G_count_exc);
+				
 				// N_rep[n + s * N] = N_rep[n + (s + 1) * N];
 				N_rep[n + s * N] = -1;
 				//swap_src_N_s_start++;
@@ -719,191 +902,219 @@ __global__ void swap_groups_(
 			}
 			else if (snk_G == swap_snk_G)
 			{
-				swap_snk_G_count += 1;
+				if (snk_type == 1){
+					if (swap_snk_G_count_inh == 0){
+						swap_snk_N_s_start_inh = s;
+					}
+					swap_snk_G_count_inh += 1;
+				} 
+				else if ((snk_type == 2)){
+					if (swap_snk_G_count_exc == 0){
+						swap_snk_N_s_start_exc = s;
+					}
+					swap_snk_G_count_exc += 1;
+				}
 
 				//G_swap_tensor[neuron_idx + (max_neurons_per_group + N_relative_G_indices[snk_N]) * G_swap_tensor_shape_1] = snk_N;
 				G_swap_tensor[neuron_idx + s * G_swap_tensor_shape_1] = N_relative_G_indices[snk_N];
 				
-				if (neuron_idx == print_idx) printf("\n(%d) n_snk=%d, (snk_G=%d)  (s=%d) %d %d, snk_N_rel=%d", 
-					n, N_rep[n + s * N], snk_G, s, snk_G == swap_src_G, snk_G == swap_snk_G, N_relative_G_indices[snk_N]);
+				if (bprint) printf("\n(%d) n_snk=%d, (snk_G=%d)  (s=%d) %d %d, snk_N_rel=%d", 
+					n, N_rep[n + s * N], snk_G, s, 
+					snk_G == swap_src_G, snk_G == swap_snk_G, 
+					N_relative_G_indices[snk_N]);
 			} 
-			else if((swap_src_G_count > 0) || (swap_snk_G_count > 0)){
+			else if((swap_src_G_count_inh > 0) 
+					|| (swap_src_G_count_exc > 0) 
+					|| (swap_snk_G_count_inh > 0)
+					|| (swap_snk_G_count_exc > 0)
+				){
 				G_swap_tensor[neuron_idx + s * G_swap_tensor_shape_1] = N_rep[n + s * N];	
 			}
 
-			if (snk_G < swap_snk_G){
-				swap_snk_N_s_start += 1;
-			} 
-
-
 		}
 
-		if (neuron_idx == print_idx){
-			printf("\n\nswap_src_N_s_start=%d, swap_src_G_count=%d swap_snk_G_count=%d\n", 
-				   swap_src_N_s_start, swap_src_G_count, swap_snk_G_count);
+		if (bprint){
+			printf("\n\ninh: src=[%d, +%d] snk=[%d, +%d]\n", 
+				   swap_src_N_s_start_inh, swap_src_G_count_inh, swap_snk_N_s_start_inh, swap_snk_G_count_inh);
+				   printf("exc: src=[%d, +%d] snk=[%d, +%d]\n", 
+				   swap_src_N_s_start_exc, swap_src_G_count_exc, swap_snk_N_s_start_exc, swap_snk_G_count_exc);
 		}
 
-		if (swap_src_G_count > 0){
+		int distance_inh = min((swap_src_G_count_inh + swap_src_N_s_start_inh) - swap_snk_N_s_start_inh, 
+								max(0, swap_src_N_s_start_inh - (swap_snk_G_count_inh + swap_snk_N_s_start_inh)));
 
-			int distance = min((swap_src_G_count + swap_src_N_s_start) - swap_snk_N_s_start, 
-			                   max(0, swap_src_N_s_start - (swap_snk_G_count + swap_snk_N_s_start)));
+		if (swap_src_G_count_inh > 0){
 
-			s_end = swap_src_G_count;
+
+			// s_end = swap_src_G_count;
 			
-			if (distance != 0){
-				int rep_idx;
-				int swap_idx;
-				int roll_mod = abs(swap_snk_N_s_start - swap_src_N_s_start);
-				
-				for (int s=0; s < roll_mod; s++){
-					
-					rep_idx = n + (swap_src_N_s_start + s) * N;
-					swap_idx = neuron_idx + (swap_src_N_s_start + ((s +  swap_src_G_count) % roll_mod)) * G_swap_tensor_shape_1;
-					//snk_N = N_rep[rep_idx];
-					
-					if (neuron_idx == print_idx){
-						printf("\nN_rep[%d, %d]=%d -> G_swap_tensor[%d, %d]=%d", 
-						swap_src_N_s_start + s, n,
-						N_rep[rep_idx], 
-						(swap_src_N_s_start + ((s +  swap_src_G_count) % roll_mod)), neuron_idx,
-						G_swap_tensor[swap_idx] );
-					}
+			if (distance_inh != 0){
 
-					N_rep[rep_idx] = G_swap_tensor[swap_idx];
-					
-				}	
+				int direction = -1 * (distance_inh > 0) + (distance_inh < 0);
+
+				roll_copy(
+					N_rep, G_swap_tensor, 
+					n, neuron_idx, 
+					swap_src_N_s_start_inh, 
+					N, G_swap_tensor_shape_1, 
+					abs(swap_snk_N_s_start_inh - swap_src_N_s_start_inh), 
+					direction * swap_src_G_count_inh, 
+					false);
+
+				swap_src_N_s_start_inh += -distance_inh;
+
+				if (bprint) {printf("\n\nswap_src_N_s_start_inh=%d, distance_inh=%d\n", swap_src_N_s_start_inh, distance_inh);}
+
 			}
-			
-		    swap_src_N_s_start += -distance;
+		}
 
-			if (neuron_idx == print_idx) {printf("\n\nswap_src_N_s_start=%d, distance=%d\n", swap_src_N_s_start, distance);}
-			
-			const int total_snk_G_count_inh = group_neuron_counts_inh[snk_group_index];
+		int distance_exc = min((swap_src_G_count_exc + swap_src_N_s_start_exc) - swap_snk_N_s_start_exc, 
+							   max(0, swap_src_N_s_start_exc - (swap_snk_G_count_exc + swap_snk_N_s_start_exc)));
+
+
+		if (swap_src_G_count_exc > 0){
+
+			if (distance_exc != 0){
+				int direction = -1 * (distance_exc > 0) + (distance_exc < 0);
+
+				roll_copy(
+					N_rep, G_swap_tensor, 
+					n, neuron_idx, 
+					swap_src_N_s_start_exc, 
+					N, G_swap_tensor_shape_1, 
+					abs(swap_snk_N_s_start_exc - swap_src_N_s_start_exc), 
+					direction * swap_src_G_count_exc, 
+					false);
+
+					swap_src_N_s_start_exc += -distance_exc;
+				
+				if (bprint) {printf("\n\nswap_src_N_s_start_exc=%d, distance_exc=%d\n", swap_src_N_s_start_exc, distance_exc);}
+
+			}
+		}	
+
+		if ((swap_src_G_count_inh)|| (swap_src_G_count_exc > 0)){
+
 			const int total_snk_G_count_exc = group_neuron_counts_exc[snk_group_index];
 
 			curandState local_state = randstates[neuron_idx];
-			int snk_type;
-			float r;
-			
-			s_end = swap_src_N_s_start + swap_src_G_count;
+			// float r;
 
-			int group_idx_inh_0 = G_neuron_typed_ccount[swap_snk_G];
+			// int group_idx_inh_0 = ;
 			int group_idx_exc_0 = G_neuron_typed_ccount[G + swap_snk_G];
 
-			int max_count;
 
-			int min_G_swap_snk = G_swap_tensor[neuron_idx + swap_snk_N_s_start * G_swap_tensor_shape_1];
-			int max_G_swap_snk = G_swap_tensor[neuron_idx + (swap_snk_N_s_start + swap_snk_G_count - 1) * G_swap_tensor_shape_1];
-
-			int s_offset = 0;
-
-			// bool is_min = false;
-	
-			for (int s=swap_src_N_s_start; s < s_end; s++){
-				// is_min = false;
-				r = curand_uniform(&local_state);
-	
-				snk_N = -N_rep[n + (s-s_offset) * N] - total_src_G_count;
-				snk_type = N_G[snk_N * 2];
-				max_count = (snk_type - 1) * total_snk_G_count_exc + (2 - snk_type) * total_snk_G_count_inh;
-	
-				snk_N = __float2int_rd(r * __int2float_rn(max_count)) + (snk_type - 1) * total_snk_G_count_inh;
-				
-					
-				if (neuron_idx == print_idx) printf("\nnew=%d (%d), s=%d-%d, [%d, %d], [%d, %d / %d]", 
-													snk_N, snk_type, s, s_offset,
-													min_G_swap_snk, max_G_swap_snk, 
-													group_idx_inh_0, group_idx_exc_0,total_snk_G_count_inh);
-
-				
-
-				if (swap_snk_G_count < total_snk_G_count){	
-					bool found = false;
-					int i = 0;	
-					int j = 0;
-					// int move = 1;
-					int swap_idx = neuron_idx + (swap_snk_N_s_start)  * G_swap_tensor_shape_1;
-					int G_swap0;
-					int G_swap_m1;
-
-					int write_row;
-					int write;
-
-					while ((!found) && (j < 20)){
-						write_row = s - s_offset;
-						write = -i;
-						swap_idx = neuron_idx + (swap_snk_N_s_start + i )  * G_swap_tensor_shape_1;
-						G_swap0 = G_swap_tensor[swap_idx];
-						G_swap_m1 = G_swap_tensor[swap_idx - G_swap_tensor_shape_1];
-
-						if((snk_N < min_G_swap_snk) || (swap_snk_G_count == 0)){
-							if (swap_snk_G_count == 0){
-								max_G_swap_snk = snk_N;
-							}
-							write = snk_N;
-							swap_snk_N_s_start -= 1;
-							write_row = swap_snk_N_s_start;
-							// G_swap_tensor[neuron_idx + (write_row)  * G_swap_tensor_shape_1] = snk_N;
-							min_G_swap_snk = snk_N;
-							N_rep[n + (s-s_offset ) * N] = N_rep[n + write_row * N];
-							s_offset++;
-							// is_min = true;
-							swap_snk_G_count++;
-							found = true;
-							
-							// break;
-						}
-						else if(snk_N > max_G_swap_snk){
-
-							max_G_swap_snk = snk_N;
-							found = true;
-							write = -swap_snk_G_count;
-							// G_swap_tensor[neuron_idx + (write_row) * G_swap_tensor_shape_1] = -i;
-							// break;
-						}
-						else if ((G_swap_m1 < snk_N) && (snk_N < G_swap0)){
-							// G_swap_tensor[neuron_idx + (write_row) * G_swap_tensor_shape_1] = -i;
-							found = true;
-							// break;
-						}
-						if (found){
-							G_swap_tensor[neuron_idx + (write_row) * G_swap_tensor_shape_1] = write;
-							break;
-						}
-						i = (i + 1) % swap_snk_G_count;
-
-						if ((snk_N == G_swap0)){
-							snk_N = (snk_N + 1) % max_count;
-						}
-
-						if (neuron_idx == print_idx) printf("\n+ new=%d[%d] G_swap0=%d, max_count=%d, (%d), s=%d", 
-						snk_N, i, G_swap0, max_count, snk_type, s);
-
-						j++;
-
-						// if (j >= 10){
-						// 	printf("\nn=%d; new=%d[%d] G_swap0=%d, max_count=%d, (%d), s=%d", 
-						// 		   n, snk_N, i, G_swap0, max_count, snk_type, s);
-						// }
-					}
-					
-					N_rep[n + (write_row) * N] = snk_N + (snk_type - 1) * (group_idx_exc_0 - total_snk_G_count_inh) + (2 - snk_type) * group_idx_inh_0;
-					if (neuron_idx == print_idx) printf("\n(found j=%d) N_rep[%d, %d]=%d [%d (snk_N) + %d]", 
-						j, 
-						write_row, n, N_rep[n + (write_row) * N], snk_N,
-						(snk_type - 1) * (group_idx_exc_0 - total_snk_G_count_inh) + (2 - snk_type) * group_idx_inh_0
-					);
-				} 
-
-				swap_snk_G_count++;
+			if (swap_src_G_count_inh > 0){
+				generate_synapses(
+					N,
+					n,
+					neuron_idx,
+					N_rep,
+					G_swap_tensor,
+					swap_src_N_s_start_inh, swap_snk_N_s_start_inh,
+					swap_src_G_count_inh, swap_snk_G_count_inh,
+					total_src_G_count, total_snk_G_count,
+					local_state,
+					G_swap_tensor_shape_1,
+					1,
+					group_neuron_counts_inh[snk_group_index],
+					G_neuron_typed_ccount[swap_snk_G],
+					0,
+					bprint
+				);
 			}
-	
 			randstates[neuron_idx] = local_state;
-	
 		}
 
-		//for ()
+		// int s_offset = 0;
 
+
+		// for (int s=swap_src_N_s_start; s < s_end; s++){
+		// 	r = curand_uniform(&local_state);
+
+		// 	snk_N = -N_rep[n + (s-s_offset) * N] - total_src_G_count;
+		// 	snk_type = N_G[snk_N * 2];
+		// 	max_count = (snk_type - 1) * total_snk_G_count_exc + (2 - snk_type) * total_snk_G_count_inh;
+
+		// 	snk_N = __float2int_rd(r * __int2float_rn(max_count)) + (snk_type - 1) * total_snk_G_count_inh;
+			
+		// 	if (bprint) printf("\nnew=%d (%d), s=%d-%d, [%d, %d], [%d, %d / %d]", 
+		// 										snk_N, snk_type, s, s_offset,
+		// 										min_G_swap_snk, max_G_swap_snk, 
+		// 										group_idx_inh_0, group_idx_exc_0,total_snk_G_count_inh);
+
+		// 	if (swap_snk_G_count < total_snk_G_count){	
+		// 		bool found = false;
+		// 		int i = 0;	
+		// 		int j = 0;
+		// 		int swap_idx = neuron_idx + (swap_snk_N_s_start)  * G_swap_tensor_shape_1;
+		// 		int G_swap0;
+		// 		int G_swap_m1;
+
+		// 		int write_row;
+		// 		int write;
+
+		// 		while ((!found) && (j < 20)){
+		// 			write_row = s - s_offset;
+		// 			write = -i;
+		// 			swap_idx = neuron_idx + (swap_snk_N_s_start + i )  * G_swap_tensor_shape_1;
+		// 			G_swap0 = G_swap_tensor[swap_idx];
+		// 			G_swap_m1 = G_swap_tensor[swap_idx - G_swap_tensor_shape_1];
+
+		// 			if((snk_N < min_G_swap_snk) || (swap_snk_G_count == 0)){
+		// 				if (swap_snk_G_count == 0){
+		// 					max_G_swap_snk = snk_N;
+		// 				}
+		// 				write = snk_N;
+		// 				swap_snk_N_s_start -= 1;
+		// 				write_row = swap_snk_N_s_start;
+		// 				min_G_swap_snk = snk_N;
+		// 				N_rep[n + (s-s_offset ) * N] = N_rep[n + write_row * N];
+		// 				s_offset++;
+		// 				swap_snk_G_count++;
+		// 				found = true;
+						
+		// 			}
+		// 			else if(snk_N > max_G_swap_snk){
+
+		// 				max_G_swap_snk = snk_N;
+		// 				found = true;
+		// 				write = -swap_snk_G_count;
+		// 			}
+		// 			else if ((G_swap_m1 < snk_N) && (snk_N < G_swap0)){
+		// 				found = true;
+		// 			}
+		// 			if (found){
+		// 				G_swap_tensor[neuron_idx + (write_row) * G_swap_tensor_shape_1] = write;
+		// 				break;
+		// 			}
+		// 			i = (i + 1) % swap_snk_G_count;
+
+		// 			if ((snk_N == G_swap0)){
+		// 				snk_N = (snk_N + 1) % max_count;
+		// 			}
+
+		// 			if (bprint) printf("\n+ new=%d[%d] G_swap0=%d, max_count=%d, (%d), s=%d", 
+		// 			snk_N, i, G_swap0, max_count, snk_type, s);
+
+		// 			j++;
+
+		// 			// if (j >= 10){
+		// 			// 	printf("\nn=%d; new=%d[%d] G_swap0=%d, max_count=%d, (%d), s=%d", 
+		// 			// 		   n, snk_N, i, G_swap0, max_count, snk_type, s);
+		// 			// }
+		// 		}
+				
+		// 		N_rep[n + (write_row) * N] = snk_N + (snk_type - 1) * (group_idx_exc_0 - total_snk_G_count_inh) + (2 - snk_type) * group_idx_inh_0;
+		// 		if (bprint) printf("\n(found j=%d) N_rep[%d, %d]=%d [%d (snk_N) + %d]", 
+		// 			j, 
+		// 			write_row, n, N_rep[n + (write_row) * N], snk_N,
+		// 			(snk_type - 1) * (group_idx_exc_0 - total_snk_G_count_inh) + (2 - snk_type) * group_idx_inh_0
+		// 		);
+		// 	} 
+
+		// 	swap_snk_G_count++;
+		// }
 
 	}
 }
@@ -917,7 +1128,8 @@ void SnnSimulation::swap_groups(
 	float* swap_rates,
 	int* group_neuron_counts_inh, int* group_neuron_counts_exc, int* group_neuron_counts_total,
 	int swap_delay,
-	int* N_relative_G_indices, int* G_neuron_typed_ccount
+	int* N_relative_G_indices, int* G_neuron_typed_ccount,
+	const int print_idx
 )
 {
 	LaunchParameters lp_swap_groups = LaunchParameters(n_neurons, (void *)swap_groups_);
@@ -939,7 +1151,8 @@ void SnnSimulation::swap_groups(
 		N_G,
 		N_rep,
 		N_delays,
-		rand_states
+		rand_states,
+		print_idx
 	);
 
 	checkCudaErrors(cudaDeviceSynchronize());
@@ -953,7 +1166,8 @@ void SnnSimulation::swap_groups_python(
 	const long swap_rates,
 	const long group_neuron_counts_inh, const long group_neuron_counts_exc, const long group_neuron_counts_total,
 	const int swap_delay,
-	const long N_relative_G_indices, const long G_neuron_typed_ccount
+	const long N_relative_G_indices, const long G_neuron_typed_ccount,
+	const int print_idx
 )
 {
 	swap_groups(reinterpret_cast<long*> (neurons), n_neurons, 
@@ -963,7 +1177,8 @@ void SnnSimulation::swap_groups_python(
 				reinterpret_cast<float*> (swap_rates),
 				reinterpret_cast<int*> (group_neuron_counts_inh), reinterpret_cast<int*> (group_neuron_counts_exc), reinterpret_cast<int*> (group_neuron_counts_total),
 				swap_delay,
-				reinterpret_cast<int*> (N_relative_G_indices), reinterpret_cast<int*> (G_neuron_typed_ccount)
+				reinterpret_cast<int*> (N_relative_G_indices), reinterpret_cast<int*> (G_neuron_typed_ccount),
+				print_idx
 				
 	);
 }
