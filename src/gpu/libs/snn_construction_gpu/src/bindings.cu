@@ -225,7 +225,29 @@ void reindex_N_rep_python(
     );
 }
 
+void fill_N_rep_groups_python(
+	int N,
+	int S,
+	const long N_G_dp,
+	const long N_rep_dp,
+	const long N_rep_groups_dp,
+    int N_G_n_cols,
+    int N_G_group_id_col
+){
+    const int* N_G = reinterpret_cast<int*> (N_G_dp);
+    const int* N_rep = reinterpret_cast<int*> (N_rep_dp);
+    int* N_rep_groups = reinterpret_cast<int*> (N_rep_groups_dp);
 
+    fill_N_rep_groups(
+		N,
+		S,
+		N_G,
+		N_rep,
+		N_rep_groups,
+		N_G_n_cols,
+		N_G_group_id_col
+    );
+}
 
 PYBIND11_MODULE(snn_construction_gpu, m)
 {
@@ -313,6 +335,17 @@ PYBIND11_MODULE(snn_construction_gpu, m)
           py::arg("sort_keys"),
           py::arg("N_rep"),
           py::arg("verbose") = false);
+
+    m.def("fill_N_rep_groups", 
+          &fill_N_rep_groups_python, 
+          py::arg("N"),
+          py::arg("S"),
+          py::arg("N_G"),
+          py::arg("N_rep"),
+          py::arg("N_rep_groups"),
+          py::arg("N_G_n_cols"),
+          py::arg("N_G_group_id_col")
+    );
 
     py::class_<CuRandStates, std::shared_ptr<CuRandStates>>(m, "CuRandStates_") //, py::dynamic_attr())
     .def(py::init<int>())

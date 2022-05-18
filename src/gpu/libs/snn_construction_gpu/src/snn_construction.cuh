@@ -12,7 +12,7 @@ void fill_N_G_group_id_and_G_neuron_count_per_type(
     int* G_neuron_counts,
     int G_shape_x, int G_shape_y, int G_shape_z,
     int N_pos_n_cols = 13,
-    int N_G_n_cols = 3,
+    int N_G_n_cols = 2,
     int N_G_neuron_type_col = 0,
     int N_G_group_id_col = 1
 );
@@ -105,4 +105,15 @@ void reindex_N_rep(
 	int* sort_keys,
 	int* N_rep,
 	bool verbose
+);
+
+
+void fill_N_rep_groups(
+	int N,
+	int S,
+	const int* N_G,
+	const int* N_rep,
+	int* N_rep_groups,
+    int N_G_n_cols = 2,
+    int N_G_group_id_col = 1
 );

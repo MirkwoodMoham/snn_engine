@@ -1311,3 +1311,49 @@ void reindex_N_rep(
 	  checkCudaErrors(cudaDeviceSynchronize());
 	  printf("\n");
 }
+
+
+__global__ void fill_N_rep_groups_(
+	const int N,
+	const int S,
+	const int* N_G,
+	const int* N_rep,
+	int* N_rep_groups,
+    const int N_G_n_cols,
+    const int N_G_group_id_col
+){
+	const int n = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if (n < N){
+
+		int rep_idx;
+
+		for (int s=0; s<S; s++){
+			rep_idx = n + s * N;
+			N_rep_groups[rep_idx] = N_G[N_rep[rep_idx] * N_G_n_cols + N_G_group_id_col]; 
+		}
+	}
+}
+
+
+void fill_N_rep_groups(
+	const int N,
+	const int S,
+	const int* N_G,
+	const int* N_rep,
+	int* N_rep_groups,
+    const int N_G_n_cols,
+    const int N_G_group_id_col
+){
+	LaunchParameters launch(N, (void *)fill_N_rep_groups_); 
+
+	fill_N_rep_groups_ KERNEL_ARGS2(launch.grid3, launch.block3)(
+		N,
+		S,
+		N_G,
+		N_rep,
+		N_rep_groups,
+		N_G_n_cols,
+		N_G_group_id_col
+	);
+}

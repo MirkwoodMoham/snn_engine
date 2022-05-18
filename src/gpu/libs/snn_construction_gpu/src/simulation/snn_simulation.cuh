@@ -111,23 +111,25 @@ struct SnnSimulation
     void swap_groups(
         long* neurons, int n_neurons, 
         long* groups, int n_groups, 
-        int* group_indices,
+        int* neuron_group_indices,
         int* G_swap_tensor, int max_neurons_per_group, const int G_swap_tensor_shape_1,
         float* swap_rates,
         int* group_neuron_counts_inh, int* group_neuron_counts_exc, int* group_neuron_counts_total,
         int swap_delay,
         int* N_relative_G_indices, int* G_neuron_typed_ccount,
+        int* neuron_group_counts,
         int print_idx
     );
     void swap_groups_python(
         long neurons, int n_neurons, 
         long groups, int n_groups, 
-        long group_indices,
+        long neuron_group_indices,
         long G_swap_tensor, int max_neurons_per_group, const int G_swap_tensor_shape_1,
         long swap_rates,
         long group_neuron_counts_inh, long group_neuron_counts_exc, long group_neuron_counts_total, 
         int swap_delay,
         long N_relative_G_indices, long G_neuron_typed_ccount,
+        long neuron_group_counts,
         int print_idx
     );
 };
