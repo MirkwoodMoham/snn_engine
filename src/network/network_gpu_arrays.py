@@ -152,6 +152,7 @@ class NetworkGPUArrays(GPUArrayCollection):
         )
         self.N_relative_G_indices = self._N_relative_G_indices()
         self.G_swap_tensor = self._G_swap_tensor()
+        self.print_allocated_memory('G_swap_tensor')
         self.swap_group_synapses(torch.from_numpy(grid.forward_groups).to(device=self.device).type(torch.int64))
         self.N_states.use_preset('rs', self.selected_neuron_mask(self._config.sensory_groups))
 
@@ -666,87 +667,92 @@ class NetworkGPUArrays(GPUArrayCollection):
         m = self._config.swap_tensor_shape_multiplicators
         return self.izeros((m[0], m[1] * max_neurons_per_group)) - 1
 
-    def swap_group_synapses(self, groups):
+    def swap_group_synapses(self, groups, self_swap=True):
         n_groups = groups.shape[1]
         if n_groups > self._config.swap_tensor_shape_multiplicators[1]:
             raise ValueError
 
-        g_flat = groups.ravel()
-        swap_delay = self.G_delay_distance[g_flat[0], g_flat[1]].item()
+        swap_delay = self.G_delay_distance[groups.ravel()[0], groups.ravel()[n_groups]].item()
         if not bool((self.G_delay_distance[
-                         g_flat[:groups.size().numel() - n_groups],
-                         g_flat[n_groups:groups.size().numel()]] == swap_delay).all()):
+                         groups.ravel()[:groups.size().numel() - n_groups],
+                         groups.ravel()[n_groups:groups.size().numel()]] == swap_delay).all()):
             raise ValueError
 
         chain_length = groups.shape[0] - 2
 
-        # group_neuron_counts_total = self.group_counts[g_flat].reshape(groups.shape).type(torch.int32)
-        group_neuron_counts_typed = (self.G_neuron_counts[:len(NeuronTypes)][:, g_flat]
+        group_neuron_counts_typed = (self.G_neuron_counts[:len(NeuronTypes)][:, groups.ravel()]
                                      .reshape((2, groups.shape[0], groups.shape[1])))
 
         group_neuron_counts_total = group_neuron_counts_typed[0] + group_neuron_counts_typed[1]
-        # group_indices = self.izeros(group_neuron_counts_total[1:chain_length+1].sum())
-        # n_inh_core_neurons = group_neuron_counts_typed[0][1:chain_length+1].sum()
-        # group_indices[:n_inh_core_neurons] = (
-        #     torch.repeat_interleave(torch.arange(n_groups, device=self.device).repeat(chain_length),
-        #                             group_neuron_counts_typed[0][1:chain_length+1].flatten()))
-        # group_indices[n_inh_core_neurons:] = (
-        #     torch.repeat_interleave(torch.arange(n_groups, device=self.device).repeat(chain_length),
-        #                             group_neuron_counts_typed[1][1:chain_length+1].flatten()))
+
         inh_sums = group_neuron_counts_typed[0].sum(axis=1)
         total_sums = group_neuron_counts_total.sum(axis=1)
-        swap_rates = self.fzeros((chain_length, n_groups)) + 1.
 
-        group_indices_offset = 0
-
-        max_neurons_per_group = int(self.G_swap_tensor.shape[0] / 2)
-
+        swap_rates0 = self.fzeros((chain_length, n_groups)) + 1.
+        swap_rates1 = self.fzeros((chain_length, n_groups)) + .5
+        # group_indices_offset = 0
+        # max_neurons_per_group = int(self.G_swap_tensor.shape[0] / 2)
         neuron_group_indices = self.izeros(self.G_swap_tensor.shape[1]) - 1
         neuron_group_counts = self.izeros((2, self.G_swap_tensor.shape[1]))
-
         neuron_group_indices_aranged = torch.arange(n_groups, device=self.device)
 
         for i in range(chain_length):
-            g = groups[i+1]
-            neurons = self.select(groups=g)
-            n_neurons = len(neurons)
-            # group_indices_ = group_indices[group_indices_offset: group_indices_offset + n_neurons]
-            n_inh_core_neurons = inh_sums[i+1]
+            program = groups[i:i + 3]
+            assert program.shape == swap_rates0.shape
+            n_inh_core_neurons = inh_sums[i + 1]
             neuron_group_indices[:n_inh_core_neurons] = (
-                torch.repeat_interleave(neuron_group_indices_aranged, group_neuron_counts_typed[0][i+1].ravel()))
+                torch.repeat_interleave(neuron_group_indices_aranged, group_neuron_counts_typed[0][i + 1].ravel()))
             neuron_group_indices[n_inh_core_neurons:total_sums[i+1]] = (
-                torch.repeat_interleave(neuron_group_indices_aranged, group_neuron_counts_typed[1][i+1].ravel()))
+                torch.repeat_interleave(neuron_group_indices_aranged, group_neuron_counts_typed[1][i + 1].ravel()))
+            self._single_group_swap(
+                program,
+                group_neuron_counts_total[i:i + 3], group_neuron_counts_typed[:, i:i + 3],
+                neuron_group_counts, neuron_group_indices,
+                swap_rates0)
 
-            assert (neuron_group_indices[neuron_group_indices >= 0] + g[0] - self.N_G[neurons][:, 1]).sum() == 0
+            self._single_group_swap(
+                program[[1, 1, 2], :].clone(),
+                group_neuron_counts_total[[i+1, i+1, i+2], :].clone(),
+                group_neuron_counts_typed[:, [i+1, i+1, i+2]].clone(),
+                neuron_group_counts, neuron_group_indices,
+                swap_rates1)
 
-            print_idx = min(1900000, n_neurons - 1)
-            # print_idx = 0
-
-            self.Simulation.swap_groups(
-                neurons.data_ptr(), n_neurons,
-                groups[i:i+3].data_ptr(), n_groups,
-                # group_indices_.data_ptr(),
-                neuron_group_indices.data_ptr(),
-                self.G_swap_tensor.data_ptr(), max_neurons_per_group, self.G_swap_tensor.shape[1],
-                swap_rates.data_ptr(),
-                group_neuron_counts_typed[0].data_ptr(),
-                group_neuron_counts_typed[1].data_ptr(),
-                group_neuron_counts_total.data_ptr(),
-                swap_delay,
-                self.N_relative_G_indices.data_ptr(), self.G_neuron_typed_ccount.data_ptr(),
-                neuron_group_counts.data_ptr(),
-                print_idx
-            )
-
-            # a, b = self.swap_validation(print_idx, neurons)
-            # print('\n\n', b)
-            assert (neuron_group_counts[0].any() == False)
-            self.N_rep_groups_cpu[:, neurons] = self.G_swap_tensor[:, :n_neurons].cpu()
-            group_indices_offset += len(neurons)
-            self.G_swap_tensor[:] = -1
             neuron_group_indices[:] = -1
 
         return
+
+    def _single_group_swap(self, program,
+                           group_neuron_counts_total, group_neuron_counts_typed,
+                           neuron_group_counts, neuron_group_indices,
+                           swap_rates):
+
+        swap_delay0 = self.G_delay_distance[program[0, 0], program[1, 0]].item()
+
+        neurons = self.select(groups=program[1])
+        n_neurons = len(neurons)
+
+        assert (neuron_group_indices[neuron_group_indices >= 0] + program[1, 0] - self.N_G[neurons][:, 1]).sum() == 0
+
+        print_idx = min(1900000, n_neurons - 1)
+        # print_idx = 0
+        self.Simulation.swap_groups(
+            neurons.data_ptr(), n_neurons,
+            program.data_ptr(), program.shape[1],
+            neuron_group_indices.data_ptr(),
+            self.G_swap_tensor.data_ptr(), self.G_swap_tensor.shape[1],
+            swap_rates.data_ptr(), swap_rates.data_ptr(),
+            group_neuron_counts_typed[0].data_ptr(), group_neuron_counts_typed[1].data_ptr(),
+            group_neuron_counts_total.data_ptr(),
+            self.G_delay_distance.data_ptr(),
+            self.N_relative_G_indices.data_ptr(), self.G_neuron_typed_ccount.data_ptr(), neuron_group_counts.data_ptr(),
+            print_idx)
+        a, b = self.swap_validation(print_idx, neurons)
+        # assert (neuron_group_counts[0].any() == False)
+        self.N_rep_groups_cpu[:, neurons] = self.G_swap_tensor[:, :n_neurons].cpu()
+
+        self.G_swap_tensor[:] = -1
+
+        neuron_group_counts[:] = 0
 
     def swap_validation(self, j, neurons):
         a = self.to_dataframe(self.G_swap_tensor)
@@ -755,4 +761,6 @@ class NetworkGPUArrays(GPUArrayCollection):
         b[2] = self.N_rep[:, neurons[j]].cpu().numpy()
         b[3] = self.N_G[b[2], 1].cpu().numpy()
         b[0] = self.N_rep_groups_cpu[:, neurons[j]].numpy()
+        b[4] = b[0] != b[3]
+
         return a, b
