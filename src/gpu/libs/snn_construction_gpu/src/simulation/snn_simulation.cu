@@ -651,12 +651,14 @@ __device__ void roll_copy(
 	int write_row_start, 
 	int n_write_array_cols, int n_read_array_cols,
 	const int copy_length, 
-	const int read_offset, bool bprint){
+	const int read_offset, 
+	bool bprint){
+	
 	int write_idx;
 	int read_idx;
 	//int roll_mod = abs(swap_snk_N_s_start - swap_src_N_s_start);
 
-	for (int s=0; s < copy_length; s++){
+	for (int s=0; s < abs(copy_length); s++){
 
 		write_idx = write_col + (write_row_start + s) * n_write_array_cols;
 		read_idx = read_col + (write_row_start + ((s +  read_offset) % copy_length)) * n_read_array_cols;
@@ -677,40 +679,76 @@ __device__ void roll_copy(
 
 
 __device__ void shift_values_row_wise_(
-	int shift_,
+	int shift_start_offset,
 	int* array0, int* array1,
 	int col0, int col1,
 	int n_cols0, int n_cols1,
-	int end_row
+	int end_row,
+	int swap_dir,
+	bool bprint
 ){
 	int idx_end0 = col0 + (end_row) * n_cols0;
 	int idx_end1 = col1 + (end_row) * n_cols1;
 	int value0;
-	for (int k=-shift_; k < 0; k++){
-		value0 = array0[idx_end0 + (k+1) * n_cols0];
-		if (value0 > 0){
-			array0[idx_end0 + k * n_cols0] = value0;
-			array1[idx_end1 + k * n_cols1] = array1[idx_end1 + (k+1) * n_cols1];
-		}
+
+	if (swap_dir == 1){
+		for (int k=shift_start_offset; k < 0; k++){
+			value0 = array0[idx_end0 + (k+swap_dir) * n_cols0];
+			if (value0 > 0){
+	
+				if (bprint){
+					printf("\nN_rep[%d, %d] = %d -> %d, G_swap_index[%d, %d] = %d -> %d",
+						end_row + k, idx_end0, array0[idx_end0 + k * n_cols0], value0,
+						end_row + k, idx_end1, array1[idx_end1 + k * n_cols1], array1[idx_end1 + (k+swap_dir) * n_cols1]
+					);
 		
+				}
+	
+				array0[idx_end0 + k * n_cols0] = value0;
+				array1[idx_end1 + k * n_cols1] = array1[idx_end1 + (k+swap_dir) * n_cols1];
+			}
+		
+		}
 	}
+	
+	else if (swap_dir == -1){
+		for (int k=0; k > shift_start_offset; k--){
+			value0 = array0[idx_end0 + (k+swap_dir) * n_cols0];
+			if (value0 > 0){
+	
+				if (bprint){
+					printf("\nN_rep[%d, %d] = %d -> %d, G_swap_index[%d, %d] = %d -> %d",
+						end_row + k, idx_end0, array0[idx_end0 + k * n_cols0], value0,
+						end_row + k, idx_end1, array1[idx_end1 + k * n_cols1], array1[idx_end1 + (k+swap_dir) * n_cols1]
+					);
+		
+				}
+	
+				array0[idx_end0 + k * n_cols0] = value0;
+				array1[idx_end1 + k * n_cols1] = array1[idx_end1 + (k+swap_dir) * n_cols1];
+			}
+		
+		}
+	}
+
 }
 
 
 __device__ void generate_synapses(
-	int N,
-	int n,
-	int neuron_idx,
+	const int N,
+	const int n,
+	const int neuron_idx,
 	int* N_rep,
 	int* G_swap_tensor,
 	int& swap_src_N_s_start, int& swap_snk_N_s_start,
 	int& swap_src_G_count, int& swap_snk_G_count,
-	int max_snk_count,
+	const int max_snk_count,
 	curandState &local_state,
 	int G_swap_tensor_shape_1, 
-	int swap_type,
-	int index_offset,
-	int relative_index_offset,
+	const int swap_type,
+	const int index_offset,
+	const int relative_index_offset,
+	const int swap_dir,
 	bool bprint
 ){
 	
@@ -721,20 +759,16 @@ __device__ void generate_synapses(
 		min_G_swap_snk = max_snk_count + relative_index_offset;
 		max_G_swap_snk = -1;
 	}
-	//int s_offset = 0;
 	float r;
-	// int max_snk_count = (snk_type - 1) * total_snk_G_count_exc + (2 - snk_type) * total_snk_G_count_inh;
 
 	int s_end = swap_src_N_s_start + swap_src_G_count;
+	
 
 	for (int s=swap_src_N_s_start; s < s_end; s++){
+	// for (int s=swap_src_N_s_start; s < swap_src_N_s_start + 2; s++){
 		
 		r = curand_uniform(&local_state);
 
-		// snk_N = -N_rep[n + (s-s_offset) * N] - total_src_G_count;
-		// snk_type = N_G[snk_N * 2];
-
-		// snk_N = __float2int_rd(r * __int2float_rn(max_snk_count)) + (snk_type - 1) * total_snk_G_count_inh;
 		snk_N = __float2int_rd(r * __int2float_rn(max_snk_count)) + relative_index_offset;
 			
 				
@@ -753,11 +787,11 @@ __device__ void generate_synapses(
 			int G_swap_m1;
 
 			int write_row;
-			// int write;
 
 			int last_write_mode = 0;
 			int write_mode = 0;
 
+			// while ((!found) && (j < 40)){
 			while ((!found) && (j < G_swap_tensor_shape_1)){
 				
 				write_mode = 0;
@@ -773,7 +807,12 @@ __device__ void generate_synapses(
 				
 	
 					min_G_swap_snk = snk_N;
-					write_row = swap_snk_N_s_start - 1;
+					
+					if (swap_dir == 1){
+						write_row = swap_snk_N_s_start - 1;
+					} else {
+						write_row = swap_snk_N_s_start;
+					}
 					write_mode = 1;
 
 					if (swap_snk_G_count == 0){
@@ -788,21 +827,37 @@ __device__ void generate_synapses(
 					// 	min_G_swap_snk = snk_N;
 					// }
 					max_G_swap_snk = snk_N;
-					write_row = swap_snk_N_s_start + swap_snk_G_count - 1;
+					if (swap_dir == 1){
+						write_row = swap_snk_N_s_start + swap_snk_G_count - 1;
+					} else {
+						write_row = swap_snk_N_s_start + swap_snk_G_count;
+					}
+					
 
 				}
 				else if ((G_swap_m1 < snk_N) && (snk_N < G_swap0)){
 					write_mode = 3;
-					write_row = swap_snk_N_s_start + i - 1;
+					if (swap_dir == 1){
+						write_row = swap_snk_N_s_start + i - 1;
+					} else {
+						write_row = swap_snk_N_s_start + i;
+					}
+					
 				}
 
 				found = write_mode > 0;
 
 				if (found){
-					swap_snk_N_s_start -= 1;
+					if (swap_dir == 1){
+						swap_snk_N_s_start -= 1;
+					} else {
+						swap_src_N_s_start += 1;
+					}
+					
 					// write = snk_N;
 					// s_offset++;
 					swap_snk_G_count++;
+					swap_src_G_count--;
 					// G_swap_tensor[neuron_idx + (write_row) * G_swap_tensor_shape_1] = write;
 					break;}
 				
@@ -838,14 +893,28 @@ __device__ void generate_synapses(
 			}
 
 			//|| (j >= 30)
-			if (write_mode > 1){
+			if ((swap_dir > 0) && (write_mode > 1)){
 				shift_values_row_wise_(
-					write_row - swap_snk_N_s_start + 1,
+					swap_snk_N_s_start - write_row - 1,
 					N_rep, G_swap_tensor,
 					n, neuron_idx,
 					N, G_swap_tensor_shape_1,
-					write_row);
+					write_row,
+					swap_dir,
+					bprint
+				);
+			} else if ((swap_dir < 0) && (write_mode > 0) && (write_mode != 2)){
+				shift_values_row_wise_(
+					write_row - swap_src_N_s_start - 1,
+					N_rep, G_swap_tensor,
+					n, neuron_idx,
+					N, G_swap_tensor_shape_1,
+					swap_src_N_s_start,
+					swap_dir,
+					bprint
+				);
 			}
+
 
 			N_rep[n + (write_row) * N] = snk_N + index_offset - relative_index_offset;
 			G_swap_tensor[neuron_idx + (write_row) * G_swap_tensor_shape_1] = snk_N;
@@ -912,7 +981,7 @@ __global__ void swap_groups_(
 		const int total_snk_G_count = group_neuron_counts_total[snk_group_index];
 
 		if (bprint){		
-			printf("\nswap_src %d (%d), src_G %d %d (%d), swap_snk %d (%d)  neuron_group_indices[%d] = %d\n", 
+			printf("\n\nswap_src %d (%d), src_G %d %d (%d), swap_snk %d (%d)  neuron_group_indices[%d] = %d\n", 
 			swap_src_G, total_src_G_count,
 			N_G[2 * n + 1], src_G, group_neuron_counts_total[snk_group_index - n_groups],
 			swap_snk_G, total_snk_G_count, neuron_idx, (int)neuron_group_indices[neuron_idx]);
@@ -952,9 +1021,6 @@ __global__ void swap_groups_(
 					if (swap_src_G_count == 0){
 						swap_src_N_s_start = s;
 					}
-					if (swap_snk_G_count ==0){
-						swap_snk_N_s_start = s;
-					}
 					swap_src_G_count += 1;
 
 					G_swap_tensor[neuron_idx + s * G_swap_tensor_shape_1] = -total_src_G_count-N_rep[n + s * N]; //-2;
@@ -993,7 +1059,7 @@ __global__ void swap_groups_(
 		}
 
 		if (swap_snk_G_count == 0){
-			swap_snk_N_s_start += 1;
+			swap_snk_N_s_start = swap_src_N_s_start + swap_src_G_count;
 		}
 		// if (swap_snk_G_count_exc == 0){
 		// 	swap_snk_N_s_start_exc += 1;
@@ -1014,11 +1080,11 @@ __global__ void swap_groups_(
 
 
 		if (bprint){
-			printf("\n\nrow intervals: src=[%d, %d (+%d)) snk=[%d, %d (+%d))\n", 
+			printf("\n\nrow intervals: src=[%d, %d (+%d)) snk=[%d, %d (+%d)), swap_rate=%f\n", 
 				   swap_src_N_s_start, swap_src_N_s_start + swap_src_G_count, 
 				   swap_src_G_count, 
 				   swap_snk_N_s_start, swap_snk_N_s_start + swap_snk_G_count,
-				   swap_snk_G_count);
+				   swap_snk_G_count, swap_rate);
 				//    printf("exc: src=[%d, +%d] snk=[%d, +%d]\n", 
 				//    swap_src_N_s_start_exc, swap_src_G_count_exc, swap_snk_N_s_start_exc, swap_snk_G_count_exc);
 		}
@@ -1027,28 +1093,38 @@ __global__ void swap_groups_(
 
 			int distance = max(swap_snk_N_s_start - (swap_src_N_s_start + swap_src_G_count), 
 						       min(0, swap_snk_N_s_start + swap_snk_G_count - swap_src_N_s_start));
+
+			int swap_dir = 1 * (swap_snk_N_s_start > swap_src_N_s_start) + -1 * (swap_snk_N_s_start < swap_src_N_s_start);
 			
 			if (distance != 0){
 
-				int direction = 1 * (distance > 0) + -1 * (distance < 0);
+				// if (swap_dir == 1){
+					roll_copy(
+						N_rep, G_swap_tensor, 
+						n, neuron_idx, 
+						min(swap_src_N_s_start, swap_snk_N_s_start + swap_snk_G_count), 
+						N, G_swap_tensor_shape_1, 
+						(swap_snk_N_s_start - swap_src_N_s_start) * (swap_dir == 1) + (swap_dir == -1) * (-distance + swap_src_G_count), 
+						swap_src_G_count * (swap_dir == 1) - distance *  (swap_dir == -1), 
+						bprint);
+				// } else {
+				// 	roll_copy(
+				// 		N_rep, G_swap_tensor, 
+				// 		n, neuron_idx, 
+				// 		swap_snk_N_s_start, 
+				// 		N, G_swap_tensor_shape_1, 
+				// 		swap_snk_N_s_start - swap_src_N_s_start, 
+				// 		swap_dir * swap_src_G_count, 
+				// 		bprint);
+				// }
 
-				roll_copy(
-					N_rep, G_swap_tensor, 
-					n, neuron_idx, 
-					swap_src_N_s_start, 
-					N, G_swap_tensor_shape_1, 
-					abs(swap_snk_N_s_start - swap_src_N_s_start), 
-					direction * swap_src_G_count, 
-					bprint);
 
 				swap_src_N_s_start += distance;
 
 				if (bprint) {printf("\n\nswap_src_N_s_start=%d, distance=%d\n", swap_src_N_s_start, distance);}
 
 			}
-		}	
 
-		if ((swap_src_G_count) > 0){
 
 			curandState local_state = randstates[neuron_idx];
 
@@ -1079,6 +1155,7 @@ __global__ void swap_groups_(
 					expected_snk_type,
 					index_offset,
 					relative_index_offset,
+					swap_dir,
 					bprint
 				);
 			}

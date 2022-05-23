@@ -668,6 +668,10 @@ class NetworkGPUArrays(GPUArrayCollection):
         return self.izeros((m[0], m[1] * max_neurons_per_group)) - 1
 
     def swap_group_synapses(self, groups, self_swap=True):
+
+        # groups = groups[:3:, [0]]
+        # groups = groups.flip(0)
+
         n_groups = groups.shape[1]
         if n_groups > self._config.swap_tensor_shape_multiplicators[1]:
             raise ValueError
@@ -698,7 +702,7 @@ class NetworkGPUArrays(GPUArrayCollection):
 
         for i in range(chain_length):
             program = groups[i:i + 3]
-            assert program.shape == swap_rates0.shape
+
             n_inh_core_neurons = inh_sums[i + 1]
             neuron_group_indices[:n_inh_core_neurons] = (
                 torch.repeat_interleave(neuron_group_indices_aranged, group_neuron_counts_typed[0][i + 1].ravel()))
@@ -708,14 +712,14 @@ class NetworkGPUArrays(GPUArrayCollection):
                 program,
                 group_neuron_counts_total[i:i + 3], group_neuron_counts_typed[:, i:i + 3],
                 neuron_group_counts, neuron_group_indices,
-                swap_rates0)
+                swap_rates0[i])
 
             self._single_group_swap(
                 program[[1, 1, 2], :].clone(),
                 group_neuron_counts_total[[i+1, i+1, i+2], :].clone(),
                 group_neuron_counts_typed[:, [i+1, i+1, i+2]].clone(),
                 neuron_group_counts, neuron_group_indices,
-                swap_rates1)
+                swap_rates1[i])
 
             neuron_group_indices[:] = -1
 
@@ -726,7 +730,7 @@ class NetworkGPUArrays(GPUArrayCollection):
                            neuron_group_counts, neuron_group_indices,
                            swap_rates):
 
-        swap_delay0 = self.G_delay_distance[program[0, 0], program[1, 0]].item()
+        # swap_delay0 = self.G_delay_distance[program[0, 0], program[1, 0]].item()
 
         neurons = self.select(groups=program[1])
         n_neurons = len(neurons)
