@@ -964,7 +964,8 @@ __global__ void swap_groups_(
 
 	if (neuron_idx < n_neurons){
 
-		bool bprint = (neuron_idx == min(print_idx, n_neurons- 1));
+		// bool bprint = (neuron_idx == min(print_idx, n_neurons- 1));
+		bool bprint = false;
 
 		const int n = neurons[neuron_idx];
 		
@@ -1085,8 +1086,8 @@ __global__ void swap_groups_(
 				   swap_src_G_count, 
 				   swap_snk_N_s_start, swap_snk_N_s_start + swap_snk_G_count,
 				   swap_snk_G_count, swap_rate);
-				//    printf("exc: src=[%d, +%d] snk=[%d, +%d]\n", 
-				//    swap_src_N_s_start_exc, swap_src_G_count_exc, swap_snk_N_s_start_exc, swap_snk_G_count_exc);
+					//    printf("exc: src=[%d, +%d] snk=[%d, +%d]\n", 
+					//    swap_src_N_s_start_exc, swap_src_G_count_exc, swap_snk_N_s_start_exc, swap_snk_G_count_exc);
 		}
 
 		if (swap_src_G_count > 0){
