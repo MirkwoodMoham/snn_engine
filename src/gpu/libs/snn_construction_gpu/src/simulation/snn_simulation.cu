@@ -166,7 +166,9 @@ SnnSimulation::SnnSimulation(
 	float* fired_,
 	float* firing_times_,
 	int* firing_idcs_,
-	int* firing_counts_
+	int* firing_counts_,
+	int* G_stdp_config0_,
+	int* G_stdp_config1_
 ){
     
 	N = N_;
@@ -208,6 +210,9 @@ SnnSimulation::SnnSimulation(
 	firing_idcs_read = firing_idcs;
 	
 	firing_counts_write = firing_counts;
+
+	G_stdp_config0 = G_stdp_config0_;
+	G_stdp_config1 = G_stdp_config1_;
 
 	reset_firing_times_ptr_threshold = 13 * N;
 
@@ -937,8 +942,6 @@ __device__ void generate_synapses(
 
 
 
-
-
 __global__ void swap_groups_(
 	const long* neurons, const int n_neurons, 
 	const long* groups, const int n_groups,
@@ -1286,4 +1289,19 @@ void SnnSimulation::swap_groups_python(
 				print_idx
 				
 	);
+}
+
+void SnnSimulation::set_stdp_config(int stdp_config_id, bool activate){
+
+	if (stdp_config_id==0){
+		G_stdp_config_current = G_stdp_config0;
+	} else if (stdp_config_id==1){
+		G_stdp_config_current = G_stdp_config1;
+	} else {
+		throw std::invalid_argument( "not in [0, 1]" );
+	}
+
+	if (activate){
+		stdp_active = true;
+	}
 }

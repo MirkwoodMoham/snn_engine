@@ -8,6 +8,7 @@
 #include <string>
 #include <sstream>
 #include <vector>
+#include <stdexcept>
 
 typedef unsigned int uint;
 

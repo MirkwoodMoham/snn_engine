@@ -613,6 +613,12 @@ class OutputCells(IOCells):
         self.states_gpu.selected = mask
         self.states_gpu.b_output_group = torch.where(mask, 1, 0)
 
+        active_output_groups = self.network.GPU.select_groups(self.states_gpu.b_output_group.type(torch.bool))
+        if ((self.network.GPU.active_output_groups is None) or
+                (len(self.network.GPU.active_output_groups) != len(active_output_groups)) or
+                (not bool((active_output_groups == self.network.GPU.active_output_groups).all()))):
+            self.network.GPU.set_active_output_groups(active_output_groups)
+
         self.actualize_colors()
 
         self.network.GPU.actualize_plot_map(

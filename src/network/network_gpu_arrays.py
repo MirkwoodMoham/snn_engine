@@ -87,10 +87,11 @@ class NetworkGPUArrays(GPUArrayCollection):
          self.G_neuron_typed_ccount) = self._N_G_and_G_neuron_counts_1of2(shapes, grid, neurons)
 
         self.neuron_ids = torch.arange(config.N).to(device=self.device)
+        self.group_ids = torch.arange(config.G).to(device=self.device)
         self.group_indices = self._set_group_indices()
 
         self.G_pos: RegisteredGPUArray = self._G_pos(shape=shapes.G_pos, vbo=buffers.selected_group_boxes_vbo)
-        self.G_delay_distance = self._G_delay_distance(self.G_pos)
+        self.G_distance, self.G_delay_distance = self._G_delay_distance(self.G_pos)
         self._G_neuron_counts_2of2(self.G_delay_distance, self.G_neuron_counts)
         self.G_group_delay_counts = self._G_group_delay_counts(shapes.G_delay_counts, self.G_delay_distance)
 
@@ -120,8 +121,9 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.Firing_times = self.fzeros((15, self._config.N))
         self.Firing_idcs = self.izeros((15, self._config.N))
         self.Firing_counts = self.izeros((1, T * 2))
-        # print()
-        # print(self.N_states)
+
+        self.G_stdp_config0 = self.izeros((self._config.G, self._config.G))
+        self.G_stdp_config1 = self.izeros((self._config.G, self._config.G))
 
         self.Simulation = snn_simulation_gpu.SnnSimulation(
             N=self._config.N,
@@ -148,13 +150,20 @@ class NetworkGPUArrays(GPUArrayCollection):
             fired=self.Fired.data_ptr(),
             firing_times=self.Firing_times.data_ptr(),
             firing_idcs=self.Firing_idcs.data_ptr(),
-            firing_counts=self.Firing_counts.data_ptr()
+            firing_counts=self.Firing_counts.data_ptr(),
+            G_stdp_config0=self.G_stdp_config0.data_ptr(),
+            G_stdp_config1=self.G_stdp_config1.data_ptr()
         )
         self.N_relative_G_indices = self._N_relative_G_indices()
         self.G_swap_tensor = self._G_swap_tensor()
         self.print_allocated_memory('G_swap_tensor')
         self.swap_group_synapses(torch.from_numpy(grid.forward_groups).to(device=self.device).type(torch.int64))
         self.N_states.use_preset('rs', self.selected_neuron_mask(self._config.sensory_groups))
+
+        self.Simulation.set_stdp_config(0)
+
+        self.active_output_groups = None
+
 
     def update(self):
         self.plotting_arrays.voltage.map()
@@ -215,7 +224,7 @@ class NetworkGPUArrays(GPUArrayCollection):
 
     def _G_delay_distance(self, G_pos: RegisteredGPUArray):
         G_pos_distance = torch.cdist(G_pos.tensor, G_pos.tensor)
-        return ((self._config.D - 1) * G_pos_distance / G_pos_distance.max()).round().int()
+        return G_pos_distance, ((self._config.D - 1) * G_pos_distance / G_pos_distance.max()).round().int()
 
     def _curand_states(self):
         cu = snn_construction_gpu.CuRandStates(self._config.N).ptr()
@@ -629,6 +638,9 @@ class NetworkGPUArrays(GPUArrayCollection):
     def select(self, groups):
         return self.neuron_ids[self.selected_neuron_mask(groups)]
 
+    def select_groups(self, mask):
+        return self.group_ids[mask]
+
     def actualize_plot_map(self, groups):
         selected_neurons = self.neuron_ids[self.selected_neuron_mask(groups)]
 
@@ -768,3 +780,28 @@ class NetworkGPUArrays(GPUArrayCollection):
         b[4] = b[0] != b[3]
 
         return a, b
+
+    def _stdp_distance_based_config(self, target_group, target_config: torch.Tensor):
+
+        distance_to_target_group = self.G_distance[:, target_group]
+
+        xx = distance_to_target_group.reshape(self._config.G, 1).repeat(1, self._config.G)
+
+        mask = (xx > distance_to_target_group)
+
+        target_config[mask.T] = 1
+        target_config[~mask.T] = -1
+        target_config[(xx == distance_to_target_group).T] = 0
+
+    def set_active_output_groups(self, output_groups):
+        assert len(output_groups) == 2
+        output_group_types = self.G_props.output_type[output_groups].type(torch.int64)
+
+        group0 = output_groups[output_group_types == 0].item()
+        group1 = output_groups[output_group_types == 1].item()
+
+        self._stdp_distance_based_config(group0, self.G_stdp_config0)
+        b = self.to_dataframe(self.G_stdp_config0)
+
+        self._stdp_distance_based_config(group1, self.G_stdp_config1)
+

@@ -43,6 +43,11 @@ struct SnnSimulation
     
     int* firing_counts_write;
     int* firing_counts;
+
+    int* G_stdp_config0;
+    int* G_stdp_config1;
+    int* G_stdp_config_current;
+    bool stdp_active;
     
     LaunchParameters lp_update_state;
     LaunchParameters lp_update_voltage_plot;
@@ -101,7 +106,10 @@ struct SnnSimulation
         float* fired_,
         float* firing_times_,
         int* firing_idcs_,
-        int* firing_counts_
+        int* firing_counts_,
+        
+        int* G_stdp_config0_,
+        int* G_stdp_config1_
     );
     
     void update_voltage_plot();
@@ -132,4 +140,6 @@ struct SnnSimulation
         long neuron_group_counts,
         int print_idx
     );
+
+    void set_stdp_config(int stdp_config_id, bool activate = true);
 };

@@ -32,7 +32,9 @@ SnnSimulation make_SnnSimulation(
     const long fired_dp,
     const long firing_times_dp,
     const long firing_idcs_dp,
-    const long firing_counts_dp
+    const long firing_counts_dp,
+    const long G_stdp_config0_dp,
+    const long G_stdp_config1_dp
 ){
     float* voltage_plot_data = reinterpret_cast<float*> (voltage_plot_data_dp);
     int* voltage_plot_map = reinterpret_cast<int*> (voltage_plot_map_dp);
@@ -52,6 +54,8 @@ SnnSimulation make_SnnSimulation(
     int* firing_idcs = reinterpret_cast<int*> (firing_idcs_dp);
     int* firing_counts = reinterpret_cast<int*> (firing_counts_dp);
 
+    int* G_stdp_config0 = reinterpret_cast<int*> (G_stdp_config0_dp);
+    int* G_stdp_config1 = reinterpret_cast<int*> (G_stdp_config1_dp);
     
     return SnnSimulation(
         N,
@@ -78,7 +82,9 @@ SnnSimulation make_SnnSimulation(
         fired,
         firing_times,
         firing_idcs,
-        firing_counts
+        firing_counts,
+        G_stdp_config0,
+        G_stdp_config1
     );
 }
 
@@ -97,9 +103,12 @@ PYBIND11_MODULE(snn_simulation_gpu, m)
     .def_readonly("D", &SnnSimulation::D)
     .def_readonly("t", &SnnSimulation::t)
     .def_readonly("N_G", &SnnSimulation::N_G)
+    .def_readwrite("stdp_active", &SnnSimulation::stdp_active)
     .def("update", &SnnSimulation::update)
     .def("swap_groups", &SnnSimulation::swap_groups_python)
-    // .def_readonly("p", &CuRandStates::p)
+    .def("set_stdp_config", &SnnSimulation::set_stdp_config, 
+         py::arg("stdp_config_id"), 
+         py::arg("activate") = true)
     .def("__repr__",
         [](const SnnSimulation &sim) {
             return "SnnSimulation(N=" + std::to_string(sim.N) + ")";
@@ -130,6 +139,8 @@ PYBIND11_MODULE(snn_simulation_gpu, m)
         py::arg("fired"),
         py::arg("firing_times"),
         py::arg("firing_idcs"),
-        py::arg("firing_counts")
+        py::arg("firing_counts"),
+        py::arg("G_stdp_config0"),
+        py::arg("G_stdp_config1")
     );
 }
