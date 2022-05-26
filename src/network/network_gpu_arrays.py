@@ -787,10 +787,10 @@ class NetworkGPUArrays(GPUArrayCollection):
 
         xx = distance_to_target_group.reshape(self._config.G, 1).repeat(1, self._config.G)
 
-        mask = (xx > distance_to_target_group)
+        mask = (xx > distance_to_target_group).T
 
-        target_config[mask.T] = 1
-        target_config[~mask.T] = -1
+        target_config[mask] = 1
+        target_config[~mask] = -1
         target_config[(xx == distance_to_target_group).T] = 0
 
     def set_active_output_groups(self, output_groups):

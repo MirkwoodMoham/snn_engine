@@ -261,8 +261,9 @@ __global__ void update_current_(
 	const int n_fired_m1_to_end,
 	const int n_fired,
 	const int t, 
-	const int* N_delays
-	//float* debug_i
+	const int* N_delays,
+	bool r_stdp,
+	int* G_stdp_config_current
 )
 {
 	//const int tid_x = blockIdx.get_x * blockDim.get_x + threadIdx.get_x;
@@ -320,6 +321,12 @@ __global__ void update_current_(
 		// 	// 	}
 		// 	// }
 	 	// }
+		
+		int src_G;
+		
+		if (r_stdp){
+			src_G = N_G[n * 2 + 1];
+		}
 
 		int snk_neuron;
 		int snk_G;
@@ -365,6 +372,10 @@ __global__ void update_current_(
 			if (!snk_G_is_sensory)
 			{
 				atomicAdd(&N_states[snk_neuron + 7 * N], N_weights[idx]);
+			}
+
+			if ((r_stdp) && (G_stdp_config_current[])){
+				
 			}
 		}
 	}
@@ -621,8 +632,9 @@ void SnnSimulation::update(const bool verbose)
 		n_fired_m1_to_end,
 		n_fired,
 		t,
-		N_delays
-		// debug_i.get_dp()
+		N_delays,
+		stdp_active,
+		G_stdp_config_current
     );
 	
 	checkCudaErrors(cudaDeviceSynchronize());

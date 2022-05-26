@@ -44,10 +44,10 @@ struct SnnSimulation
     int* firing_counts_write;
     int* firing_counts;
 
+    bool stdp_active;
     int* G_stdp_config0;
     int* G_stdp_config1;
     int* G_stdp_config_current;
-    bool stdp_active;
     
     LaunchParameters lp_update_state;
     LaunchParameters lp_update_voltage_plot;
