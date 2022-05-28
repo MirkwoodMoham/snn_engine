@@ -10,7 +10,8 @@ __global__ void update_N_state_(
 	const int* N_G,
 	const float* G_props,
 	float* N_states,
-	float* fired
+	float* fired,
+	int* last_fired
 	// float* neuron_color,
 	// float* debug_i,
 	// float* debug_v
@@ -60,6 +61,7 @@ __global__ void update_N_state_(
 			v = c;
 			u = u + d;
 			fired[n] = t;
+			last_fired[n] = __float2int_rn(t);
 			N_pos[n * 13 + 10] = 1.f;
 		} 
 		
@@ -160,10 +162,13 @@ SnnSimulation::SnnSimulation(
 	int* N_G_,
     float* G_props_, 
     int* N_rep_, 
+    // int* N_rep_pre_synaptic_, 
+    // int* N_rep_pre_synaptic_counts_, 
     int* N_delays_, 
     float* N_states_,
 	float* N_weights_,
 	float* fired_,
+	int* last_fired_,
 	float* firing_times_,
 	int* firing_idcs_,
 	int* firing_counts_,
@@ -193,11 +198,13 @@ SnnSimulation::SnnSimulation(
 	N_G = N_G_;
     G_props = G_props_; 
     N_rep = N_rep_;
+
     N_delays = N_delays_;
     N_states = N_states_;
 	N_weights = N_weights_;
 
 	fired = fired_;
+	last_fired = last_fired_;
 	
 	firing_times = firing_times_;
 	firing_idcs = firing_idcs_;
@@ -263,7 +270,16 @@ __global__ void update_current_(
 	const int t, 
 	const int* N_delays,
 	bool r_stdp,
-	int* G_stdp_config_current
+	const int* G_stdp_config_current,
+	const int* last_fired, 
+	float alpha = 1.f,
+	float beta = 0.f, 
+	float phi_r = 1.f,
+	float phi_p = 1.f,
+	float a_r_p = 1.f,
+	float a_p_m = -1.f,
+	float a_r_m = -1.f,
+	float a_p_p = 1.f
 )
 {
 	//const int tid_x = blockIdx.get_x * blockDim.get_x + threadIdx.get_x;
@@ -281,14 +297,14 @@ __global__ void update_current_(
 			// global index of firing-array < len(fired-array) 
 			// -> use the trailing pointer
 			n = fired_idcs_read[fired_idx];
-			firing_time = __int2float_rn(firing_times_read[fired_idx]);
+			firing_time = __float2int_rn(firing_times_read[fired_idx]);
 		}
 		else
 		{
 			// global index of firing-array >= len(fired-array) 
 			// -> use the 'normal' pointer
 			n = fired_idcs[fired_idx - n_fired_m1_to_end];
-			firing_time = __int2float_rn(firing_times[fired_idx - n_fired_m1_to_end]);
+			firing_time = __float2int_rn(firing_times[fired_idx - n_fired_m1_to_end]);
 		}
 		// const int firing_time = __int2float_rn(firing_times[fired_idx]);
 
@@ -328,7 +344,7 @@ __global__ void update_current_(
 			src_G = N_G[n * 2 + 1];
 		}
 
-		int snk_neuron;
+		int snk_N;
 		int snk_G;
 		// const int src_G = N_G[n * 2 + 1];
 		bool snk_G_is_sensory = false;
@@ -363,19 +379,32 @@ __global__ void update_current_(
 
 		int idx;
 		int row_end = N_delays[delay_idx + N]; 
+		
+		float weight_delta = 0.f;
+
+
+		float w;
 		for (int row = N_delays[delay_idx]; row < row_end; row++)
 		{
 			idx = n + N * row;
-			snk_neuron = N_rep[idx];
-			snk_G = N_G[snk_neuron * 2 + 1];
+			snk_N = N_rep[idx];
+			snk_G = N_G[snk_N * 2 + 1];
 			snk_G_is_sensory = G_props[snk_G + 7 * G] > 0.f;
+
+			w =  N_weights[idx];
 			if (!snk_G_is_sensory)
 			{
-				atomicAdd(&N_states[snk_neuron + 7 * N], N_weights[idx]);
+				atomicAdd(&N_states[snk_N + 7 * N], w);
 			}
 
-			if ((r_stdp) && (G_stdp_config_current[])){
-				
+			if ((r_stdp) && (t - last_fired[snk_N] < D)){
+				if (G_stdp_config_current[src_G + snk_G * G] > 0){
+				// 	weight_delta = alpha * phi_r * a_r_p + beta * phi_p * a_p_m;
+				// }
+				// else if (G_stdp_config_current[src_G + snk_G * G] < 0){
+					weight_delta = alpha * phi_r * a_r_m + beta * phi_p * a_p_p;
+				}
+				weight_delta *= w * (1. - w);
 			}
 		}
 	}
@@ -488,7 +517,8 @@ void SnnSimulation::update(const bool verbose)
 		N_G,
 		G_props,
 		N_states,
-		fired
+		fired,
+		last_fired
 		// debug_i.get_dp(),
 		// debug_v.get_dp()
     );
@@ -634,7 +664,8 @@ void SnnSimulation::update(const bool verbose)
 		t,
 		N_delays,
 		stdp_active,
-		G_stdp_config_current
+		G_stdp_config_current,
+		last_fired
     );
 	
 	checkCudaErrors(cudaDeviceSynchronize());
@@ -1316,4 +1347,103 @@ void SnnSimulation::set_stdp_config(int stdp_config_id, bool activate){
 	if (activate){
 		stdp_active = true;
 	}
+}
+
+void SnnSimulation::set_pre_synaptic_pointers(
+	int* N_rep_pre_synaptic_, 
+	int* N_rep_pre_synaptic_counts_
+){
+	N_rep_pre_synaptic = N_rep_pre_synaptic_;
+    N_rep_pre_synaptic_counts = N_rep_pre_synaptic_counts_;
+}
+void SnnSimulation::set_pre_synaptic_pointers_python(
+	const long N_rep_pre_synaptic_dp, 
+	const long N_rep_pre_synaptic_counts_dp
+){
+	set_pre_synaptic_pointers(
+		reinterpret_cast<int*>(N_rep_pre_synaptic_dp),
+		reinterpret_cast<int*>(N_rep_pre_synaptic_counts_dp));
+}
+
+
+__global__ void fill_N_rep_snk_counts(
+	const int N,
+	const int S,
+	int* N_rep,
+	int* N_rep_pre_synaptic_counts
+){
+	const int src_N = blockIdx.x * blockDim.x + threadIdx.x; 
+	int snk_N;
+	if (src_N < N){
+		for (int s = 0; s < S; s++){
+			snk_N = N_rep[src_N + s * N];
+			atomicAdd(&N_rep_pre_synaptic_counts[snk_N + 1], 1);
+		}
+	}
+}
+
+
+__global__ void reset_N_rep_pre_synaptic(
+	const int N,
+	const int S,
+	int* N_rep_pre_synaptic_counts
+){
+	const int src_N = blockIdx.x * blockDim.x + threadIdx.x; 
+	if (src_N < N){
+		for (int s = 0; s < S; s++){
+			N_rep_pre_synaptic_counts[src_N + s * N] = -1;
+		}
+	}
+
+}
+
+
+__global__ void fill_N_rep_pre_synaptic(
+	const int N,
+	const int S,
+	int* N_rep,
+	int* N_rep_pre_synaptic_counts
+){
+	const int src_N = blockIdx.x * blockDim.x + threadIdx.x; 
+	int snk_N;
+	int idx;
+
+	if (src_N < N){
+
+		for (int s = 0; s < S; s++){
+			snk_N = N_rep[src_N + s * N];
+			idx = N_rep_pre_synaptic_counts[snk_N];
+			atomicAdd(&N_rep_pre_synaptic_counts[snk_N + 1], 1);
+		}
+	}
+
+}
+
+void SnnSimulation::actualize_N_rep_pre_synaptic(){
+	
+	LaunchParameters launch_pars = LaunchParameters(N, (void *)fill_N_rep_snk_counts);
+
+	fill_N_rep_snk_counts KERNEL_ARGS2(launch_pars.grid3, launch_pars.block3)(
+		N,
+		S,
+		N_rep,
+		N_rep_pre_synaptic_counts
+	);
+
+	thrust::device_ptr<int> count_ptr = thrust::device_pointer_cast(N_rep_pre_synaptic_counts);
+
+	checkCudaErrors(cudaDeviceSynchronize());
+
+	thrust::inclusive_scan(thrust::device, count_ptr, count_ptr + N + 1, count_ptr);
+
+	checkCudaErrors(cudaDeviceSynchronize());
+
+	reset_N_rep_pre_synaptic KERNEL_ARGS2(launch_pars.grid3, launch_pars.block3)(
+		N,
+		S,
+		N_rep_pre_synaptic_counts
+	);
+
+	checkCudaErrors(cudaDeviceSynchronize());
+
 }

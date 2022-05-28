@@ -105,6 +105,10 @@ class NetworkGPUArrays(GPUArrayCollection):
         (self.N_rep,
          self.N_delays) = self._N_rep_and_N_delays(shapes=shapes, curand_states=self.curand_states)
 
+        self.N_rep_pre_synaptic = self.izeros(self.N_rep.shape)
+        self.N_rep_pre_synaptic_counts = self.izeros(self._config.N + 1)
+        self.print_allocated_memory('N_rep_inv')
+
         self.N_rep_groups_cpu = self._N_rep_groups_cpu()
 
         self.N_weights = self._N_weights(shapes.N_weights)
@@ -118,6 +122,7 @@ class NetworkGPUArrays(GPUArrayCollection):
                                                select_ibo=buffers.selected_group_boxes_ibo)
 
         self.Fired = self.fzeros(self._config.N)
+        self.last_Fired = self.izeros(self._config.N) - self._config.D
         self.Firing_times = self.fzeros((15, self._config.N))
         self.Firing_idcs = self.izeros((15, self._config.N))
         self.Firing_counts = self.izeros((1, T * 2))
@@ -148,12 +153,18 @@ class NetworkGPUArrays(GPUArrayCollection):
             N_states=self.N_states.data_ptr(),
             N_weights=self.N_weights.data_ptr(),
             fired=self.Fired.data_ptr(),
+            last_fired=self.last_Fired.data_ptr(),
             firing_times=self.Firing_times.data_ptr(),
             firing_idcs=self.Firing_idcs.data_ptr(),
             firing_counts=self.Firing_counts.data_ptr(),
             G_stdp_config0=self.G_stdp_config0.data_ptr(),
-            G_stdp_config1=self.G_stdp_config1.data_ptr()
+            G_stdp_config1=self.G_stdp_config1.data_ptr(),
         )
+        self.Simulation.set_pre_synaptic_pointers(
+            N_rep_pre_synaptic=self.N_rep_pre_synaptic.data_ptr(),
+            N_rep_pre_synaptic_counts=self.N_rep_pre_synaptic_counts.data_ptr()
+        )
+        self.Simulation.actualize_N_rep_pre_synaptic()
         self.N_relative_G_indices = self._N_relative_G_indices()
         self.G_swap_tensor = self._G_swap_tensor()
         self.print_allocated_memory('G_swap_tensor')
@@ -163,7 +174,6 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.Simulation.set_stdp_config(0)
 
         self.active_output_groups = None
-
 
     def update(self):
         self.plotting_arrays.voltage.map()

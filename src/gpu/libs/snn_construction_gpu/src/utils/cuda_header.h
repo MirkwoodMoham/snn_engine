@@ -13,8 +13,10 @@
 
 #define THRUST_IGNORE_DEPRECATED_CPP_DIALECT
 
-#include <thrust/sort.h>
 #include <thrust/device_ptr.h>
+#include <thrust/execution_policy.h>
+#include <thrust/scan.h>
+#include <thrust/sort.h>
 
 #ifdef __INTELLISENSE__
 

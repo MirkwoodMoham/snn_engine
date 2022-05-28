@@ -30,6 +30,7 @@ SnnSimulation make_SnnSimulation(
     const long N_states_dp,
     const long N_weights_dp,
     const long fired_dp,
+    const long last_fired_dp,
     const long firing_times_dp,
     const long firing_idcs_dp,
     const long firing_counts_dp,
@@ -45,17 +46,23 @@ SnnSimulation make_SnnSimulation(
     int* N_G = reinterpret_cast<int*> (N_G_dp);
     float* G_props = reinterpret_cast<float*> (G_props_dp);
     int* N_rep = reinterpret_cast<int*> (N_rep_dp);
+
+    // int* N_rep_pre_synaptic = reinterpret_cast<int*> (N_rep_pre_synaptic_dp);
+    // int* N_rep_pre_synaptic_counts = reinterpret_cast<int*> (N_rep_pre_synaptic_counts_dp);
+    // int* N_rep_pre_synaptic_counts = reinterpret_cast<int*> (N_rep_dp);
+    
     int* N_delays = reinterpret_cast<int*> (N_delays_dp);
     float* N_states = reinterpret_cast<float*> (N_states_dp);
     float* N_weights = reinterpret_cast<float*> (N_weights_dp);
 
     float* fired = reinterpret_cast<float*> (fired_dp);
+    int* last_fired = reinterpret_cast<int*> (last_fired_dp);
     float* firing_times = reinterpret_cast<float*> (firing_times_dp);
     int* firing_idcs = reinterpret_cast<int*> (firing_idcs_dp);
     int* firing_counts = reinterpret_cast<int*> (firing_counts_dp);
 
     int* G_stdp_config0 = reinterpret_cast<int*> (G_stdp_config0_dp);
-    int* G_stdp_config1 = reinterpret_cast<int*> (G_stdp_config1_dp);
+    int* G_stdp_config1 = reinterpret_cast<int*> (G_stdp_config0_dp);
     
     return SnnSimulation(
         N,
@@ -76,10 +83,13 @@ SnnSimulation make_SnnSimulation(
         N_G,
         G_props, 
         N_rep, 
+        // N_rep_pre_synaptic, 
+        // N_rep_pre_synaptic_counts, 
         N_delays, 
         N_states,
         N_weights,
         fired,
+        last_fired,
         firing_times,
         firing_idcs,
         firing_counts,
@@ -106,9 +116,13 @@ PYBIND11_MODULE(snn_simulation_gpu, m)
     .def_readwrite("stdp_active", &SnnSimulation::stdp_active)
     .def("update", &SnnSimulation::update)
     .def("swap_groups", &SnnSimulation::swap_groups_python)
+    .def("set_pre_synaptic_pointers", &SnnSimulation::set_pre_synaptic_pointers_python,
+        py::arg("N_rep_pre_synaptic"),
+        py::arg("N_rep_pre_synaptic_counts"))
     .def("set_stdp_config", &SnnSimulation::set_stdp_config, 
-         py::arg("stdp_config_id"), 
-         py::arg("activate") = true)
+        py::arg("stdp_config_id"), 
+        py::arg("activate") = true)
+    .def("actualize_N_rep_pre_synaptic", &SnnSimulation::actualize_N_rep_pre_synaptic)
     .def("__repr__",
         [](const SnnSimulation &sim) {
             return "SnnSimulation(N=" + std::to_string(sim.N) + ")";
@@ -133,10 +147,13 @@ PYBIND11_MODULE(snn_simulation_gpu, m)
         py::arg("N_G"),
         py::arg("G_props"),
         py::arg("N_rep"),
+        // py::arg("N_rep_pre_synaptic"),
+        // py::arg("N_rep_pre_synaptic_c"),
         py::arg("N_delays"),
         py::arg("N_states"),
         py::arg("N_weights"),
         py::arg("fired"),
+        py::arg("last_fired"),
         py::arg("firing_times"),
         py::arg("firing_idcs"),
         py::arg("firing_counts"),

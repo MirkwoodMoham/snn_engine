@@ -26,12 +26,15 @@ struct SnnSimulation
     int* N_G; 
     float* G_props; 
     int* N_rep; 
+    int* N_rep_pre_synaptic; 
+    int* N_rep_pre_synaptic_counts; 
     int* N_delays; 
     float* N_states; 
     
     float* N_weights;
     
     float* fired; 
+    int* last_fired; 
     
     float* firing_times_write;
     float* firing_times_read;
@@ -100,10 +103,13 @@ struct SnnSimulation
         int* N_G_,
         float* G_props_, 
         int* N_rep_, 
+        // int* N_rep_pre_synaptic_, 
+        // int* N_rep_pre_synaptic_counts_, 
         int* N_delays_, 
         float* N_states_,
         float* N_weights_,
         float* fired_,
+        int* last_fired_,
         float* firing_times_,
         int* firing_idcs_,
         int* firing_counts_,
@@ -142,4 +148,13 @@ struct SnnSimulation
     );
 
     void set_stdp_config(int stdp_config_id, bool activate = true);
+
+    void set_pre_synaptic_pointers(
+        int* N_rep_pre_synaptic_, 
+        int* N_rep_pre_synaptic_counts_);
+    void set_pre_synaptic_pointers_python(
+        const long N_rep_pre_synaptic_dp, 
+        const long N_rep_pre_synaptic_counts_dp);
+
+    void actualize_N_rep_pre_synaptic();
 };
