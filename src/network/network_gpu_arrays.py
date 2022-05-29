@@ -105,7 +105,7 @@ class NetworkGPUArrays(GPUArrayCollection):
         (self.N_rep,
          self.N_delays) = self._N_rep_and_N_delays(shapes=shapes, curand_states=self.curand_states)
 
-        self.N_rep_pre_synaptic = self.izeros(self.N_rep.shape)
+        self.N_rep_pre_synaptic = self.izeros(shapes.N_rep_pre_synaptic)
         self.N_rep_pre_synaptic_counts = self.izeros(self._config.N + 1)
         self.print_allocated_memory('N_rep_inv')
 

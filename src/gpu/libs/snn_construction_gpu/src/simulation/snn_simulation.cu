@@ -263,6 +263,7 @@ __global__ void update_current_(
 	const int* N_G,
 	const float* G_props,
 	const int* N_rep, 
+	const int* N_rep_pre_synaptic,
 	const float* N_weights, 
 	float* N_states,
 	const int n_fired_m1_to_end,
@@ -657,6 +658,7 @@ void SnnSimulation::update(const bool verbose)
 		N_G,
 		G_props,
 		N_rep,
+		N_rep_pre_synaptic,
 		N_weights,
 		N_states,
 		n_fired_m1_to_end,
@@ -1366,6 +1368,26 @@ void SnnSimulation::set_pre_synaptic_pointers_python(
 }
 
 
+__global__ void reset_N_rep_pre_synaptic(
+	const int N,
+	const int S,
+	int* N_rep_pre_synaptic,
+	int* N_rep_pre_synaptic_counts
+){
+	const int src_N = blockIdx.x * blockDim.x + threadIdx.x; 
+	if (src_N < N){
+		for (int s = 0; s < S; s++){
+			N_rep_pre_synaptic[src_N + s * N] = -1;
+		}
+		N_rep_pre_synaptic_counts[src_N] = 0;
+		if (src_N == 0){
+			N_rep_pre_synaptic_counts[N] = 0;
+		}
+	}
+
+}
+
+
 __global__ void fill_N_rep_snk_counts(
 	const int N,
 	const int S,
@@ -1383,37 +1405,36 @@ __global__ void fill_N_rep_snk_counts(
 }
 
 
-__global__ void reset_N_rep_pre_synaptic(
-	const int N,
-	const int S,
-	int* N_rep_pre_synaptic_counts
-){
-	const int src_N = blockIdx.x * blockDim.x + threadIdx.x; 
-	if (src_N < N){
-		for (int s = 0; s < S; s++){
-			N_rep_pre_synaptic_counts[src_N + s * N] = -1;
-		}
-	}
-
-}
-
-
 __global__ void fill_N_rep_pre_synaptic(
 	const int N,
 	const int S,
 	int* N_rep,
+	int* N_rep_pre_synaptic,
 	int* N_rep_pre_synaptic_counts
 ){
 	const int src_N = blockIdx.x * blockDim.x + threadIdx.x; 
 	int snk_N;
 	int idx;
 
+	int old;
+
 	if (src_N < N){
 
 		for (int s = 0; s < S; s++){
+
+			old = src_N;
+
 			snk_N = N_rep[src_N + s * N];
 			idx = N_rep_pre_synaptic_counts[snk_N];
-			atomicAdd(&N_rep_pre_synaptic_counts[snk_N + 1], 1);
+			
+			while (old != -1){
+				old = atomicExch(&N_rep_pre_synaptic[idx], old);
+				idx++;
+				
+			}
+
+			atomicAdd(&N_rep_pre_synaptic_counts[snk_N],1);
+
 		}
 	}
 
@@ -1421,7 +1442,16 @@ __global__ void fill_N_rep_pre_synaptic(
 
 void SnnSimulation::actualize_N_rep_pre_synaptic(){
 	
-	LaunchParameters launch_pars = LaunchParameters(N, (void *)fill_N_rep_snk_counts);
+	LaunchParameters launch_pars = LaunchParameters(N, (void *)reset_N_rep_pre_synaptic);
+
+	reset_N_rep_pre_synaptic KERNEL_ARGS2(launch_pars.grid3, launch_pars.block3)(
+		N,
+		S,
+		N_rep_pre_synaptic,
+		N_rep_pre_synaptic_counts
+	);
+
+	checkCudaErrors(cudaDeviceSynchronize());
 
 	fill_N_rep_snk_counts KERNEL_ARGS2(launch_pars.grid3, launch_pars.block3)(
 		N,
@@ -1438,9 +1468,20 @@ void SnnSimulation::actualize_N_rep_pre_synaptic(){
 
 	checkCudaErrors(cudaDeviceSynchronize());
 
-	reset_N_rep_pre_synaptic KERNEL_ARGS2(launch_pars.grid3, launch_pars.block3)(
+	fill_N_rep_pre_synaptic KERNEL_ARGS2(launch_pars.grid3, launch_pars.block3)(
 		N,
 		S,
+		N_rep,
+		N_rep_pre_synaptic,
+		N_rep_pre_synaptic_counts
+	);
+
+	checkCudaErrors(cudaDeviceSynchronize());
+
+	fill_N_rep_snk_counts KERNEL_ARGS2(launch_pars.grid3, launch_pars.block3)(
+		N,
+		S,
+		N_rep,
 		N_rep_pre_synaptic_counts
 	);
 
