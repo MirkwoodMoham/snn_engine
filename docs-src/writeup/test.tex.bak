@@ -1,0 +1,553 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% % Lines starting with % are comments, which are ignored.
+% % This is a handy way of indicating the date and version of
+% % your document, to wit:
+% %
+% % LaTeX sample file
+% % Modified March, 2002
+% %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% % Title and author(s)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\title{[Entwurf] Arbeitstitel }
+%\author{Hatem Sven Chaibi
+%\thanks{     
+\author{Mirkwood Moham\thanks{mirkmoh@protonmail.com, keybase.io: 6763 79B9 EDBC C5EA }}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\documentclass{article}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% %
+% % The next command allows your in import encapsulated
+% % postscript files, .epsf or .eps files, which
+% % contain vector graphic image data.
+% %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\usepackage{graphicx}
+ \usepackage{mathrsfs}
+\usepackage{amsmath}
+\usepackage{amssymb }
+ \usepackage{amsfonts}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% % We use newtheorem to define theorem-like structures
+% %
+% % Here are some common ones. . .
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{proposition}{Proposition}
+\newtheorem{scolium}{Scolium}   %% And a not so common one.
+\newtheorem{definition}{Definition}
+
+\newenvironment{proof}{{\sc Proof:}}{~\hfill QED}
+\newenvironment{AMS}{}{}
+\newenvironment{keywords}{}{}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% %   The first thanks indicates your affiliation
+% %
+% %  Just the name here.
+% %
+% % Your mailing address goes at the end.
+% %
+% % \thanks is also how you indicate grant support
+% %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\begin{document}
+\newpage
+\maketitle
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% abstract, keywords and Subject classification are optional.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{abstract}
+  We propose an extension of spatially extended spiking network models by allowing individual point-locations 
+   to emit chemicals and affect the properties of the network. 
+   We provide a network model example fulfilling rule 110 up to one error and 
+   sketch how this system attempts to correct this error
+%    without using backpropagation
+    . 
+   The error consists of having  a group of neuron A connected to group of neuron B such that a specific activity pattern 
+   in A causes activity in B and suppresses activity in a group C.
+   The correction is achieved if the same pattern of activity in A causes activity in C and suppresses activity in B.
+ 
+\end{abstract}
+
+% Most people don't use these, so they are "commented out"
+% by starting the lines with a "%"
+%\begin{keywords}
+%   \LaTeX, typesetting
+%\end{keywords}
+
+%\begin{AMS}
+%   50C60, 18C25
+%\end{AMS}
+
+%%%%%%%%%%%%%%%%%%%%%%
+% % Here is the start of the Text
+%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Chemical Spiking Neural Network (CSNN)} 
+
+
+
+\begin{definition}[Spatially extended Spiking Neural Network (SeSNN)]
+
+Let $P \subset{\mathbb{R}^{d}}$.
+A Spatially extended Spiking Neural Network (SeSNN) $\mathcal{NN}$ within $P$ is a Spiking Neural Network (SNN) with the following additional properties.
+
+\begin{enumerate}
+\item  $N$ Neurons ... (use some Spiking Neuron Model, for example: \emph{Izkevitch Model (2003)}).
+The set of all neurons is called $\mathcal{N} = \mathcal{N}(\mathcal{NN}) = \{n_j: n_j \text{ is a neuron and } j \in \{0,..., N-1\} \}$.
+
+\item All $N$ neurons have, as an attribute, an $\mathbb{R}^{d}$-valued position within $P$. 
+\item Synapses have distance dependent existence probabilities and delays.
+\end{enumerate}
+
+\end{definition}
+
+
+
+
+\subsection{Location Groups and chemical Concentrations}
+
+Let $P = [0,1] \times [0,1] \times [0,1] \subset{\mathbb{R}^{3}}$ and  $\mathcal{NN}$ be a SeSNN within $P$.
+
+
+Partition $P$ into $G \in \mathbb{N}_{>0}$ into equally sized cells. Each cell and the contained neurons define a \textbf{location group} $g_i$,  $i \in \{0,...,G-1\}$. 
+
+Define $\mathcal{LG} =\mathcal{LG}(\mathcal{NN}) = \{g_j: g_j \text{ is a location group and } j \in \{0,..., G-1\} \}$ 
+as the \textbf{set of all location groups}.
+
+We say a neuron $n \in \mathcal{N}=\mathcal{N}(\mathcal{N}\mathcal{N})$ belongs to $g_i \in \mathcal{LG}$ if $n_j$ is positioned within the cell
+corresponding to $g_i$  and denote it by $n \in g_i$. 
+$\#g$ corresponds to the number of neurons in $g \in \mathcal{LG}$    
+
+The volume occupied by $g \in \mathcal{LG}$ is denoted by $Vol(g)$. 
+
+%Each location group $g\in \mathcal{LG}$ and each neuron $n \in \mathcal{N}$ has concentrations of chemicals as variables. 
+%The concentration $x \in \mathbb{R}_{\geq 0}$ of the chemical $c_{A}$ 
+%in $g \in \mathcal{LG}$ is denoted by $CON_{g}(c_{A}) = x$.
+
+\begin{definition}[Self-Sustained Activity]
+Let $R, T_I, T_b \in \mathbb{R}_{>0}$, and $N \in \mathbb{N}_{>0}$. 
+We say a location group $g\in \mathcal{LG}$ is
+ in a state of \textbf{($(R, T_I, T_b$}-\textbf{)self-sustained activity} at time $t$ if $t$
+belongs to a time interval of length $T_I$
+and there is a time interval of length $T_b$ in which at least $k \in \mathbb{N}$
+ neurons
+ $\frac{k}{\#g} \geq R$
+ would have been spiking without requiring external activation. 
+\end{definition}
+
+
+
+
+\begin{definition}[Cluster, R-Clusters] A \textbf{cluster} is set of two or more location groups. Let $C$ be a cluster.
+ If the self-sustained activity of one or more location group belonging to $\mathcal{C}$ causes the self-sustained activity of all other groups in $\mathcal{C}$, 
+ we say $\mathcal{C}$ is a \textbf{R-Cluster}. 
+ An R-Cluster of which at least one location with at least one location group is in a state 
+ of self-sustained activity is said to be \textbf{activated}. 
+\end{definition}
+
+\textbf{R-Cluster activation notation:} Let $C$ be a cluster such that more than one cluster causes the self-sustained activity of the other groups. If $\{ c_0, c_1, ..., c_i \}$ are clusters of $C$ causing self-sustained activity in $\{c_{i+1}, ...,\}$ 
+if their respective self-sustained activity time-intervals overlap (w.r.t. $T_b$), we denote this statement by:
+$$
+C:\{ c_0, c_1, ..., c_i \} \Rightarrow \{c_{i+1}, ...,\}.
+$$ 
+Feedback effect may be loosely indicated using 
+$\overleftarrow{\Rightarrow}$ w.r.t. their intensity or $\Leftrightarrow$  if  
+$$
+C:\{c_{i+1}, ...,\}\Rightarrow \{ c_0, c_1, ..., c_i \} 
+$$
+if also true.
+If the inactivity (self-sustained activity) of  one more location groups is necessary for (excludes) the self-sustained activity of one more other groups 
+(not necessarily belonging to $C$) we denote this statement by:  
+$$
+C:\{ \overline{c_0}, c_1, ..., c_i \} \Rightarrow \{c_{i+1}, ...,\}.
+$$ 
+$$
+C:\{ c_0, c_1, ..., c_i \} \Rightarrow \{c_{i+1}, ...,\overline{x}\}.
+$$ 
+
+if $c_0$ or $x$  are respectively the specifically non-activated group(s). 
+
+\subsection{Fluid-Network (Bloodstream)}
+
+   \begin{figure}[htb]
+      \centering
+      \includegraphics[width=4in]{para_eps.jpg}
+      \caption{Fluid-Network Example (with 3x3x3 location groups) [TODO: Resize diameters]\label{ParabFig}}
+  \end{figure}
+This Network is intended to approximate the circulation of blood within $P$. 
+A Fluid network $B$ is built similarly to a neural network (and graph) with delays, but with location groups (as nodes) instead of  Neurons 
+and vessels instead of synapses (as edges). Instead of transferring voltage spikes from neuron to neuron, the blood network 
+transfers chemical concentration spikes. 
+
+$B$ has an entry surface $B_{in}$ and exit surface $B_{out}$  at the border $\partial P$ of $P$. \textbf{Vessel diameters may be inter-dependent, i.e. a vessel contraction may lead to the expansion of some other vessels.} 
+[\emph{TODO: } Volume In = Volume out]
+
+\begin{definition}[Attributes]
+Let $X, Y$ and $Z$ be sets such that $X \subset Y$. An $(Y, Z)$-valued-attribute (or $Z$-valued-attribute $z$ ) of $X$ is an $Z$-valued map from $Y$ to $Z$. 
+\end{definition}
+
+We assume that $P$ can be separated in three non-overlapping subsets:
+Neurons (Points), denoted by $P_N$, Synapse(edges without endpoints), denoted by $P_S$, 
+fluid-network vessels (if present), denoted by $P_F$ and $P$ minus the previous sets, denoted by $P_R$. 
+
+\begin{definition}[set of chemicals, chemical concentration, chemicals, ]
+Let $C$ be a non-empty set of  $\mathbb{R}_{\geq 0}$-valued attributes of $P$.
+ $C$ may  be called a \textbf{set of chemicals} of $P$ if for each attribute $c \in C$ 
+and for each of the following (non-overlapping) subsets of $P$, $P_N$, $P_S$, $P_F$, and $P_R$,  
+there exists a time(-step) dependent 'diffusion' function $f_c(p,c(p, t), t, ...)$
+$$
+f: (\mathbb{R}^{3}, \mathbb{R}_{\geq 0}, \mathbb{R}_{\geq 0}, ...) \rightarrow \mathbb{R}_{\geq 0},
+$$
+
+such that 
+$$
+c(p, t_{i+1}, ...) = f_c(p, c(p, t_i),  t_i, ...)  
+$$
+
+and $f_c$ fulfills one of the following properties 
+\begin{enumerate}
+\item $[$some mathematical property: diffusion w.r.t a subset of P (including flow for  blood vessels)$]$, 
+\item ... .
+\end{enumerate}
+
+If $C$ is a set of chemicals in $P$, the elements of $C$ are called \textbf{chemicals}. A value $c(p,t)$ is called \textbf{chemical concentration} (of the chemical $c$ in the point $p$ at time $t$). 
+The diffusion functions are denoted by $d_{c, N}$, $d_{c, S}$, $d_{c,F}$ and $d_{c,R}$ (w.r.t. $P_N$, $P_S$, $P_F$, and $P_R$).
+\end{definition}
+
+
+
+\begin{definition}[gas-emission,
+production (points, neurons)]
+ If $P$ has at least one chemical attribute $c$ and $p \in P$ can increase the concentration of $c$ in it's neighborhood we say that $p$ is a \textbf{gas-emitting point} and that $p$ \textbf{produces} $c$. 
+If $p \in P_N$ we call the corresponding neuron a \textbf{gas-emitting neuron}.
+\end{definition}
+
+
+\begin{definition}[gland, production (glands)] An R-Cluster whose activation directly 
+causes the increase of chemical concentrations at particular points in the blood stream is called a \textbf{gland}. 
+If a gland increases the chemical concentrations of (say) chemicals $C_1$, $C_2$ and $C_3$ at a rate $x$, we speak of a 
+\textbf{$C_1C_2C_3$-gland} and say that this glands \textbf{produces} $C_1$, $C_2$ and $C_3$ at rate $x$. 
+\end{definition}  
+
+
+\begin{definition}[chemically sensitive neurons]
+Let $x$ be a Neuron with a set of attributes $A_x$ positioned in $p \in P$, and $C$ is a set of chemicals in $P$.
+The subset of attributes of $x$ that are chemical concentrations at point $p$ is denoted by $C_x \subset C$. 
+ If  a change in concentration of an element of $C_x$ causes a change in another element of $A_x$, the neuron is called 
+chemically sensitive.
+\end{definition}
+
+\begin{definition}[Vessel-contraction and expansion]
+Vessel diameters can be a function of one more location group parameters
+\end{definition}
+
+\subsection{Definition}
+
+A Chemical Spiking Neural Network (CSNN) within $P \subset \mathbb{R}^{3}$ is a SeSNN with the following properties.
+
+\begin{enumerate}
+\item  One or more Neurons of the SeSNN are chemically sensitive.
+\item One or more points in $P$ are gas-emitting. 
+\item ..
+\end{enumerate}
+
+\subsection{Neuronal Frequency Decoders}
+..
+
+
+
+
+\newpage
+\section{Example}
+
+\subsection{Rule 110}
+Consider the following tuples: 
+\begin{align*}
+p_{0} &= (0,0,0) , &
+p_{1} &= (0,0,1) , &
+p_{2} &= (0,1,0) , &
+p_{3} &= (0,1,1) , \\
+p_{4} &= (1,0,0) , &
+p_{5} &= (1,0,1) , &
+p_{6} &= (0,1,1) , &
+p_{7} &= (1,1,1). 
+\end{align*}
+Set $P = \{p_0, p_1,...,p_7\}$ and define the  map $r_{110} :P \rightarrow \{0,1\}$ by: 
+\begin{align*}
+r_{110} :p_0, p_4, p_7& \mapsto 0, \\
+r_{110} :p_1, p_2, p_3, p_5, p_6 &\mapsto 1.
+\end{align*} 
+
+
+   \begin{figure}[htb]
+      \centering
+      \includegraphics[width=4in]{110input.jpg}
+      \caption{Rule 110 (highlighted: $p_1 = (0,0,1)$). The first row corresponds to the inputs, the second one to the outputs (i.e $ \, r_{110}(p_1) = 1$). 
+[\emph{Image source: Wikipedia}]      
+      \label{rule110}}
+  \end{figure}
+  
+
+\begin{definition}[Rule 110]
+Let $\mathcal{NN}$ be a CSNN containing a sufficient number of $R$-$Clusters$ such that
+$\mathcal{I}= \{i_0, i_1,i_2, i_3\}$, $\mathcal{O}= \{o_0, o_1\}$  and 
+$\mathcal{R}= \{ r  \in \mathcal{LG}(\mathcal{NN}), r \notin  \mathcal{I} \cup \mathcal{C} \cup \mathcal{O}  \}$ 
+are clusters of distinct location groups  
+$\subset \mathcal{LG} = \mathcal{LG}(\mathcal{NN})$.
+
+We say that $\mathcal{NN}$ \textbf{fulfills the rule 110} if the following statements are true:
+
+\begin{align*}
+A_0 = 
+\mathcal{I} \cup \mathcal{O}: \{\overline{i_0}, \overline{i_1}, \overline{i_2}, i_3\} & \Rightarrow \{ o_0, \overline{o_1} \} ,\\
+A_1 = 
+\mathcal{I} \cup \mathcal{O}: \{\overline{i_0}, \overline{i_1}, i_2, i_3\} & \Rightarrow \{  \overline{o_0}, o_1 \} ,\\
+A_2 = 
+\mathcal{I} \cup \mathcal{O}:\{\overline{i_0}, i_1,  \overline{i_2},i_3\} &\Rightarrow  \{  \overline{o_0}, o_1 \} ,\\
+A_3 = 
+\mathcal{I} \cup \mathcal{O}:\{\overline{i_0}, i_1,  i_2, i_3\} &\Rightarrow  \{  \overline{o_0}, o_1 \}, \\
+A_4 = 
+\mathcal{I} \cup \mathcal{O}: \{i_0, \overline{i_1}, \overline{i_2}, i_3\} &  \Rightarrow \{ o_0, \overline{o_1} \} ,\\
+A_5 = 
+\mathcal{I} \cup \mathcal{O}:\{\overline{i_0}, i_1, \overline{ i_2}, i_3\} & \Rightarrow  \{  \overline{o_0}, o_1 \}, \\
+A_6 = 
+\mathcal{I} \cup \mathcal{O}:\{\overline{i_0}, \overline{ i_1}, i_2, i_3\} &\Rightarrow  \{  \overline{o_0}, o_1 \}  , \\
+A_7 = 
+\mathcal{I} \cup \mathcal{O}: \{i_0, i_1,i_2, i_3\} & \Rightarrow   \{ o_0, \overline{o_1} \} .\\
+\end{align*}
+
+\end{definition}
+
+ \subsection{Network}
+
+From now on let $\mathcal{NN}$ be a CSSN
+such that the parameters $R, T_I$ and $T_b$ defining self-sustained activity are constant and containing a sufficient number of R-clusters such that 
+all statements of rule 110 except $A_1$ are fulfilled. Instead the following is true:
+$$
+\overline{A_1} = 
+\mathcal{I} \cup \mathcal{O}: \{\overline{i_0}, \overline{i_1}, i_2, i_3\}  \Rightarrow \{ o_0, \overline{o_1} \};
+$$
+and the weights of $\mathcal{NN}$ can be modified such that $A1$ is true.
+
+
+
+
+\subsubsection{Input-Clusters}
+Each input cluster contains one signal neuron that will emit spikes at different rates, depending if the cluster is active or not. 
+All 8 frequencies are distinct.
+
+\subsubsection{Chemicals and Glands}
+$\{E, W,T,S,F,R, L_1, L_2,NL_1,NL_2, STL, ASTL\}$ is the set of  chemical of $\mathcal{NN}$ 
+( Acronyms from: 
+\textbf{E}nergy,
+\textbf{W}ake,
+\textbf{T}ired,
+\textbf{S}leep,
+\textbf{F}ear,
+\textbf{R}eward,
+\textbf{L}earning,
+\textbf{N}euron,
+\textbf{S}hort-\textbf{T}erm \textbf{Activation},
+\textbf{A}nti \textbf{S}hort-\textbf{T}erm \textbf{Activation}
+).
+ $\mathcal{R} \subset \mathcal{LG}$ contains four glands:
+ \begin{enumerate}
+ \item fear-gland ($F$-gland)
+ \item reward-gland ($R$-gland, it can only be activated externally by a supervisor) 
+ \item wake-gland ($WT$-gland)
+ \item sleep-gland ($S$-gland)
+  \item learn-gland ($L_1$-/$L_2$-gland)
+    \item short-term-chemical-activation-gland ($STA$-gland)
+        \item anti-short-term-chemical-activation-gland ($ASTA$-gland)
+\end{enumerate}  
+Each gland has two modes:
+\begin{enumerate}
+\item active (producing the corresponding chemicals at a (time-limited) fixed rate)
+\item inactive 
+\end{enumerate}
+
+\subsubsection{Frequency-Network}
+The input-clusters, output-clusters and the $F$-Gland are connected in such a way that the addition 
+of all input-spike-signals and output signals 
+are relayed to a specific neuron(s) of the $F$-Gland (receiver) and a frequency decoder:
+If the signal contains a frequency, a corresponding neurons 'activates'. 
+A number of neurons of the $F$-Gland function as an emitter.
+The $F$-gland can recognize if the frequencies of the emitter match those of the receiver.
+Such a \textbf{signal-match} 
+
+ \subsubsection{Network-States}
+ 
+
+
+Depending on the chemical concentrations in $P$, at any point in time, we attribute one of the following 'states' to
+$\mathcal{NN}$ 
+\begin{enumerate}
+\item wake-state; sub-states:
+\begin{enumerate}
+\item interpreting-state (only the $WT$-gland is active),
+\item rewarded-state (only the $WT$-gland and $R$-gland are active),
+\item fear-state (only the $WT$-gland and $F$-gland are active),
+\end{enumerate}
+\item asleep; sub-states:
+\begin{enumerate}
+\item dream-state (only $S$-gland in active),
+\item fear-state  (only the $WT$-gland and $F$-gland are active),
+\item learning-state  (only the $WT$-gland and $F$-gland are active),
+%\item sleep-eating-state  (only the $WT$-gland and $R$-gland are active),
+\end{enumerate}
+\end{enumerate}
+The only possible transitions are
+$1.a \rightarrow 1.b$, $1.a \rightarrow 1.b$, $1.a \rightarrow 2.a$ (falling-asleep-state), 
+$1.b \rightarrow 1.a$, $1.c \rightarrow 1.a$, $2.a \rightarrow 1.a$(waking-up-state),
+$2.a \rightarrow 2.b$, $2.a \rightarrow 2.c$ ,
+$2.b \rightarrow 2.a$  and $2.c \rightarrow 2.a$.
+We also denote \emph{wake} and \emph{sleep} for a state 
+
+
+\begin{enumerate}
+\item The $S$-gland will activate and the $WT$-gland will deactivate  if $T$ exceeds a threshold in a point $p \in P$.
+\item In the \emph{interpreting-state}, the $R$-gland will activate if triggered from outside. 
+If the $R$-concentration exceeds a threshold in a point $p\in P$, the  $WT$-gland stops producing $T$.
+\item The chemical $E$ is delivered via blood flow. The amount delivered depend on the vessel diameters. Some vessel diameters may shrink to a point where the local network activity is suppressed. 
+\item ... [\emph{TODO: chemical properties}]
+\end{enumerate}
+
+\subsubsection{Memory formation}
+
+[TODO: precise Definitions]
+
+\textbf{L-T-S-Memory}: Activation pattern change caused by long-term changes in synaptic weights or new synapses  
+
+\textbf{S-T-S-Memory}: Activation pattern  change caused by short-term changes in synaptic weights or new short-lived synapses  
+
+\textbf{S-T-C-Memory}: Activation pattern  change caused by changes in chemical concentrations
+
+... [TODO: ]
+
+
+\subsection{Correcting the Error}
+
+In the following we sketch the behavior of the Network:
+
+\subsubsection{Wake State}
+
+   \begin{figure}[htb]
+      \centering
+      \includegraphics[width=4in]{wake.jpg}
+      \caption{Wake.  
+      \label{wakestate}}
+  \end{figure}
+
+We assume the the network is in the \emph{interpreting-state}.
+
+\begin{enumerate}
+\item \emph{(interpreting-state)} ..
+
+\item \emph{(interpreting-state)} \emph{TODO: The network detects an Input ($ \Rightarrow i_3$ is activated) 
+corresponding to $\{\overline{i_0}, \overline{i_1}, i_2\}$}. 
+\item \emph{(interpreting-state)} The activity pattern causes the blood vessels going through $\mathcal{I}$ 
+to contract and expand proportionally to the activity.
+\item \emph{(interpreting-state)} The activation of $I_3$ causes the $STL$-gland to emit (say) only in $\mathcal{I}$. 
+The vessel diameters are such that the concentration of $STL$ exceeds a threshold 
+in $\{ i_2, i_3\}$ and not in $\{\overline{i_0}, \overline{i_1}\}$. 
+
+\item \emph{(fear-state)} \emph{TODO} Due to the error the $R$-Gland is not activated which in turn cause the $F$-Gland to be activated.
+
+\item \emph{(fear-state)} The activation of the $F$-Gland causes the 'light' activation of the Input cluster. 
+Because of the $STA$-concentrations, the Input cluster activity corresponds 
+to the last input pattern.
+
+\item \emph{(interpreting-state)} (See Frequency-Network) Some synapses of the $F$-Gland grow or shrink randomly until 
+the frequencies of the receiver match those of the current active $R$-clusters of $\mathcal{I}$.
+A 'match' causes the current $F$-Gland synapse configuration to freeze, the $F$-Gland to deactivate and the $ASTA$-gland to activate for limited time period  (which cause the 
+$STA$-concentrations to go to zero).
+
+\item \emph{(interpreting-state)} ..
+
+\subsubsection{Sleep State}
+
+     \begin{figure}[htb]
+      \centering
+      \includegraphics[width=4in]{sleep.jpg}
+      \caption{Sleep.  
+      \label{sleestate}}
+   \end{figure} 
+   
+\item \emph{(dream-state)}  ..
+\item \emph{(dream-state)}  $i_0, i_1, i_2, o_0,$ and $o_1$ are regularly  randomly activated for (and the corresponding output clusters) limited time periods. S-T-C memories are formed and erased regularly.  
+\item \emph{(dream-state)}  ..
+\item \emph{(dream-state)} the 'input-output-state' $\{\overline{i_0}, \overline{i_1}, i_2, \overline{o_0}, o_1\}$ is reached
+\item \emph{(fear-state)} the $F$-gland 'recognizes' the 'input-output-state'-frequency signature corresponding to $\{\overline{i_0}, \overline{i_1}, i_2, \overline{o_0}, o_1\}$ and is activated. 
+\item \emph{(learning-state)} (loop) $L1$ is released into the whole network (a constant level of concentration is maintained afterwards).
+\item \emph{(learning-state)} (loop) overall activation + $S$-$T$-$C$ causes  $\{\overline{i_0}, \overline{i_1}, i_2, o_0, \overline{o_1}\}$ to be active.
+\item \emph{(learning-state)} (loop) $L1$ causes the Neurons to slowly grow new non-persistent random synapses (with a probability proportional to $L1$-concentration) until  $o_0$ is deactivated and $o_1$ activated such that the frequencies don't match the ones of the error. The sudden drop in activity in the $F$-Gland while being subjected to $L1$ causes the release of $L2$ and the temporary deactivation of the $L1$-Gland. 
+\item \emph{(learning-state)} (loop) $L2$ is released predominately around currently active
+neurons and the connections between them as active groups have extended the blood supplying vessel-diameters at the expense of others.
+\item \emph{(learning-state)} (loop) If a neuron is subjected to $L2$ above a certain threshold $th_1$
+will cause the release $NL1$ which increases the probability of activation for a Neuron. Above a threshold $th_2 > th_1$
+$NL2$ is released which turns some new non-permanent synapses into permanent ones.
+%\item \emph{(learning-state)} (loop) If a neuron is subjected to $NL1$ above a certain threshold it will turn neu non-permanent synapse into  perman
+\item \emph{(learning-state)}  (loop) $L2$ slows the decrease in $L1$-concentration
+
+\item (loop) ..
+\end{enumerate}
+
+     \begin{figure}[htb]
+      \centering
+      \includegraphics[width=5in]{Learning.jpg}
+      \caption{Learning  (2D).  
+      \label{learningstate}}
+  \end{figure}
+
+
+
+
+\begin{thebibliography}{9}
+%     \bibitem{MyFavorite}
+%         {\sc Lamport, L.,}
+%         ``\LaTeX - A Document Preparation System'',
+%         Addison-Wesley, 1998.
+
+    \bibitem{Izkevitch}
+         {\sc Izkevitch} 
+%         and {\sc Heliotrope, B.,}
+         {\em ..}
+         2003.
+    \bibitem{short}
+         {\sc ..} 
+         {\em Shot-Term Memory, }
+         ..
+         
+             \bibitem{}
+         {\sc .. } 
+         {\em Rule 110. ..}
+         
+
+\end{thebibliography}
+
+
+
+%\section*{About the author:}
+%   We would like a short biographical sketch,
+%   beyond just your affiliation to be placed
+%   after the bibliography.
+%   And below that, your full address.
+
+
+
+%\subsection*{Primus Scriber}
+%   Mirkwood,
+%   Philadelphia, Pennsylvania, 42345-6543$\pm\epsilon$.
+%   pscriber@cenet.edu
+%
+%\subsection*{Theco Author}~
+%   Department of Statistics,
+%   The Virtual University,
+%   New York, NY 13291-5555.
+%   also@aol.com
+
+\end{document}
