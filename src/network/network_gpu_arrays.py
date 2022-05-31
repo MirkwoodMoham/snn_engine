@@ -106,6 +106,7 @@ class NetworkGPUArrays(GPUArrayCollection):
          self.N_delays) = self._N_rep_and_N_delays(shapes=shapes, curand_states=self.curand_states)
 
         self.N_rep_pre_synaptic = self.izeros(shapes.N_rep_pre_synaptic)
+        self.N_rep_pre_synaptic_weight_idx = self.izeros(shapes.N_rep_pre_synaptic)
         self.N_rep_pre_synaptic_counts = self.izeros(self._config.N + 1)
         self.print_allocated_memory('N_rep_inv')
 
@@ -118,8 +119,7 @@ class NetworkGPUArrays(GPUArrayCollection):
                               types_tensor=self.N_G[:, self._config.N_G_neuron_type_col])
 
         self.G_props = LocationGroupProperties(shape=shapes.G_props, device=self.device, config=self._config,
-                                               grid=grid,
-                                               select_ibo=buffers.selected_group_boxes_ibo)
+                                               grid=grid, select_ibo=buffers.selected_group_boxes_ibo)
 
         self.Fired = self.fzeros(self._config.N)
         self.last_Fired = self.izeros(self._config.N) - self._config.D
@@ -130,7 +130,21 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.G_stdp_config0 = self.izeros((self._config.G, self._config.G))
         self.G_stdp_config1 = self.izeros((self._config.G, self._config.G))
 
-        self.Simulation = snn_simulation_gpu.SnnSimulation(
+        self.Simulation = self._init_sim(T, plotting_config)
+
+        self.N_relative_G_indices = self._N_relative_G_indices()
+        self.G_swap_tensor = self._G_swap_tensor()
+        self.print_allocated_memory('G_swap_tensor')
+        self.swap_group_synapses(torch.from_numpy(grid.forward_groups).to(device=self.device).type(torch.int64))
+        self.N_states.use_preset('rs', self.selected_neuron_mask(self._config.sensory_groups))
+
+        self.Simulation.set_stdp_config(0)
+
+        self.active_output_groups = None
+
+    def _init_sim(self, T, plotting_config):
+
+        sim = snn_simulation_gpu.SnnSimulation(
             N=self._config.N,
             G=self._config.G,
             S=self._config.S,
@@ -160,20 +174,16 @@ class NetworkGPUArrays(GPUArrayCollection):
             G_stdp_config0=self.G_stdp_config0.data_ptr(),
             G_stdp_config1=self.G_stdp_config1.data_ptr(),
         )
-        self.Simulation.set_pre_synaptic_pointers(
+
+        sim.set_pre_synaptic_pointers(
             N_rep_pre_synaptic=self.N_rep_pre_synaptic.data_ptr(),
+            N_rep_pre_synaptic_weight_idx=self.N_rep_pre_synaptic_weight_idx.data_ptr(),
             N_rep_pre_synaptic_counts=self.N_rep_pre_synaptic_counts.data_ptr()
         )
-        self.Simulation.actualize_N_rep_pre_synaptic()
-        self.N_relative_G_indices = self._N_relative_G_indices()
-        self.G_swap_tensor = self._G_swap_tensor()
-        self.print_allocated_memory('G_swap_tensor')
-        self.swap_group_synapses(torch.from_numpy(grid.forward_groups).to(device=self.device).type(torch.int64))
-        self.N_states.use_preset('rs', self.selected_neuron_mask(self._config.sensory_groups))
 
-        self.Simulation.set_stdp_config(0)
+        sim.actualize_N_rep_pre_synaptic()
 
-        self.active_output_groups = None
+        return sim
 
     def update(self):
         self.plotting_arrays.voltage.map()

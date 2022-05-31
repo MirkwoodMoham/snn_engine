@@ -78,6 +78,9 @@ class NetworkConfig:
 
     def __post_init__(self):
 
+        if self.N <= 4000:
+            self.N_pos_shape = (1, 1, 1)
+
         if self.S is None:
             self.S = int(min(1000, max(np.sqrt(self.N), 2)))
         if self.D is None:

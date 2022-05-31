@@ -15,7 +15,7 @@ from pycuda import autoinit
 
 class EngineConfig:
 
-    N: int = 7 * 10 ** 5
+    N: int = 1 * 10 ** 2
     T: int = 2000  # Max simulation duration
 
     device: int = 0

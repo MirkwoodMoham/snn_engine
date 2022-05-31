@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.6)
 
 project(snn_construction_gpu)
 
+set(CMAKE_CUDA_COMPILER /usr/local/cuda/bin/nvcc)
 enable_language(CUDA)
 find_package(CUDA REQUIRED)
 # find_library(${CUDA_cusparse_LIBRARY} PATHS "/usr/local/cuda/lib64" NO_DEFAULT_PATH) 
@@ -11,8 +12,8 @@ if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
 endif()
 
 
-find_package(PythonInterp 3.9 REQUIRED)
-find_package(PythonLibs 3.9 REQUIRED)
+find_package(PythonInterp 3 REQUIRED)
+find_package(PythonLibs 3 REQUIRED)
 find_package(OpenGL REQUIRED)
 
 get_filename_component(PROJECT_INC_DIRECTORY ../../../../inc ABSOLUTE)

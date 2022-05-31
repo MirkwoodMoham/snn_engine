@@ -264,6 +264,7 @@ __global__ void update_current_(
 	const float* G_props,
 	const int* N_rep, 
 	const int* N_rep_pre_synaptic,
+	const int* N_rep_pre_synaptic_counts,
 	const float* N_weights, 
 	float* N_states,
 	const int n_fired_m1_to_end,
@@ -292,6 +293,7 @@ __global__ void update_current_(
 	{
 		int n;
 		int firing_time;
+		
 
 		if (fired_idx < n_fired_m1_to_end)
 		{
@@ -307,14 +309,16 @@ __global__ void update_current_(
 			n = fired_idcs[fired_idx - n_fired_m1_to_end];
 			firing_time = __float2int_rn(firing_times[fired_idx - n_fired_m1_to_end]);
 		}
+
+		int delay = t - firing_time;
 		// const int firing_time = __int2float_rn(firing_times[fired_idx]);
 
 		// const int delay_idx = n * (D + 1) + (t - firing_time);
 
 		// N_delays.shape = (D+1, N)
-		// t - firing-time = delay -> use the dealy to infer which synapses must be activated using
+		// t - firing-time = delay -> use the delay to infer which synapses must be activated using
 		// the N_delays array. 
-		const int delay_idx = n + N * (t - firing_time);
+		const int delay_idx = n + N * (delay);
 		// const int syn_idx_start = n * S + N_delays[delay_idx];
 		// const int syn_idx_end = n * S + N_delays[delay_idx + N];
 
@@ -379,15 +383,16 @@ __global__ void update_current_(
 		//}
 
 		int idx;
-		int row_end = N_delays[delay_idx + N]; 
+		int s_end = N_delays[delay_idx + N]; 
+		int s_end2; 
 		
 		float weight_delta = 0.f;
 
 
 		float w;
-		for (int row = N_delays[delay_idx]; row < row_end; row++)
+		for (int s = N_delays[delay_idx]; s < s_end; s++)
 		{
-			idx = n + N * row;
+			idx = n + N * s;
 			snk_N = N_rep[idx];
 			snk_G = N_G[snk_N * 2 + 1];
 			snk_G_is_sensory = G_props[snk_G + 7 * G] > 0.f;
@@ -397,16 +402,41 @@ __global__ void update_current_(
 			{
 				atomicAdd(&N_states[snk_N + 7 * N], w);
 			}
-
-			if ((r_stdp) && (t - last_fired[snk_N] < D)){
-				if (G_stdp_config_current[src_G + snk_G * G] > 0){
+			
+			if (r_stdp){
+				if ((t - last_fired[snk_N] < D) 
+					&& (G_stdp_config_current[src_G + snk_G * G] > 0)){
+				//if (G_stdp_config_current[src_G + snk_G * G] > 0){
 				// 	weight_delta = alpha * phi_r * a_r_p + beta * phi_p * a_p_m;
 				// }
 				// else if (G_stdp_config_current[src_G + snk_G * G] < 0){
-					weight_delta = alpha * phi_r * a_r_m + beta * phi_p * a_p_p;
+					//weight_delta = alpha * phi_r * a_r_m + beta * phi_p * a_p_p;
+				//}
+				// weight_delta *= w * (1. - w);
+
+					weight_delta = (alpha * phi_r * a_r_m + beta * phi_p * a_p_p) * w * (1. - w);
+				
+				} 
+
+				if (delay == 0){
+					int pre_src_N;
+					s_end2 = N_rep_pre_synaptic_counts[n + 1];
+					for (int s2 = N_rep_pre_synaptic_counts[n]; s2 < s_end2; s2++){
+
+						pre_src_N = N_rep_pre_synaptic[s2];
+
+						if ((t - last_fired[pre_src_N] < D) 
+							 && (G_stdp_config_current[src_G + snk_G * G] > 0)){
+								
+								// idx = pre_src_N + N * ;
+								weight_delta = (alpha * phi_r * a_r_m + beta * phi_p * a_p_p) * w * (1. - w);
+							 
+						}
+					}
 				}
-				weight_delta *= w * (1. - w);
 			}
+
+
 		}
 	}
 	
@@ -659,6 +689,7 @@ void SnnSimulation::update(const bool verbose)
 		G_props,
 		N_rep,
 		N_rep_pre_synaptic,
+		N_rep_pre_synaptic_counts,
 		N_weights,
 		N_states,
 		n_fired_m1_to_end,
@@ -1353,17 +1384,21 @@ void SnnSimulation::set_stdp_config(int stdp_config_id, bool activate){
 
 void SnnSimulation::set_pre_synaptic_pointers(
 	int* N_rep_pre_synaptic_, 
+	int* N_rep_pre_synaptic_weight_idx_, 
 	int* N_rep_pre_synaptic_counts_
 ){
 	N_rep_pre_synaptic = N_rep_pre_synaptic_;
+    N_rep_pre_synaptic_weight_idx = N_rep_pre_synaptic_weight_idx_;
     N_rep_pre_synaptic_counts = N_rep_pre_synaptic_counts_;
 }
 void SnnSimulation::set_pre_synaptic_pointers_python(
 	const long N_rep_pre_synaptic_dp, 
+	const long N_rep_pre_synaptic_weight_idx_dp, 
 	const long N_rep_pre_synaptic_counts_dp
 ){
 	set_pre_synaptic_pointers(
 		reinterpret_cast<int*>(N_rep_pre_synaptic_dp),
+		reinterpret_cast<int*>(N_rep_pre_synaptic_weight_idx_dp),
 		reinterpret_cast<int*>(N_rep_pre_synaptic_counts_dp));
 }
 
@@ -1372,12 +1407,14 @@ __global__ void reset_N_rep_pre_synaptic(
 	const int N,
 	const int S,
 	int* N_rep_pre_synaptic,
+	int* N_rep_pre_synaptic_weight_idx,
 	int* N_rep_pre_synaptic_counts
 ){
 	const int src_N = blockIdx.x * blockDim.x + threadIdx.x; 
 	if (src_N < N){
 		for (int s = 0; s < S; s++){
 			N_rep_pre_synaptic[src_N + s * N] = -1;
+			N_rep_pre_synaptic_weight_idx[src_N + s * N] = -1;
 		}
 		N_rep_pre_synaptic_counts[src_N] = 0;
 		if (src_N == 0){
@@ -1410,6 +1447,7 @@ __global__ void fill_N_rep_pre_synaptic(
 	const int S,
 	int* N_rep,
 	int* N_rep_pre_synaptic,
+	int* N_rep_pre_synaptic_weight_idx,
 	int* N_rep_pre_synaptic_counts
 ){
 	const int src_N = blockIdx.x * blockDim.x + threadIdx.x; 
@@ -1429,8 +1467,8 @@ __global__ void fill_N_rep_pre_synaptic(
 			
 			while (old != -1){
 				old = atomicExch(&N_rep_pre_synaptic[idx], old);
+				N_rep_pre_synaptic_weight_idx[idx] = snk_N;
 				idx++;
-				
 			}
 
 			atomicAdd(&N_rep_pre_synaptic_counts[snk_N],1);
@@ -1448,6 +1486,7 @@ void SnnSimulation::actualize_N_rep_pre_synaptic(){
 		N,
 		S,
 		N_rep_pre_synaptic,
+		N_rep_pre_synaptic_weight_idx,
 		N_rep_pre_synaptic_counts
 	);
 
@@ -1473,6 +1512,7 @@ void SnnSimulation::actualize_N_rep_pre_synaptic(){
 		S,
 		N_rep,
 		N_rep_pre_synaptic,
+		N_rep_pre_synaptic_weight_idx,
 		N_rep_pre_synaptic_counts
 	);
 

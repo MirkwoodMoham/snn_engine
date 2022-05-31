@@ -1,6 +1,7 @@
 #include <utils/curand_states.cuh>
 #include <utils/launch_parameters.cuh>
 
+
 struct SnnSimulation
 {
     int N;
@@ -27,6 +28,7 @@ struct SnnSimulation
     float* G_props; 
     int* N_rep; 
     int* N_rep_pre_synaptic; 
+    int* N_rep_pre_synaptic_weight_idx; 
     int* N_rep_pre_synaptic_counts; 
     int* N_delays; 
     float* N_states; 
@@ -151,9 +153,11 @@ struct SnnSimulation
 
     void set_pre_synaptic_pointers(
         int* N_rep_pre_synaptic_, 
+        int* N_rep_pre_synaptic_weight_idx_,
         int* N_rep_pre_synaptic_counts_);
     void set_pre_synaptic_pointers_python(
         const long N_rep_pre_synaptic_dp, 
+        const long N_rep_pre_synaptic_weight_idx_dp,
         const long N_rep_pre_synaptic_counts_dp);
 
     void actualize_N_rep_pre_synaptic();
