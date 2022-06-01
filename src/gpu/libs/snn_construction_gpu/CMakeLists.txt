@@ -12,8 +12,8 @@ if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
 endif()
 
 
-find_package(PythonInterp 3 REQUIRED)
-find_package(PythonLibs 3 REQUIRED)
+find_package(PythonInterp 3.9 REQUIRED)
+find_package(PythonLibs 3.9 REQUIRED)
 find_package(OpenGL REQUIRED)
 
 get_filename_component(PROJECT_INC_DIRECTORY ../../../../inc ABSOLUTE)
@@ -24,11 +24,10 @@ include_directories(
     ${PYTHON_INCLUDE_DIRS}
     ${PROJECT_INC_DIRECTORY}
     ${OPENGL_INCLUDE_DIR}
-
 )
 
 link_directories(
-    /usr/local/cuda11-5/lib64
+    /usr/local/cuda/lib64
     "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.5/libs/x64"
 )
 
@@ -37,6 +36,14 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 endif()
 
+set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}; -Xcompiler -fPIC)
+
+set(CUDA_SEPARABLE_COMPILATION ON)
+set(CUDA_PROPAGATE_HOST_FLAGS OFF)
+
+# set(CUDA_NVCC_FLAGS "-rdc=true")
+
+# set(PROJECT_LINK_LIBS  -lcudadevrt)
 
 cuda_add_library(
     snn_construction_gpu SHARED
@@ -54,6 +61,11 @@ cuda_add_library(
     ./src/utils/launch_parameters.cu
     ./src/utils/curand_states.cu
 )
+
+# target_link_libraries(
+#     snn_simulation_gpu
+#     ${CUDA_cudadevrt_LIBRARY}
+# )
 
 target_link_libraries(
     snn_construction_gpu

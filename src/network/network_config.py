@@ -78,6 +78,8 @@ class NetworkConfig:
 
     def __post_init__(self):
 
+        assert self.N % 2 == 0
+
         if self.N <= 4000:
             self.N_pos_shape = (1, 1, 1)
 

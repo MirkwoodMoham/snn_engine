@@ -1,6 +1,6 @@
 ### PyCharm ###
 .idea/
-*.vscode/*
+/src/gpu/libs/snn_construction_gpu/.vscode
 
 # Created by https://www.toptal.com/developers/gitignore/api/python,c++,cuda
 # Edit at https://www.toptal.com/developers/gitignore?templates=python,c++,cuda
