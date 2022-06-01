@@ -87,7 +87,7 @@ class NetworkConfig:
             self.D = min(int(max(np.log10(self.N) * (1 + np.sqrt(np.log10(self.N))), 2)), 20)
 
         # assert self.N >= 20
-        assert self.N <= 2 * 10 ** 6
+        # assert self.N <= 2 * 10 ** 6
         assert isinstance(self.N, int)
         assert self.S <= 1000
         assert isinstance(self.S, int)

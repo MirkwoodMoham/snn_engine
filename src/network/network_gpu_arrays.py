@@ -106,7 +106,7 @@ class NetworkGPUArrays(GPUArrayCollection):
          self.N_delays) = self._N_rep_and_N_delays(shapes=shapes, curand_states=self.curand_states)
 
         self.N_rep_pre_synaptic = self.izeros(shapes.N_rep_pre_synaptic)
-        self.N_rep_pre_synaptic_weight_idx = self.izeros(shapes.N_rep_pre_synaptic)
+        self.N_rep_pre_synaptic_idx = self.izeros(shapes.N_rep_pre_synaptic)
         self.N_rep_pre_synaptic_counts = self.izeros(self._config.N + 1)
         self.print_allocated_memory('N_rep_inv')
 
@@ -136,6 +136,14 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.G_swap_tensor = self._G_swap_tensor()
         self.print_allocated_memory('G_swap_tensor')
         self.swap_group_synapses(torch.from_numpy(grid.forward_groups).to(device=self.device).type(torch.int64))
+
+        self.Simulation.actualize_N_rep_pre_synaptic()
+
+        # aa = self.to_dataframe(self.N_rep_pre_synaptic)
+        # ab = self.to_dataframe(self.N_rep_pre_synaptic_counts)
+        # ac = self.to_dataframe(self.N_rep_pre_synaptic_idx)
+        # ad = self.to_dataframe(self.N_rep)
+
         self.N_states.use_preset('rs', self.selected_neuron_mask(self._config.sensory_groups))
 
         self.Simulation.set_stdp_config(0)
@@ -177,18 +185,23 @@ class NetworkGPUArrays(GPUArrayCollection):
 
         sim.set_pre_synaptic_pointers(
             N_rep_pre_synaptic=self.N_rep_pre_synaptic.data_ptr(),
-            N_rep_pre_synaptic_weight_idx=self.N_rep_pre_synaptic_weight_idx.data_ptr(),
+            N_rep_pre_synaptic_idx=self.N_rep_pre_synaptic_idx.data_ptr(),
             N_rep_pre_synaptic_counts=self.N_rep_pre_synaptic_counts.data_ptr()
         )
-
-        sim.actualize_N_rep_pre_synaptic()
 
         return sim
 
     def update(self):
-        self.plotting_arrays.voltage.map()
-        self.plotting_arrays.firings.map()
+
         self.Simulation.update(False)
+        # self.Simulation.update(False)
+        # self.Simulation.update(False)
+        # self.Simulation.update(False)
+        # self.Simulation.update(False)
+        # self.Simulation.update(False)
+        # self.Simulation.update(False)
+        # self.Simulation.update(False)
+        # self.Simulation.update(False)
 
     def print_sim_state(self):
         print('Fired:\n', self.Fired)
@@ -559,6 +572,9 @@ class NetworkGPUArrays(GPUArrayCollection):
         del N_rep_t
         self.print_allocated_memory(f'transposed')
         # return N_rep_t.transpose_(0, 1), N_delays
+
+        assert len(N_rep[N_rep == -1]) == 0
+
         return N_rep, N_delays
 
     def _N_rep_groups_cpu(self):
@@ -755,6 +771,7 @@ class NetworkGPUArrays(GPUArrayCollection):
 
             neuron_group_indices[:] = -1
 
+        assert len(self.N_rep[self.N_rep == -1]) == 0
         return
 
     def _single_group_swap(self, program,

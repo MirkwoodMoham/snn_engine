@@ -15,7 +15,7 @@ from pycuda import autoinit
 
 class EngineConfig:
 
-    N: int = 1 * 10 ** 2
+    N: int = 50 * 10 ** 4
     T: int = 2000  # Max simulation duration
 
     device: int = 0
@@ -24,7 +24,7 @@ class EngineConfig:
 
     network_config = NetworkConfig(N=N, N_pos_shape=(4, 4, 1))
     plotting_config = PlottingConfig(N=N,
-                                     n_voltage_plots=10, voltage_plot_length=100,
+                                     n_voltage_plots=50, voltage_plot_length=100,
                                      n_scatter_plots=1000, scatter_plot_length=1000)
 
 

@@ -592,6 +592,9 @@ class InputCells(IOCells):
         self.network.GPU.actualize_plot_map(
             self.network_config.sensory_groups[self.io_neuron_group_values_gpu.cpu() != -1.])
 
+        self.network.GPU.plotting_arrays.voltage.map()
+        self.network.GPU.plotting_arrays.firings.map()
+
     @property
     def src_weight(self):
         return self._src_weight
@@ -623,3 +626,6 @@ class OutputCells(IOCells):
 
         self.network.GPU.actualize_plot_map(
             self.network_config.output_groups[self.io_neuron_group_values_gpu.cpu() != -1.])
+
+        self.network.GPU.plotting_arrays.voltage.map()
+        self.network.GPU.plotting_arrays.firings.map()

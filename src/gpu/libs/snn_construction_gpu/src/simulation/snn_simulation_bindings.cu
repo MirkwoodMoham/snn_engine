@@ -119,7 +119,7 @@ PYBIND11_MODULE(snn_simulation_gpu, m)
     .def("swap_groups", &SnnSimulation::swap_groups_python)
     .def("set_pre_synaptic_pointers", &SnnSimulation::set_pre_synaptic_pointers_python,
         py::arg("N_rep_pre_synaptic"),
-        py::arg("N_rep_pre_synaptic_weight_idx"),
+        py::arg("N_rep_pre_synaptic_idx"),
         py::arg("N_rep_pre_synaptic_counts"))
     .def("set_stdp_config", &SnnSimulation::set_stdp_config, 
         py::arg("stdp_config_id"), 
