@@ -49,7 +49,7 @@ struct SnnSimulation
     int* firing_counts_write;
     int* firing_counts;
 
-    bool stdp_active;
+    bool stdp_active = false;
     int* G_stdp_config0;
     int* G_stdp_config1;
     int* G_stdp_config_current;
@@ -82,6 +82,10 @@ struct SnnSimulation
     int t = 0;
 
     bool resetting = false;
+
+    std::chrono::steady_clock::time_point t0;
+    // std::chrono::steady_clock::time_point t1;
+    uint update_duration;
 
     SnnSimulation(
         int N_,

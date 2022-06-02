@@ -17,7 +17,6 @@ class NetworkArrayShapes:
 
         # Network Representation
         self.N_rep = (config.S, config.N)  # float
-        self.N_rep_pre_synaptic = (config.N, config.S)  # float
         self.N_weights = self.N_rep  # np.float32
         self.N_delays = (config.D + 1, config.N)  # int
         self.N_fired = (1, config.N)  # int
@@ -27,7 +26,6 @@ class NetworkArrayShapes:
 
         # pt, u, v, a, b, c, d, I
         self.N_states = (n_N_states, config.N)  # dtype=np.float32
-        self.N_stpd = (config.N, config.S * n_neuron_types)  # dtype=np.float32
 
         # GROUPS (location-based)
 
@@ -91,3 +89,8 @@ class NetworkArrayShapes:
 
         assert config.G == self.G_props[1]
         assert config.N == self.N_states[1]
+
+    # noinspection PyPep8Naming
+    @property
+    def N_rep_inv(self):
+        return self.N_rep[1], self.N_rep[0]

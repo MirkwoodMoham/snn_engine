@@ -73,24 +73,11 @@ class EngineSceneCanvas(scene.SceneCanvas):
         axis.transform = STTransform()
         axis.transform.move((-0.1, -0.1, -0.1))
 
+        self.time_txt2 = None
+        self.update_duration_value_txt = None
+
         plot_col = 1
-        text_grid: scene.widgets.Grid = self.grid.add_grid(row=0, col=5, row_span=2, col_span=1,
-                                                           border_color='w')
-
-        time_txt = scene.Label('t', color='white')
-        time_txt.border_color = 'w'
-
-        self.time_txt2 = scene.Label('0', color='white')
-        self.time_txt2.border_color = 'w'
-        time_txt.height_min = 100
-        time_txt.height_max = 100
-        # text_grid.height_min = 30
-        # text_grid.height_max = 30
-        text_grid.width_min = 150
-        text_grid.width_max = 150
-
-        text_grid.add_widget(time_txt, row=0, col=0, row_span=1)
-        text_grid.add_widget(self.time_txt2, row=0, col=1, row_span=1)
+        self.info_grid_right()
 
         self.voltage_plot_view = self._voltage_plot_view(row=0, col=plot_col)
         self.voltage_plot_view.width_min = 450
@@ -115,6 +102,35 @@ class EngineSceneCanvas(scene.SceneCanvas):
 
             # self._select(network.selector_box, True)
             # self._selected_objects.append(network.selector_box)
+
+    def info_grid_right(self):
+        # noinspection PyTypeChecker
+        text_grid: scene.widgets.Grid = self.grid.add_grid(row=0, col=5, row_span=2, col_span=1,
+                                                           border_color='w')
+        # noinspection PyTypeChecker
+        time_txt = scene.Label('t', color='white')
+        time_txt.border_color = 'w'
+        # noinspection PyTypeChecker
+        self.time_txt2 = scene.Label('0', color='white')
+        self.time_txt2.border_color = 'w'
+        time_txt.height_min = 100
+        time_txt.height_max = 100
+        # text_grid.height_min = 30
+        # text_grid.height_max = 30
+        text_grid.width_min = 150
+        text_grid.width_max = 150
+        text_grid.add_widget(time_txt, row=0, col=0, row_span=1)
+        text_grid.add_widget(self.time_txt2, row=0, col=1, row_span=1)
+
+        update_duration_text = scene.Label('update\nduration', color='white')
+        update_duration_text.height_max = 100
+        update_duration_text.border_color = 'w'
+        self.update_duration_value_txt = scene.Label('0', color='white')
+        self.update_duration_value_txt.border_color = 'w'
+
+        text_grid.add_widget(update_duration_text, row=1, col=0, row_span=1)
+        text_grid.add_widget(self.update_duration_value_txt, row=1, col=1, row_span=1)
+
 
     @property
     def _window_id(self):

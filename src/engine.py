@@ -15,7 +15,7 @@ from pycuda import autoinit
 
 class EngineConfig:
 
-    N: int = 1 * 10 ** 4
+    N: int = 2 * 10 ** 5
     T: int = 2000  # Max simulation duration
 
     device: int = 0
@@ -134,6 +134,7 @@ class Engine:
             # self.set_scale(elapsed)
             self.network.GPU.update()
             self.window.scene_3d.time_txt2.text = str(self.network.GPU.Simulation.t)
+            self.window.scene_3d.update_duration_value_txt.text = str(self.network.GPU.Simulation.update_duration)
 
     def toggle_outergrid(self):
         self.network.outer_grid.visible = not self.network.outer_grid.visible

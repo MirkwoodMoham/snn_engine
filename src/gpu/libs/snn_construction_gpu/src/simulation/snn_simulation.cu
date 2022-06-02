@@ -549,6 +549,8 @@ void SnnSimulation::print_info(bool bprint_idcs){
 
 void SnnSimulation::update(const bool verbose)
 {	
+	t0 = std::chrono::steady_clock::now();
+	
 	// if (verbose)
 	// {
 	// 	std::cout << "\n\n  ------------------------------------ ";
@@ -741,6 +743,9 @@ void SnnSimulation::update(const bool verbose)
 	// {
 	// 	printf("\n");
 	// }
+
+	update_duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+		std::chrono::steady_clock::now() - t0).count();
 }
 
 
@@ -1609,7 +1614,7 @@ __global__ void fill_N_rep_pre_synaptic_idx(
 ){
 	const int n = blockIdx.x * blockDim.x + threadIdx.x; 
 
-	if (N < N){
+	if (n < N){
 
 		int snk_N;
 		int idx;
