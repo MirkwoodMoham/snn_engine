@@ -25,9 +25,10 @@ struct SnnSimulation
     
     float* N_pos; 
     int* N_G; 
+    int* G_group_delay_counts; 
     float* G_props; 
     int* N_rep; 
-    int* N_rep_pre_synaptic; 
+    int* N_rep_buffer; 
     int* N_rep_pre_synaptic_idx; 
     int* N_rep_pre_synaptic_counts; 
     int* N_delays; 
@@ -53,6 +54,8 @@ struct SnnSimulation
     int* G_stdp_config0;
     int* G_stdp_config1;
     int* G_stdp_config_current;
+    float* G_avg_weight_inh;
+    float* G_avg_weight_exc;
     
     LaunchParameters lp_update_state;
     LaunchParameters lp_update_voltage_plot;
@@ -107,10 +110,12 @@ struct SnnSimulation
         curandState* rand_states_,
         float* N_pos_,
         int* N_G_,
+        int* G_group_delay_counts_,
         float* G_props_, 
         int* N_rep_, 
-        // int* N_rep_pre_synaptic_, 
-        // int* N_rep_pre_synaptic_counts_, 
+        int* N_rep_buffer_,
+        int* N_rep_pre_synaptic_idx_, 
+        int* N_rep_pre_synaptic_counts_, 
         int* N_delays_, 
         float* N_states_,
         float* N_weights_,
@@ -121,7 +126,9 @@ struct SnnSimulation
         int* firing_counts_,
         
         int* G_stdp_config0_,
-        int* G_stdp_config1_
+        int* G_stdp_config1_,
+        float* G_avg_weight_inh_,
+        float* G_avg_weight_exc_
     );
     
     void update_voltage_plot();
@@ -155,14 +162,18 @@ struct SnnSimulation
 
     void set_stdp_config(int stdp_config_id, bool activate = true);
 
-    void set_pre_synaptic_pointers(
-        int* N_rep_pre_synaptic_, 
-        int* N_rep_pre_synaptic_idx_,
-        int* N_rep_pre_synaptic_counts_);
-    void set_pre_synaptic_pointers_python(
-        const long N_rep_pre_synaptic_dp, 
-        const long N_rep_pre_synaptic_idx_dp,
-        const long N_rep_pre_synaptic_counts_dp);
+    // void set_pre_synaptic_pointers(
+    //     int* Buffer_, 
+    //     int* N_rep_pre_synaptic_idx_,
+    //     int* N_rep_pre_synaptic_counts_);
+    // void set_pre_synaptic_pointers_python(
+    //     const long Buffer_dp, 
+    //     const long N_rep_pre_synaptic_idx_dp,
+    //     const long N_rep_pre_synaptic_counts_dp);
 
     void actualize_N_rep_pre_synaptic();
+
+    void calculate_avg_group_weight();
+
+
 };

@@ -160,10 +160,12 @@ SnnSimulation::SnnSimulation(
 	curandState* rand_states_,
 	float* N_pos_,
 	int* N_G_,
+	int* G_group_delay_counts_,
     float* G_props_, 
     int* N_rep_, 
-    // int* N_rep_pre_synaptic_, 
-    // int* N_rep_pre_synaptic_counts_, 
+    int* N_rep_buffer_, 
+    int* N_rep_pre_synaptic_idx_, 
+    int* N_rep_pre_synaptic_counts_, 
     int* N_delays_, 
     float* N_states_,
 	float* N_weights_,
@@ -173,7 +175,9 @@ SnnSimulation::SnnSimulation(
 	int* firing_idcs_,
 	int* firing_counts_,
 	int* G_stdp_config0_,
-	int* G_stdp_config1_
+	int* G_stdp_config1_,
+	float* G_avg_weight_inh_,
+	float* G_avg_weight_exc_
 ){
     
 	N = N_;
@@ -196,8 +200,13 @@ SnnSimulation::SnnSimulation(
 
 	N_pos = N_pos_;
 	N_G = N_G_;
+	G_group_delay_counts = G_group_delay_counts_;
     G_props = G_props_; 
     N_rep = N_rep_;
+
+	N_rep_buffer = N_rep_buffer_;
+    N_rep_pre_synaptic_idx = N_rep_pre_synaptic_idx_; 
+    N_rep_pre_synaptic_counts = N_rep_pre_synaptic_counts_;
 
     N_delays = N_delays_;
     N_states = N_states_;
@@ -220,6 +229,9 @@ SnnSimulation::SnnSimulation(
 
 	G_stdp_config0 = G_stdp_config0_;
 	G_stdp_config1 = G_stdp_config1_;
+
+	G_avg_weight_inh = G_avg_weight_inh_;
+	G_avg_weight_exc = G_avg_weight_exc_;
 
 	reset_firing_times_ptr_threshold = 13 * N;
 
@@ -263,7 +275,7 @@ __global__ void update_current_(
 	const int* N_G,
 	const float* G_props,
 	const int* N_rep, 
-	const int* N_rep_pre_synaptic,
+	// const int* Buffer,
 	const int* N_rep_pre_synaptic_idx,
 	const int* N_rep_pre_synaptic_counts,
 	float* N_weights, 
@@ -708,7 +720,7 @@ void SnnSimulation::update(const bool verbose)
 		N_G,
 		G_props,
 		N_rep,
-		N_rep_pre_synaptic,
+		// N_rep_buffer,
 		N_rep_pre_synaptic_idx,
 		N_rep_pre_synaptic_counts,
 		N_weights,
@@ -1406,38 +1418,38 @@ void SnnSimulation::set_stdp_config(int stdp_config_id, bool activate){
 	}
 }
 
-void SnnSimulation::set_pre_synaptic_pointers(
-	int* N_rep_pre_synaptic_, 
-	int* N_rep_pre_synaptic_idx_, 
-	int* N_rep_pre_synaptic_counts_
-){
-	N_rep_pre_synaptic = N_rep_pre_synaptic_;
-    N_rep_pre_synaptic_idx = N_rep_pre_synaptic_idx_;
-    N_rep_pre_synaptic_counts = N_rep_pre_synaptic_counts_;
-}
-void SnnSimulation::set_pre_synaptic_pointers_python(
-	const long N_rep_pre_synaptic_dp, 
-	const long N_rep_pre_synaptic_idx_dp, 
-	const long N_rep_pre_synaptic_counts_dp
-){
-	set_pre_synaptic_pointers(
-		reinterpret_cast<int*>(N_rep_pre_synaptic_dp),
-		reinterpret_cast<int*>(N_rep_pre_synaptic_idx_dp),
-		reinterpret_cast<int*>(N_rep_pre_synaptic_counts_dp));
-}
+// void SnnSimulation::set_pre_synaptic_pointers(
+// 	int* Buffer_, 
+// 	int* N_rep_pre_synaptic_idx_, 
+// 	int* N_rep_pre_synaptic_counts_
+// ){
+// 	Buffer = Buffer_;
+//     N_rep_pre_synaptic_idx = N_rep_pre_synaptic_idx_;
+//     N_rep_pre_synaptic_counts = N_rep_pre_synaptic_counts_;
+// }
+// void SnnSimulation::set_pre_synaptic_pointers_python(
+// 	const long Buffer_dp, 
+// 	const long N_rep_pre_synaptic_idx_dp, 
+// 	const long N_rep_pre_synaptic_counts_dp
+// ){
+// 	set_pre_synaptic_pointers(
+// 		reinterpret_cast<int*>(Buffer_dp),
+// 		reinterpret_cast<int*>(N_rep_pre_synaptic_idx_dp),
+// 		reinterpret_cast<int*>(N_rep_pre_synaptic_counts_dp));
+// }
 
 
 __global__ void reset_N_rep_pre_synaptic(
 	const int N,
 	const int S,
-	int* N_rep_pre_synaptic,
+	int* Buffer,
 	int* N_rep_pre_synaptic_idx,
 	int* N_rep_pre_synaptic_counts
 ){
 	const int src_N = blockIdx.x * blockDim.x + threadIdx.x; 
 	if (src_N < N){
 		for (int s = 0; s < S; s++){
-			N_rep_pre_synaptic[src_N + s * N] = -1;
+			Buffer[src_N + s * N] = -1;
 			N_rep_pre_synaptic_idx[src_N + s * N] = -1;
 		}
 
@@ -1496,7 +1508,7 @@ __global__ void fill_N_rep_pre_synaptic(
 	const int N,
 	const int S,
 	int* N_rep,
-	int* N_rep_pre_synaptic,
+	int* Buffer,
 	int* N_rep_pre_synaptic_idx,
 	int* N_rep_pre_synaptic_counts
 ){
@@ -1517,7 +1529,7 @@ __global__ void fill_N_rep_pre_synaptic(
 			write_idx = N_rep_pre_synaptic_counts[snk_N];
 			
 			while (read_idx != -1){
-				read_idx = atomicExch(&N_rep_pre_synaptic[write_idx], read_idx);
+				read_idx = atomicExch(&Buffer[write_idx], read_idx);
 				N_rep_pre_synaptic_idx[write_idx] = snk_N;
 				write_idx++;
 			}
@@ -1534,13 +1546,13 @@ void sort_N_rep_sysnaptic(
 	const int N,
 	const int S,
 	int* sort_keys,
-	int* N_rep_pre_synaptic,
+	int* Buffer,
 	int* N_rep_pre_synaptic_counts,
 	const bool verbose = true
 ){
 
 	auto sort_keys_dp = thrust::device_pointer_cast(sort_keys);
-	auto N_rep_dp = thrust::device_pointer_cast(N_rep_pre_synaptic);
+	auto N_rep_dp = thrust::device_pointer_cast(Buffer);
 	auto N_rep_counts_dp = thrust::device_pointer_cast(N_rep_pre_synaptic_counts);
 
 	int n_sorted = 0;
@@ -1591,13 +1603,13 @@ __global__ void write_pre_synaptic_idx(
 	int src_N,
 	int start,
 	int end,
-	const int* N_rep_pre_synaptic,
+	const int* Buffer,
 	int* N_rep_pre_synaptic_idx
 ) 
 {
 	const int write_idx = start + blockIdx.x * blockDim.x + threadIdx.x; 
 
-	if ((write_idx < end) && (N_rep_pre_synaptic[write_idx] == src_N)){
+	if ((write_idx < end) && (Buffer[write_idx] == src_N)){
 
 		N_rep_pre_synaptic_idx[write_idx] = s;
 
@@ -1609,7 +1621,7 @@ __global__ void write_pre_synaptic_idx(
 __global__ void fill_N_rep_pre_synaptic_idx(
 	const int N,
 	const int S,
-	int* N_rep_pre_synaptic,
+	int* Buffer,
 	int* N_rep_pre_synaptic_idx
 ){
 	const int n = blockIdx.x * blockDim.x + threadIdx.x; 
@@ -1626,9 +1638,9 @@ __global__ void fill_N_rep_pre_synaptic_idx(
 
 			snk_N = N_rep_pre_synaptic_idx[idx];
 
-			N_rep_pre_synaptic_idx[idx] = N_rep_pre_synaptic[idx]; //(N_rep_pre_synaptic[idx] - snk_N) / N;
+			N_rep_pre_synaptic_idx[idx] = Buffer[idx]; //(Buffer[idx] - snk_N) / N;
 
-			N_rep_pre_synaptic[idx] = snk_N;
+			Buffer[idx] = snk_N;
 
 		}
 	}
@@ -1642,7 +1654,7 @@ void SnnSimulation::actualize_N_rep_pre_synaptic(){
 	reset_N_rep_pre_synaptic KERNEL_ARGS2(launch_pars.grid3, launch_pars.block3)(
 		N,
 		S,
-		N_rep_pre_synaptic,
+		N_rep_buffer,
 		N_rep_pre_synaptic_idx,
 		N_rep_pre_synaptic_counts
 	);
@@ -1668,7 +1680,7 @@ void SnnSimulation::actualize_N_rep_pre_synaptic(){
 		N,
 		S,
 		N_rep,
-		N_rep_pre_synaptic,
+		N_rep_buffer,
 		N_rep_pre_synaptic_idx,
 		N_rep_pre_synaptic_counts
 	);
@@ -1695,7 +1707,7 @@ void SnnSimulation::actualize_N_rep_pre_synaptic(){
 
 	checkCudaErrors(cudaDeviceSynchronize());
 
-	sort_N_rep_sysnaptic(N, S, N_rep_pre_synaptic_idx, N_rep_pre_synaptic, N_rep_pre_synaptic_counts);
+	sort_N_rep_sysnaptic(N, S, N_rep_pre_synaptic_idx, N_rep_buffer, N_rep_pre_synaptic_counts);
 
 	checkCudaErrors(cudaDeviceSynchronize());
 
@@ -1705,7 +1717,7 @@ void SnnSimulation::actualize_N_rep_pre_synaptic(){
 
 	fill_N_rep_pre_synaptic_idx KERNEL_ARGS2(launch_pars.grid3, launch_pars.block3)(
 		N, S, 
-		N_rep_pre_synaptic, 
+		N_rep_buffer, 
 		N_rep_pre_synaptic_idx
 	);
 	
@@ -1716,4 +1728,71 @@ void SnnSimulation::actualize_N_rep_pre_synaptic(){
 	printf("done.\n");
 
 	std::cout << "Time difference = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]" << std::endl;
+}
+
+
+__global__ void sum_group_weight_(
+	const int N,
+	const int G,
+	const int S,
+	const int* N_G,
+	const int* G_group_delay_counts,
+	const int* N_rep,
+	const float* N_weights,
+	float* G_avg_weight_inh,
+	float* G_avg_weight_exc
+){
+	const int src_N = blockIdx.x * blockDim.x + threadIdx.x; 
+
+	if (src_N < N){
+		
+
+		int src_type = N_G[src_N * 2];
+		int src_G = N_G[src_N * 2 + 1];
+		int snk_N;
+		int snk_G;
+		int N_rep_idx;
+		int write_idx;
+		float weight;
+
+		for (int s = 0; s < S; s++){
+			
+			N_rep_idx = src_N + s * N;
+			snk_N = N_rep[N_rep_idx];
+			snk_G = N_G[snk_N * 2 + 1];
+			write_idx = src_G + snk_G * G;
+			weight = N_weights[N_rep_idx];
+
+			if (src_type == 1){
+				atomicAdd(&G_avg_weight_inh[write_idx], weight);
+			} else if (src_type == 2){
+				atomicAdd(&G_avg_weight_exc[write_idx], weight);
+			}
+		}
+
+	}
+}
+
+
+void SnnSimulation::calculate_avg_group_weight(){
+
+	LaunchParameters launch_pars = LaunchParameters(N, (void *)sum_group_weight_);
+
+	sum_group_weight_ KERNEL_ARGS2(launch_pars.grid3, launch_pars.block3)(
+		N,
+		G,
+		S,
+		N_G,
+		G_group_delay_counts,
+		N_rep,
+		N_weights,
+		G_avg_weight_inh,
+		G_avg_weight_exc
+	);
+
+	checkCudaErrors(cudaDeviceSynchronize());
+
+
+	checkCudaErrors(cudaDeviceSynchronize());
+
 }

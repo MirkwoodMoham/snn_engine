@@ -101,11 +101,11 @@ class NetworkGPUArrays(GPUArrayCollection):
          self.G_exp_ccsyn_per_src_type_and_delay,
          self.G_exp_exc_ccsyn_per_snk_type_and_delay) = self._fill_syn_counts(shapes=shapes,
                                                                               G_neuron_counts=self.G_neuron_counts)
-        self.Buffer = self.izeros(shapes.N_rep)
+        self.N_rep_buffer = self.izeros(shapes.N_rep)
+        self.print_allocated_memory('N_rep_buffer')
 
         (self.N_rep,
          self.N_delays) = self._N_rep_and_N_delays(shapes=shapes, curand_states=self.curand_states)
-
 
         self.N_rep_pre_synaptic_idx = self.izeros(shapes.N_rep_inv)
         self.N_rep_pre_synaptic_counts = self.izeros(self._config.N + 1)
@@ -131,6 +131,9 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.G_stdp_config0 = self.izeros((self._config.G, self._config.G))
         self.G_stdp_config1 = self.izeros((self._config.G, self._config.G))
 
+        self.G_avg_weight_exc = self.fzeros(self.G_delay_distance.shape)
+        self.G_avg_weight_inh = self.fzeros(self.G_delay_distance.shape)
+
         self.Simulation = self._init_sim(T, plotting_config)
 
         self.N_relative_G_indices = self._N_relative_G_indices()
@@ -138,13 +141,18 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.print_allocated_memory('G_swap_tensor')
         self.swap_group_synapses(torch.from_numpy(grid.forward_groups).to(device=self.device).type(torch.int64))
 
-        self.actualize_N_rep_pre_synaptic_idx()
+        self.actualize_N_rep_pre_synaptic_idx(shapes)
 
         self.N_states.use_preset('rs', self.selected_neuron_mask(self._config.sensory_groups))
 
         self.Simulation.set_stdp_config(0)
 
         self.active_output_groups = None
+
+        self.N_rep_buffer = self.N_rep_buffer.reshape(shapes.N_rep)
+        self.N_rep_buffer[:] = self.N_rep_groups_cpu.to(self.device)
+
+        self.Simulation.calculate_avg_group_weight()
 
     def _init_sim(self, T, plotting_config):
 
@@ -165,8 +173,12 @@ class NetworkGPUArrays(GPUArrayCollection):
             curand_states_p=self.curand_states,
             N_pos=self.N_pos.data_ptr(),
             N_G=self.N_G.data_ptr(),
+            G_group_delay_counts=self.G_group_delay_counts.data_ptr(),
             G_props=self.G_props.data_ptr(),
             N_rep=self.N_rep.data_ptr(),
+            N_rep_buffer=self.N_rep_buffer.data_ptr(),
+            N_rep_pre_synaptic_idx=self.N_rep_pre_synaptic_idx.data_ptr(),
+            N_rep_pre_synaptic_counts=self.N_rep_pre_synaptic_counts.data_ptr(),
             N_delays=self.N_delays.data_ptr(),
             N_states=self.N_states.data_ptr(),
             N_weights=self.N_weights.data_ptr(),
@@ -177,30 +189,27 @@ class NetworkGPUArrays(GPUArrayCollection):
             firing_counts=self.Firing_counts.data_ptr(),
             G_stdp_config0=self.G_stdp_config0.data_ptr(),
             G_stdp_config1=self.G_stdp_config1.data_ptr(),
+            G_avg_weight_inh=self.G_avg_weight_inh.data_ptr(),
+            G_avg_weight_exc=self.G_avg_weight_exc.data_ptr()
         )
-
-        sim.set_pre_synaptic_pointers(
-            N_rep_pre_synaptic=self.Buffer.data_ptr(),
-            N_rep_pre_synaptic_idx=self.N_rep_pre_synaptic_idx.data_ptr(),
-            N_rep_pre_synaptic_counts=self.N_rep_pre_synaptic_counts.data_ptr()
-        )
-
         return sim
 
-    def actualize_N_rep_pre_synaptic_idx(self):
+    def actualize_N_rep_pre_synaptic_idx(self, shapes):
+
+        self.N_rep_buffer = self.N_rep_buffer.reshape(shapes.N_rep_inv)
 
         self.Simulation.actualize_N_rep_pre_synaptic()
 
         if self._config.N <= 2 * 10 ** 5:
-            aa = self.to_dataframe(self.Buffer)
+            aa = self.to_dataframe(self.N_rep_buffer)
             ab = self.to_dataframe(self.N_rep_pre_synaptic_counts)
             ac = self.to_dataframe(self.N_rep_pre_synaptic_idx)
             ad = self.to_dataframe(self.N_rep)
 
             assert len(self.N_rep_pre_synaptic_idx[self.N_rep.flatten()[
-                self.N_rep_pre_synaptic_idx.type(torch.int64)] != self.Buffer]) == 0
+                self.N_rep_pre_synaptic_idx.type(torch.int64)] != self.N_rep_buffer]) == 0
 
-        self.Buffer = -1
+        self.N_rep_buffer[:] = -1
 
     def update(self):
 
@@ -481,8 +490,7 @@ class NetworkGPUArrays(GPUArrayCollection):
         N_rep_t = self.izeros(shapes.N_rep_inv)
         torch.cuda.empty_cache()
         self.print_allocated_memory('N_rep')
-        sort_keys = self.izeros(shapes.N_rep_inv)
-        self.print_allocated_memory('sort_keys')
+        self.N_rep_buffer[:] = 0
 
         def cc_syn_(gc_):
             t = self.izeros((D + 1, G))
@@ -525,7 +533,7 @@ class NetworkGPUArrays(GPUArrayCollection):
                 gc_conn_shape=gc.conn_shape,
                 cc_syn=cc_syn.data_ptr(),
                 N_delays=N_delays.data_ptr(),
-                sort_keys=sort_keys.data_ptr(),
+                sort_keys=self.N_rep_buffer.data_ptr(),
                 N_rep=N_rep_t.data_ptr(),
                 verbose=False)
 
@@ -544,7 +552,7 @@ class NetworkGPUArrays(GPUArrayCollection):
         del G_relative_autapse_indices
         torch.cuda.empty_cache()
 
-        snn_construction_gpu.sort_N_rep(N=N, S=S, sort_keys=sort_keys.data_ptr(), N_rep=N_rep_t.data_ptr())
+        snn_construction_gpu.sort_N_rep(N=N, S=S, sort_keys=self.N_rep_buffer.data_ptr(), N_rep=N_rep_t.data_ptr())
 
         for i, gc in enumerate(self.type_group_conns):
 
@@ -566,27 +574,25 @@ class NetworkGPUArrays(GPUArrayCollection):
                 gc_conn_shape=gc.conn_shape,
                 cc_syn=cc_syn.data_ptr(),
                 N_delays=N_delays.data_ptr(),
-                sort_keys=sort_keys.data_ptr(),
+                sort_keys=self.N_rep_buffer.data_ptr(),
                 N_rep=N_rep_t.data_ptr(),
                 verbose=False)
 
-        snn_construction_gpu.sort_N_rep(N=N, S=S, sort_keys=sort_keys.data_ptr(), N_rep=N_rep_t.data_ptr())
+        snn_construction_gpu.sort_N_rep(N=N, S=S, sort_keys=self.N_rep_buffer.data_ptr(), N_rep=N_rep_t.data_ptr())
 
-        # self.d = self.N_G[N_rep_t[72053].type(torch.int64)]
-        # print(N_rep)
-        del sort_keys
-        self.print_allocated_memory(f'sorted')
-        N_rep = torch.empty(shapes.N_rep, dtype=torch.int32, device=self.device)
-        N_rep[:] = N_rep_t.T
+        # N_rep = torch.empty(shapes.N_rep, dtype=torch.int32, device=self.device)
+        self.N_rep_buffer = self.N_rep_buffer.reshape(shapes.N_rep)
+        self.N_rep_buffer[:] = -1
+        self.N_rep_buffer[:] = N_rep_t.T
+
+        N_rep_t = N_rep_t.reshape(shapes.N_rep)
+        N_rep_t[:] = self.N_rep_buffer
+        self.N_rep_buffer[:] = -1
         self.print_allocated_memory(f'transposed')
 
-        del N_rep_t
-        self.print_allocated_memory(f'transposed')
-        # return N_rep_t.transpose_(0, 1), N_delays
+        assert len(N_rep_t[N_rep_t == -1]) == 0
 
-        assert len(N_rep[N_rep == -1]) == 0
-
-        return N_rep, N_delays
+        return N_rep_t, N_delays
 
     def _N_rep_groups_cpu(self):
         N_rep_groups = self.N_rep.clone()

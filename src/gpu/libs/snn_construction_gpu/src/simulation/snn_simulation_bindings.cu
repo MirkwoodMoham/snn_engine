@@ -25,8 +25,12 @@ SnnSimulation make_SnnSimulation(
     std::shared_ptr<CuRandStates> curand_states,
     const long N_pos_dp,
     const long N_G_dp,
+    const long G_group_delay_counts_dp, 
     const long G_props_dp, 
     const long N_rep_dp, 
+    const long N_rep_buffer_dp,
+    const long N_rep_pre_synaptic_idx_dp,
+    const long N_rep_pre_synaptic_counts_dp,
     const long N_delays_dp, 
     const long N_states_dp,
     const long N_weights_dp,
@@ -36,7 +40,9 @@ SnnSimulation make_SnnSimulation(
     const long firing_idcs_dp,
     const long firing_counts_dp,
     const long G_stdp_config0_dp,
-    const long G_stdp_config1_dp
+    const long G_stdp_config1_dp,
+    const long G_avg_weight_inh_dp,
+    const long G_avg_weight_exc_dp
 ){
     float* voltage_plot_data = reinterpret_cast<float*> (voltage_plot_data_dp);
     int* voltage_plot_map = reinterpret_cast<int*> (voltage_plot_map_dp);
@@ -45,11 +51,13 @@ SnnSimulation make_SnnSimulation(
 
     float* N_pos = reinterpret_cast<float*> (N_pos_dp);
     int* N_G = reinterpret_cast<int*> (N_G_dp);
+    int* G_group_delay_counts = reinterpret_cast<int*> (G_group_delay_counts_dp);
     float* G_props = reinterpret_cast<float*> (G_props_dp);
     int* N_rep = reinterpret_cast<int*> (N_rep_dp);
 
-    // int* N_rep_pre_synaptic = reinterpret_cast<int*> (N_rep_pre_synaptic_dp);
-    // int* N_rep_pre_synaptic_counts = reinterpret_cast<int*> (N_rep_pre_synaptic_counts_dp);
+    int* N_rep_buffer = reinterpret_cast<int*> (N_rep_buffer_dp);
+    int* N_rep_pre_synaptic_idx = reinterpret_cast<int*> (N_rep_pre_synaptic_idx_dp);
+    int* N_rep_pre_synaptic_counts = reinterpret_cast<int*> (N_rep_pre_synaptic_counts_dp);
     // int* N_rep_pre_synaptic_counts = reinterpret_cast<int*> (N_rep_dp);
     
     int* N_delays = reinterpret_cast<int*> (N_delays_dp);
@@ -64,6 +72,8 @@ SnnSimulation make_SnnSimulation(
 
     int* G_stdp_config0 = reinterpret_cast<int*> (G_stdp_config0_dp);
     int* G_stdp_config1 = reinterpret_cast<int*> (G_stdp_config0_dp);
+    float* G_avg_weight_inh = reinterpret_cast<float*> (G_avg_weight_inh_dp);
+    float* G_avg_weight_exc = reinterpret_cast<float*> (G_avg_weight_exc_dp);
     
     return SnnSimulation(
         N,
@@ -82,10 +92,12 @@ SnnSimulation make_SnnSimulation(
         curand_states->states,
         N_pos,
         N_G,
+        G_group_delay_counts,
         G_props, 
         N_rep, 
-        // N_rep_pre_synaptic, 
-        // N_rep_pre_synaptic_counts, 
+        N_rep_buffer,
+        N_rep_pre_synaptic_idx, 
+        N_rep_pre_synaptic_counts, 
         N_delays, 
         N_states,
         N_weights,
@@ -95,7 +107,9 @@ SnnSimulation make_SnnSimulation(
         firing_idcs,
         firing_counts,
         G_stdp_config0,
-        G_stdp_config1
+        G_stdp_config1,
+        G_avg_weight_inh,
+        G_avg_weight_exc
     );
 }
 
@@ -118,19 +132,19 @@ PYBIND11_MODULE(snn_simulation_gpu, m)
     .def_readwrite("stdp_active", &SnnSimulation::stdp_active)
     .def("update", &SnnSimulation::update)
     .def("swap_groups", &SnnSimulation::swap_groups_python)
-    .def("set_pre_synaptic_pointers", &SnnSimulation::set_pre_synaptic_pointers_python,
-        py::arg("N_rep_pre_synaptic"),
-        py::arg("N_rep_pre_synaptic_idx"),
-        py::arg("N_rep_pre_synaptic_counts"))
+    // .def("set_pre_synaptic_pointers", &SnnSimulation::set_pre_synaptic_pointers_python,
+    //     py::arg("Buffer"),
+    //     py::arg("N_rep_pre_synaptic_idx"),
+    //     py::arg("N_rep_pre_synaptic_counts"))
     .def("set_stdp_config", &SnnSimulation::set_stdp_config, 
         py::arg("stdp_config_id"), 
         py::arg("activate") = true)
     .def("actualize_N_rep_pre_synaptic", &SnnSimulation::actualize_N_rep_pre_synaptic)
+    .def("calculate_avg_group_weight", &SnnSimulation::calculate_avg_group_weight)
     .def("__repr__",
         [](const SnnSimulation &sim) {
             return "SnnSimulation(N=" + std::to_string(sim.N) + ")";
-        })
-        ;
+        });
     m.def("SnnSimulation", &make_SnnSimulation,
         py::arg("N"),
         py::arg("G"),
@@ -148,10 +162,12 @@ PYBIND11_MODULE(snn_simulation_gpu, m)
         py::arg("curand_states_p"),
         py::arg("N_pos"),
         py::arg("N_G"),
+        py::arg("G_group_delay_counts"),
         py::arg("G_props"),
         py::arg("N_rep"),
-        // py::arg("N_rep_pre_synaptic"),
-        // py::arg("N_rep_pre_synaptic_c"),
+        py::arg("N_rep_buffer"),
+        py::arg("N_rep_pre_synaptic_idx"),
+        py::arg("N_rep_pre_synaptic_counts"),
         py::arg("N_delays"),
         py::arg("N_states"),
         py::arg("N_weights"),
@@ -161,6 +177,8 @@ PYBIND11_MODULE(snn_simulation_gpu, m)
         py::arg("firing_idcs"),
         py::arg("firing_counts"),
         py::arg("G_stdp_config0"),
-        py::arg("G_stdp_config1")
+        py::arg("G_stdp_config1"),
+        py::arg("G_avg_weight_inh"),
+        py::arg("G_avg_weight_exc")
     );
 }
