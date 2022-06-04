@@ -177,7 +177,9 @@ SnnSimulation::SnnSimulation(
 	int* G_stdp_config0_,
 	int* G_stdp_config1_,
 	float* G_avg_weight_inh_,
-	float* G_avg_weight_exc_
+	float* G_avg_weight_exc_,
+	int* G_syn_count_inh_,
+	int* G_syn_count_exc_
 ){
     
 	N = N_;
@@ -232,6 +234,8 @@ SnnSimulation::SnnSimulation(
 
 	G_avg_weight_inh = G_avg_weight_inh_;
 	G_avg_weight_exc = G_avg_weight_exc_;
+	G_syn_count_inh = G_syn_count_inh_;
+	G_syn_count_exc = G_syn_count_exc_;
 
 	reset_firing_times_ptr_threshold = 13 * N;
 
@@ -291,10 +295,10 @@ __global__ void update_current_(
 	float beta = 0.f, 
 	float phi_r = 1.f,
 	float phi_p = 1.f,
-	float a_r_p = .2f,
-	float a_p_m = -.2f,
-	float a_r_m = -.2f,
-	float a_p_p = .2f
+	float a_r_p = .75f,
+	float a_p_m = -.75f,
+	float a_r_m = -.75f,
+	float a_p_p = .75f
 )
 {
 	//const int tid_x = blockIdx.get_x * blockDim.get_x + threadIdx.get_x;
@@ -452,7 +456,7 @@ __global__ void update_current_(
 				idx = N_rep_pre_synaptic_idx[s2];
 				pre_src_N = idx % S;
 
-				if (((t - last_fired[pre_src_N]) < (1 * D)) 
+				if (((t - last_fired[pre_src_N]) < (2 * D)) 
 					 && (G_stdp_config_current[N_G[pre_src_N * 2 + 1] + src_G * G] > 0)){
 						
 					// idx = pre_src_N + N * N_rep_pre_synaptic_idx[s2];
@@ -1648,8 +1652,10 @@ __global__ void fill_N_rep_pre_synaptic_idx(
 
 
 void SnnSimulation::actualize_N_rep_pre_synaptic(){
-	
+
 	LaunchParameters launch_pars = LaunchParameters(N, (void *)reset_N_rep_pre_synaptic);
+
+	checkCudaErrors(cudaDeviceSynchronize());
 
 	reset_N_rep_pre_synaptic KERNEL_ARGS2(launch_pars.grid3, launch_pars.block3)(
 		N,
@@ -1731,7 +1737,28 @@ void SnnSimulation::actualize_N_rep_pre_synaptic(){
 }
 
 
-__global__ void sum_group_weight_(
+__global__ void reset_G_avg_weight_G_syn_count_(
+	const int G,
+	float* G_avg_weight_inh,
+	float* G_avg_weight_exc,
+	int* G_syn_count_inh,
+	int* G_syn_count_exc
+){
+	const int src_G = blockIdx.x * blockDim.x + threadIdx.x; 
+	if (src_G < G){
+		int write_idx;
+		for (int snk_G = 0; snk_G < G; snk_G++){
+			write_idx = src_G + snk_G * G;
+			G_avg_weight_inh[write_idx] = 0.f;
+			G_syn_count_inh[write_idx] = 0;
+			G_avg_weight_exc[write_idx] = 0.f;
+			G_syn_count_exc[write_idx] = 0;
+		}
+	}
+}
+
+
+__global__ void prefill_G_avg_weight_G_syn_count_(
 	const int N,
 	const int G,
 	const int S,
@@ -1740,7 +1767,9 @@ __global__ void sum_group_weight_(
 	const int* N_rep,
 	const float* N_weights,
 	float* G_avg_weight_inh,
-	float* G_avg_weight_exc
+	float* G_avg_weight_exc,
+	int* G_syn_count_inh,
+	int* G_syn_count_exc
 ){
 	const int src_N = blockIdx.x * blockDim.x + threadIdx.x; 
 
@@ -1762,11 +1791,45 @@ __global__ void sum_group_weight_(
 			snk_G = N_G[snk_N * 2 + 1];
 			write_idx = src_G + snk_G * G;
 			weight = N_weights[N_rep_idx];
-
+			
 			if (src_type == 1){
-				atomicAdd(&G_avg_weight_inh[write_idx], weight);
+				atomicAdd(&G_avg_weight_inh[write_idx], 100 * weight);
+				atomicAdd(&G_syn_count_inh[write_idx], 1);
 			} else if (src_type == 2){
-				atomicAdd(&G_avg_weight_exc[write_idx], weight);
+				atomicAdd(&G_avg_weight_exc[write_idx], 100 * weight);
+				atomicAdd(&G_syn_count_exc[write_idx], 1);
+			}
+		}
+
+	}
+}
+
+__global__ void fill_G_avg_weight_(
+	const int G,
+	float* G_avg_weight_inh,
+	float* G_avg_weight_exc,
+	const int* G_syn_count_inh,
+	const int* G_syn_count_exc
+){
+	const int src_G = blockIdx.x * blockDim.x + threadIdx.x; 
+
+	if (src_G < G){
+		
+		int count;
+		int write_idx;
+
+		for (int snk_G = 0; snk_G < G; snk_G++){
+
+			write_idx = src_G + snk_G * G;
+
+			count = G_syn_count_inh[write_idx];
+			if (count != 0){
+				G_avg_weight_inh[write_idx] /= 100.f * __int2float_rn(count);
+			}
+
+			count = G_syn_count_exc[write_idx];
+			if (count != 0){
+				G_avg_weight_exc[write_idx] /= 100.f * __int2float_rn(count);
 			}
 		}
 
@@ -1776,9 +1839,22 @@ __global__ void sum_group_weight_(
 
 void SnnSimulation::calculate_avg_group_weight(){
 
-	LaunchParameters launch_pars = LaunchParameters(N, (void *)sum_group_weight_);
+	LaunchParameters launch_pars_N = LaunchParameters(N, (void *)prefill_G_avg_weight_G_syn_count_);
+	LaunchParameters launch_pars_G = LaunchParameters(N, (void *)reset_G_avg_weight_G_syn_count_);
 
-	sum_group_weight_ KERNEL_ARGS2(launch_pars.grid3, launch_pars.block3)(
+	checkCudaErrors(cudaDeviceSynchronize());
+
+	reset_G_avg_weight_G_syn_count_ KERNEL_ARGS2(launch_pars_G.grid3, launch_pars_G.block3)(
+		G,
+		G_avg_weight_inh,
+		G_avg_weight_exc,
+		G_syn_count_inh,
+		G_syn_count_exc
+	);
+
+	checkCudaErrors(cudaDeviceSynchronize());
+
+	prefill_G_avg_weight_G_syn_count_ KERNEL_ARGS2(launch_pars_N.grid3, launch_pars_N.block3)(
 		N,
 		G,
 		S,
@@ -1787,11 +1863,20 @@ void SnnSimulation::calculate_avg_group_weight(){
 		N_rep,
 		N_weights,
 		G_avg_weight_inh,
-		G_avg_weight_exc
+		G_avg_weight_exc,
+		G_syn_count_inh,
+		G_syn_count_exc
 	);
 
 	checkCudaErrors(cudaDeviceSynchronize());
 
+	fill_G_avg_weight_ KERNEL_ARGS2(launch_pars_G.grid3, launch_pars_G.block3)(
+		G,
+		G_avg_weight_inh,
+		G_avg_weight_exc,
+		G_syn_count_inh,
+		G_syn_count_exc
+	);
 
 	checkCudaErrors(cudaDeviceSynchronize());
 

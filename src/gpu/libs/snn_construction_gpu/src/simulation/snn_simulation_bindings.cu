@@ -42,7 +42,9 @@ SnnSimulation make_SnnSimulation(
     const long G_stdp_config0_dp,
     const long G_stdp_config1_dp,
     const long G_avg_weight_inh_dp,
-    const long G_avg_weight_exc_dp
+    const long G_avg_weight_exc_dp,
+    const long G_syn_count_inh_dp,
+    const long G_syn_count_exc_dp
 ){
     float* voltage_plot_data = reinterpret_cast<float*> (voltage_plot_data_dp);
     int* voltage_plot_map = reinterpret_cast<int*> (voltage_plot_map_dp);
@@ -72,8 +74,12 @@ SnnSimulation make_SnnSimulation(
 
     int* G_stdp_config0 = reinterpret_cast<int*> (G_stdp_config0_dp);
     int* G_stdp_config1 = reinterpret_cast<int*> (G_stdp_config0_dp);
+
+
     float* G_avg_weight_inh = reinterpret_cast<float*> (G_avg_weight_inh_dp);
     float* G_avg_weight_exc = reinterpret_cast<float*> (G_avg_weight_exc_dp);
+    int* G_syn_count_inh = reinterpret_cast<int*> (G_syn_count_inh_dp);
+    int* G_syn_count_exc = reinterpret_cast<int*> (G_syn_count_exc_dp);
     
     return SnnSimulation(
         N,
@@ -109,7 +115,9 @@ SnnSimulation make_SnnSimulation(
         G_stdp_config0,
         G_stdp_config1,
         G_avg_weight_inh,
-        G_avg_weight_exc
+        G_avg_weight_exc,
+        G_syn_count_inh,
+        G_syn_count_exc
     );
 }
 
@@ -179,6 +187,8 @@ PYBIND11_MODULE(snn_simulation_gpu, m)
         py::arg("G_stdp_config0"),
         py::arg("G_stdp_config1"),
         py::arg("G_avg_weight_inh"),
-        py::arg("G_avg_weight_exc")
+        py::arg("G_avg_weight_exc"),
+        py::arg("G_syn_count_inh"),
+        py::arg("G_syn_count_exc")
     );
 }

@@ -77,11 +77,18 @@ class SpikingNeuronNetwork:
         g_inh = self.add_type_group(count=int(.2 * self.network_config.N), neuron_type=NeuronTypes.INHIBITORY)
         g_exc = self.add_type_group(count=self.network_config.N - len(g_inh), neuron_type=NeuronTypes.EXCITATORY)
 
-        self.add_type_group_conn(g_inh, g_exc, w0=-.49, exp_syn_counts=self.network_config.S)
+        self.add_type_group_conn(
+            g_inh, g_exc,
+            w0=self.network_config.InitValues.Weights.Inh2Exc,
+            exp_syn_counts=self.network_config.S)
         c_exc_inh = self.add_type_group_conn(
-            g_exc, g_inh, w0=.51,
+            g_exc, g_inh,
+            w0=self.network_config.InitValues.Weights.Exc2Inh,
             exp_syn_counts=max(int((len(g_inh) / self.network_config.N) * self.network_config.S), 1))
-        self.add_type_group_conn(g_exc, g_exc, w0=.5, exp_syn_counts=self.network_config.S - len(c_exc_inh))
+        self.add_type_group_conn(
+            g_exc, g_exc,
+            w0=self.network_config.InitValues.Weights.Exc2Exc,
+            exp_syn_counts=self.network_config.S - len(c_exc_inh))
 
         self._neurons = Neurons(self.network_config, self.grid.segmentation, self.type_groups)
 

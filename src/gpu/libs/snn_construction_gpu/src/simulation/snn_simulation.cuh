@@ -54,8 +54,11 @@ struct SnnSimulation
     int* G_stdp_config0;
     int* G_stdp_config1;
     int* G_stdp_config_current;
+
     float* G_avg_weight_inh;
     float* G_avg_weight_exc;
+    int* G_syn_count_inh;
+    int* G_syn_count_exc;
     
     LaunchParameters lp_update_state;
     LaunchParameters lp_update_voltage_plot;
@@ -128,7 +131,9 @@ struct SnnSimulation
         int* G_stdp_config0_,
         int* G_stdp_config1_,
         float* G_avg_weight_inh_,
-        float* G_avg_weight_exc_
+        float* G_avg_weight_exc_,
+        int* G_syn_count_inh_,
+        int* G_syn_count_exc_
     );
     
     void update_voltage_plot();

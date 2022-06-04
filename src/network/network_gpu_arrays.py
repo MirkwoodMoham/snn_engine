@@ -131,8 +131,10 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.G_stdp_config0 = self.izeros((self._config.G, self._config.G))
         self.G_stdp_config1 = self.izeros((self._config.G, self._config.G))
 
-        self.G_avg_weight_exc = self.fzeros(self.G_delay_distance.shape)
         self.G_avg_weight_inh = self.fzeros(self.G_delay_distance.shape)
+        self.G_avg_weight_exc = self.fzeros(self.G_delay_distance.shape)
+        self.G_syn_count_inh = self.izeros(self.G_delay_distance.shape)
+        self.G_syn_count_exc = self.izeros(self.G_delay_distance.shape)
 
         self.Simulation = self._init_sim(T, plotting_config)
 
@@ -153,6 +155,10 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.N_rep_buffer[:] = self.N_rep_groups_cpu.to(self.device)
 
         self.Simulation.calculate_avg_group_weight()
+
+        self.output_tensor = self.fzeros(6)
+
+        return
 
     def _init_sim(self, T, plotting_config):
 
@@ -190,8 +196,12 @@ class NetworkGPUArrays(GPUArrayCollection):
             G_stdp_config0=self.G_stdp_config0.data_ptr(),
             G_stdp_config1=self.G_stdp_config1.data_ptr(),
             G_avg_weight_inh=self.G_avg_weight_inh.data_ptr(),
-            G_avg_weight_exc=self.G_avg_weight_exc.data_ptr()
+            G_avg_weight_exc=self.G_avg_weight_exc.data_ptr(),
+            G_syn_count_inh=self.G_syn_count_inh.data_ptr(),
+            G_syn_count_exc=self.G_syn_count_exc.data_ptr()
         )
+
+
         return sim
 
     def actualize_N_rep_pre_synaptic_idx(self, shapes):
@@ -211,17 +221,39 @@ class NetworkGPUArrays(GPUArrayCollection):
 
         self.N_rep_buffer[:] = -1
 
+    def look_up(self, tuples, input_tensor, output_tensor=None, precision=6):
+        if output_tensor is None:
+            if len(self.output_tensor) != len(tuples):
+                self.output_tensor = self.fzeros(len(tuples))
+            output_tensor = self.output_tensor
+        output_tensor[:] = torch.nan
+        for i, e in enumerate(tuples):
+            output_tensor[i] = input_tensor[e]
+        print(output_tensor)
+
     def update(self):
+
+        if self.Simulation.t % 1000 == 0:
+            self.Simulation.calculate_avg_group_weight()
+            a = self.to_dataframe(self.G_avg_weight_inh)
+            b = self.to_dataframe(self.G_avg_weight_exc)
+            r = 6
+            self.look_up([(80, 72), (88, 80), (96, 88), (104, 96), (112, 104)], self.G_stdp_config0.type(torch.float32))
+            self.look_up([(80, 72), (88, 80), (96, 88), (104, 96), (112, 104)], self.G_avg_weight_inh)
+            self.look_up([(80, 72), (88, 80), (96, 88), (104, 96), (112, 104)], self.G_avg_weight_exc)
+            print()
 
         self.Simulation.update(False)
         self.Simulation.update(False)
         self.Simulation.update(False)
         self.Simulation.update(False)
         self.Simulation.update(False)
-        # self.Simulation.update(False)
-        # self.Simulation.update(False)
-        # self.Simulation.update(False)
-        # self.Simulation.update(False)
+
+        self.Simulation.update(False)
+        self.Simulation.update(False)
+        self.Simulation.update(False)
+        self.Simulation.update(False)
+        self.Simulation.update(False)
 
     def print_sim_state(self):
         print('Fired:\n', self.Fired)
@@ -237,7 +269,7 @@ class NetworkGPUArrays(GPUArrayCollection):
     def type_group_conns(self) -> list[NeuronTypeGroupConnection]:
         return list(self._type_group_conn_dct.values())
 
-    def _N_G_and_G_neuron_counts_1of2(self, shapes, grid: NetworkGrid, neurons: Neurons):
+    def _N_G_and_G_neuron_counts_1of2(self, shapes: NetworkArrayShapes, grid: NetworkGrid, neurons: Neurons):
         N_G = self.izeros(shapes.N_G)
         # t_neurons_ids = torch.arange(self.N_G.shape[0], device='cuda')  # Neuron Id
         for g in self.type_groups:
@@ -758,7 +790,7 @@ class NetworkGPUArrays(GPUArrayCollection):
         total_sums = group_neuron_counts_total.sum(axis=1)
 
         swap_rates0 = self.fzeros((chain_length, n_groups)) + 1.
-        swap_rates1 = self.fzeros((chain_length, n_groups)) + .5
+        swap_rates1 = self.fzeros((chain_length, n_groups)) + 1.
         # group_indices_offset = 0
         # max_neurons_per_group = int(self.G_swap_tensor.shape[0] / 2)
         neuron_group_indices = self.izeros(self.G_swap_tensor.shape[1]) - 1

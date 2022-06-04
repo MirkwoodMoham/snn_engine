@@ -61,9 +61,9 @@ class NetworkConfig:
 
         class Weights:
             Inh2Exc: float = -.49
-            Exc2Inh: float = .5
-            Exc2Exc: float = .51
-            SensorySource: float = .52
+            Exc2Inh: float = .75
+            Exc2Exc: float = .75
+            SensorySource: float = .75
 
     def __str__(self):
         name = self.__class__.__name__
