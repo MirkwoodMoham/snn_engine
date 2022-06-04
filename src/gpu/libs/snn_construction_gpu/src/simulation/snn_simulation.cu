@@ -295,10 +295,10 @@ __global__ void update_current_(
 	float beta = 0.f, 
 	float phi_r = 1.f,
 	float phi_p = 1.f,
-	float a_r_p = .75f,
-	float a_p_m = -.75f,
-	float a_r_m = -.75f,
-	float a_p_p = .75f
+	float a_r_p = .95f,
+	float a_p_m = -.95f,
+	float a_r_m = -.95f,
+	float a_p_p = .95f
 )
 {
 	//const int tid_x = blockIdx.get_x * blockDim.get_x + threadIdx.get_x;
@@ -423,6 +423,7 @@ __global__ void update_current_(
 				if (r_stdp){
 					if (((t - last_fired[snk_N]) < (2 * delay)) 
 						&& (G_stdp_config_current[src_G + snk_G * G] > 0)){
+						
 
 						//if (G_stdp_config_current[src_G + snk_G * G] > 0){
 						// 	weight_delta = alpha * phi_r * a_r_p + beta * phi_p * a_p_m;
@@ -431,7 +432,7 @@ __global__ void update_current_(
 							//weight_delta = alpha * phi_r * a_r_m + beta * phi_p * a_p_p;
 						//}
 						// weight_delta *= w * (1. - w);
-
+						w - fabsf(w);
 						N_weights[idx] += (alpha * phi_r * a_r_m + beta * phi_p * a_p_p) * w * (1. - w);
 
 						if (false){
@@ -461,7 +462,7 @@ __global__ void update_current_(
 						
 					// idx = pre_src_N + N * N_rep_pre_synaptic_idx[s2];
 					
-					w2 = N_weights[idx];
+					w2 = fabsf(N_weights[idx]);
 					N_weights[idx] += (alpha * phi_r * a_r_p + beta * phi_p * a_p_m) * w2 * (1. - w2);
 
 					if (false){
