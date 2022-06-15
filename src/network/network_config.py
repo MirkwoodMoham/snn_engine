@@ -50,6 +50,8 @@ class NetworkConfig:
 
     max_z: float = 999.
 
+    sim_updates_per_frame: Optional[int] = None
+
     class InitValues:
         class ThalamicInput:
             inh_current: float = 25.
@@ -82,6 +84,14 @@ class NetworkConfig:
 
         if self.N <= 4000:
             self.N_pos_shape = (1, 1, 1)
+
+        if self.sim_updates_per_frame is None:
+            if self.N <= 10 ** 5:
+                self.sim_updates_per_frame = 1
+            elif self.N <= 40 ** 5:
+                self.sim_updates_per_frame = 5
+            else:
+                self.sim_updates_per_frame = 10
 
         if self.S is None:
             self.S = int(min(1000, max(np.sqrt(self.N), 2)))

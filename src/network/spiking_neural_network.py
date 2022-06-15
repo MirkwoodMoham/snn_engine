@@ -233,3 +233,6 @@ class SpikingNeuronNetwork:
 
         self.CPU = NetworkCPUArrays(self.network_config, self.GPU)
 
+        print('\nactive_sensory_groups:', self.GPU.active_sensory_groups)
+        print('active_output_groups:', self.GPU.active_output_groups, '\n')
+

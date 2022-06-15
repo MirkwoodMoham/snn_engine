@@ -149,8 +149,6 @@ class NetworkGPUArrays(GPUArrayCollection):
 
         self.Simulation.set_stdp_config(0)
 
-        self.active_output_groups = None
-
         self.N_rep_buffer = self.N_rep_buffer.reshape(shapes.N_rep)
         self.N_rep_buffer[:] = self.N_rep_groups_cpu.to(self.device)
 
@@ -238,22 +236,16 @@ class NetworkGPUArrays(GPUArrayCollection):
             a = self.to_dataframe(self.G_avg_weight_inh)
             b = self.to_dataframe(self.G_avg_weight_exc)
             r = 6
-            self.look_up([(80, 72), (88, 80), (96, 88), (104, 96), (112, 104)], self.G_stdp_config0.type(torch.float32))
+            # self.look_up([(80, 72), (88, 80), (96, 88), (104, 96), (112, 104)], self.G_stdp_config0.type(torch.float32))
             self.look_up([(80, 72), (88, 80), (96, 88), (104, 96), (112, 104)], self.G_avg_weight_inh)
             self.look_up([(80, 72), (88, 80), (96, 88), (104, 96), (112, 104)], self.G_avg_weight_exc)
+
+            self.look_up([(75, 67), (83, 75), (91, 83), (99, 91), (107, 99), (115, 107), (123, 1115)], self.G_avg_weight_inh)
+            self.look_up([(75, 67), (83, 75), (91, 83), (99, 91), (107, 99), (115, 107), (123, 1115)], self.G_avg_weight_exc)
             print()
 
-        self.Simulation.update(False)
-        self.Simulation.update(False)
-        self.Simulation.update(False)
-        self.Simulation.update(False)
-        self.Simulation.update(False)
-
-        self.Simulation.update(False)
-        self.Simulation.update(False)
-        self.Simulation.update(False)
-        self.Simulation.update(False)
-        self.Simulation.update(False)
+        for i in range(self._config.sim_updates_per_frame):
+            self.Simulation.update(False)
 
     def print_sim_state(self):
         print('Fired:\n', self.Fired)
@@ -820,7 +812,7 @@ class NetworkGPUArrays(GPUArrayCollection):
 
             neuron_group_indices[:] = -1
 
-        assert len(self.N_rep[self.N_rep == -1]) == 0
+        assert len(self.N_rep[self.N_rep < 0]) == 0
         return
 
     def _single_group_swap(self, program,
@@ -879,7 +871,9 @@ class NetworkGPUArrays(GPUArrayCollection):
         target_config[~mask] = -1
         target_config[(xx == distance_to_target_group).T] = 0
 
-    def set_active_output_groups(self, output_groups):
+    def set_active_output_groups(self, output_groups=None):
+        if output_groups is None:
+            output_groups = self.active_output_groups
         assert len(output_groups) == 2
         output_group_types = self.G_props.output_type[output_groups].type(torch.int64)
 
@@ -890,4 +884,12 @@ class NetworkGPUArrays(GPUArrayCollection):
         b = self.to_dataframe(self.G_stdp_config0)
 
         self._stdp_distance_based_config(group1, self.G_stdp_config1)
+
+    @property
+    def active_sensory_groups(self):
+        return self.select_groups(self.G_props.b_sensory_input.type(torch.bool))
+
+    @property
+    def active_output_groups(self):
+        return self.select_groups(self.G_props.b_output_group.type(torch.bool))
 

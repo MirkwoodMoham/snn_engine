@@ -609,6 +609,9 @@ class InputCells(IOCells):
 class OutputCells(IOCells):
 
     def transform_changed(self):
+
+        prev_act_output_grs = self.network.GPU.active_output_groups
+
         self.assign_sensory_input()
         self.states_gpu.output_type[:] = -1
         self.states_gpu.output_type[self.network_config.output_groups] = self.io_neuron_group_values_gpu
@@ -616,10 +619,10 @@ class OutputCells(IOCells):
         self.states_gpu.selected = mask
         self.states_gpu.b_output_group = torch.where(mask, 1, 0)
 
-        active_output_groups = self.network.GPU.select_groups(self.states_gpu.b_output_group.type(torch.bool))
+        active_output_groups = self.network.GPU.active_output_groups
         if ((self.network.GPU.active_output_groups is None) or
-                (len(self.network.GPU.active_output_groups) != len(active_output_groups)) or
-                (not bool((active_output_groups == self.network.GPU.active_output_groups).all()))):
+                (len(active_output_groups) != len(prev_act_output_grs)) or
+                (not bool((active_output_groups == prev_act_output_grs).all()))):
             self.network.GPU.set_active_output_groups(active_output_groups)
 
         self.actualize_colors()
