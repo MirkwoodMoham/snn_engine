@@ -98,7 +98,10 @@ class EngineSceneCanvas(scene.SceneCanvas):
         self.freeze()
 
         if network is not None:
-            network.add_rendered_objects(self.network_view, self.voltage_plot_view, self.scatter_plot_view)
+            network.add_rendered_objects(
+                self.network_view,
+                self.voltage_plot_view,
+                self.scatter_plot_view)
 
             # self._select(network.selector_box, True)
             # self._selected_objects.append(network.selector_box)
@@ -130,7 +133,6 @@ class EngineSceneCanvas(scene.SceneCanvas):
 
         text_grid.add_widget(update_duration_text, row=1, col=0, row_span=1)
         text_grid.add_widget(self.update_duration_value_txt, row=1, col=1, row_span=1)
-
 
     @property
     def _window_id(self):

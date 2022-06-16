@@ -141,9 +141,11 @@ class SpikingNeuronNetwork:
     # noinspection PyStatementEffect,PyTypeChecker
     def initialize_rendered_objs(self):
         self.voltage_plot = VoltagePlot(n_plots=self.plotting_config.n_voltage_plots,
-                                        plot_length=self.plotting_config.voltage_plot_length)
+                                        plot_length=self.plotting_config.voltage_plot_length,
+                                        n_groups=self.network_config.G)
         self.firing_scatter_plot = FiringScatterPlot(n_plots=self.plotting_config.n_scatter_plots,
-                                                     plot_length=self.plotting_config.scatter_plot_length)
+                                                     plot_length=self.plotting_config.scatter_plot_length,
+                                                     n_groups=self.network_config.G)
         self.outer_grid: visuals.Box = Box(shape=self.network_config.N_pos_shape,
                                            scale=[.99, .99, .99],
                                            segments=self.network_config.grid_segmentation,

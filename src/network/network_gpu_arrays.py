@@ -229,24 +229,6 @@ class NetworkGPUArrays(GPUArrayCollection):
             output_tensor[i] = input_tensor[e]
         print(output_tensor)
 
-    def update(self):
-
-        if self.Simulation.t % 1000 == 0:
-            self.Simulation.calculate_avg_group_weight()
-            a = self.to_dataframe(self.G_avg_weight_inh)
-            b = self.to_dataframe(self.G_avg_weight_exc)
-            r = 6
-            # self.look_up([(80, 72), (88, 80), (96, 88), (104, 96), (112, 104)], self.G_stdp_config0.type(torch.float32))
-            self.look_up([(80, 72), (88, 80), (96, 88), (104, 96), (112, 104)], self.G_avg_weight_inh)
-            self.look_up([(80, 72), (88, 80), (96, 88), (104, 96), (112, 104)], self.G_avg_weight_exc)
-
-            self.look_up([(75, 67), (83, 75), (91, 83), (99, 91), (107, 99), (115, 107), (123, 1115)], self.G_avg_weight_inh)
-            self.look_up([(75, 67), (83, 75), (91, 83), (99, 91), (107, 99), (115, 107), (123, 1115)], self.G_avg_weight_exc)
-            print()
-
-        for i in range(self._config.sim_updates_per_frame):
-            self.Simulation.update(False)
-
     def print_sim_state(self):
         print('Fired:\n', self.Fired)
         print('Firing_idcs:\n', self.Firing_idcs)
@@ -892,4 +874,25 @@ class NetworkGPUArrays(GPUArrayCollection):
     @property
     def active_output_groups(self):
         return self.select_groups(self.G_props.b_output_group.type(torch.bool))
+
+    def update(self):
+
+        if self.Simulation.t % 1000 == 0:
+            self.Simulation.calculate_avg_group_weight()
+            a = self.to_dataframe(self.G_avg_weight_inh)
+            b = self.to_dataframe(self.G_avg_weight_exc)
+            r = 6
+            # self.look_up([(80, 72), (88, 80), (96, 88), (104, 96), (112, 104)],
+            # self.G_stdp_config0.type(torch.float32))
+            # self.look_up([(80, 72), (88, 80), (96, 88), (104, 96), (112, 104)], self.G_avg_weight_inh)
+            # self.look_up([(80, 72), (88, 80), (96, 88), (104, 96), (112, 104)], self.G_avg_weight_exc)
+            # print()
+            self.look_up([(75, 67), (83, 75), (91, 83), (99, 91), (107, 99), (115, 107), (123, 115)],
+                         self.G_avg_weight_inh)
+            self.look_up([(75, 67), (83, 75), (91, 83), (99, 91), (107, 99), (115, 107), (123, 115)],
+                         self.G_avg_weight_exc)
+            print()
+
+        for i in range(self._config.sim_updates_per_frame):
+            self.Simulation.update(False)
 

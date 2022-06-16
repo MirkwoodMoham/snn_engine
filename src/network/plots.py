@@ -5,42 +5,51 @@ from vispy.scene import visuals
 from rendering import RenderedObjectNode
 
 
-def plot_pos(n_plots, plot_length):
-    pos = np.empty((n_plots * plot_length, 2), np.float32)
+class PlotData:
 
-    x = np.linspace(0, plot_length - 1, plot_length)
-    y = np.linspace(0.5, n_plots - 0.5, n_plots)
-    # noinspection PyUnresolvedReferences
-    pos[:, 0] = np.meshgrid(x, y)[0].flatten()
-    pos[:, 1] = y.repeat(plot_length)
-    return pos
+    def __init__(self, n_plots, plot_length, n_groups=9):
 
+        self._n_plots = n_plots
+        self._plot_length = plot_length
 
-def pos_color(size):
-    color = np.ones((size, 4), dtype=np.float32)
-    color[:, 0] = np.linspace(0, 1, size)
-    color[:, 1] = color[::-1, 0]
-    return color
+        mesh_ = np.meshgrid(np.linspace(0, self._plot_length - 1, self._plot_length),
+                            np.linspace(0.5, self._n_plots - 0.5, self._n_plots))
+        # noinspection PyUnresolvedReferences
+        self.pos = np.vstack([mesh_[0].ravel(), mesh_[1].ravel()]).T
+
+        size = self._plot_length * self._n_plots
+        self.color = np.ones((size, 4), dtype=np.float32)
+        self.color[:, 0] = np.linspace(0, 1, size)
+        self.color[:, 1] = self.color[::-1, 0]
+
+        self.group_separators_pos = np.zeros((n_groups * 2 * 2, 2))
+        self.group_separators_pos[:, 0] = (np.expand_dims(np.array([-2, plot_length]), 0)
+                                           .repeat(n_groups * 2, 0)).flatten()
+        self.group_separators_pos[:, 1] = np.linspace(0, self._n_plots, n_groups * 2).repeat(2)
+        return
 
 
 # noinspection PyAbstractClass
 class VoltagePlot(RenderedObjectNode):
 
-    def __init__(self, n_plots, plot_length):
-        # super().__init__()
+    def __init__(self, n_plots, plot_length, n_groups):
+
+        plot_data = PlotData(n_plots, plot_length, n_groups=n_groups)
 
         connect = np.ones(plot_length).astype(bool)
         connect[-1] = False
         connect = connect.reshape(1, plot_length).repeat(n_plots, axis=0).flatten()
 
-        self._obj: visuals.Line = visuals.Line(pos=plot_pos(n_plots, plot_length),
-                                               color=pos_color(n_plots * plot_length),
+        self._obj: visuals.Line = visuals.Line(pos=plot_data.pos,
+                                               color=plot_data.color,
                                                connect=connect,
                                                antialias=False, width=1, parent=None)
 
-        super().__init__([self._obj])
-        # line = visuals.Line(pos=pos, color=color, connect='strip', antialias=True, method='agg')
-        # self._obj.transform = STTransform()
+        self.group_separator_lines = visuals.Line(pos=plot_data.group_separators_pos,
+                                                  color='white',
+                                                  connect='segments')
+
+        super().__init__([self._obj, self.group_separator_lines])
 
     @property
     def vbo_glir_id(self):
@@ -50,24 +59,20 @@ class VoltagePlot(RenderedObjectNode):
 # noinspection PyAbstractClass
 class FiringScatterPlot(RenderedObjectNode):
 
-    def __init__(self, n_plots, plot_length):
-        # super().__init__()
+    def __init__(self, n_plots, plot_length, n_groups):
 
-        pos = plot_pos(n_plots, plot_length)
-        color = pos_color(n_plots * plot_length)
-        color[:, 3] = 0
+        plot_data = PlotData(n_plots, plot_length, n_groups)
+        plot_data.color[:, 3] = 0
 
         self._obj: visuals.visuals.MarkersVisual = visuals.Markers(parent=None)
-        # noinspection PyTypeChecker
-        self._obj.set_data(pos,
-                           face_color=color,
+        self._obj.set_data(plot_data.pos,
+                           face_color=plot_data.color,
                            edge_color=(1, 1, 1, 1),
                            size=3, edge_width=0)
         # noinspection PyTypeChecker
         self._obj.set_gl_state('translucent', blend=True, depth_test=True)
 
         super().__init__([self._obj])
-
 
     @property
     def vbo_glir_id(self):
