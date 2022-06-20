@@ -210,7 +210,11 @@ class SpikingNeuronNetwork:
         buffers = BufferCollection(
             N_pos=self._neurons.vbo,
             voltage=self.voltage_plot.vbo,
+            voltage_group_line_pos=self.voltage_plot.group_lines_pos_vbo,
+            voltage_group_line_colors=self.voltage_plot.group_lines_color_vbo,
             firings=self.firing_scatter_plot.vbo,
+            firings_group_line_pos=self.firing_scatter_plot.group_lines_pos_vbo,
+            firings_group_line_colors=self.firing_scatter_plot.group_lines_color_vbo,
             selected_group_boxes_vbo=self.selected_group_boxes.vbo,
             selected_group_boxes_ibo=self.selected_group_boxes.ibo,
         )

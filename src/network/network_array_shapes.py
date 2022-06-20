@@ -81,6 +81,10 @@ class NetworkArrayShapes:
         self.G_props = (LocationGroupProperties.__len__(), config.G)
 
         self.voltage_plot = (plotting_config.n_voltage_plots * plotting_config.voltage_plot_length, 2)
+
+        self.plot_group_line_pos = (4 * config.G, 2)
+        self.plot_group_line_colors = (4 * config.G, 4)
+
         self.firings_scatter_plot = (plotting_config.n_scatter_plots * plotting_config.scatter_plot_length,
                                      config.vispy_scatter_plot_stride)
 

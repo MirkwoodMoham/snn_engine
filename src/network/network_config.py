@@ -121,7 +121,11 @@ class NetworkConfig:
 class BufferCollection:
     N_pos: int
     voltage: int
+    voltage_group_line_pos: int
+    voltage_group_line_colors: int
     firings: int
+    firings_group_line_pos: int
+    firings_group_line_colors: int
     selected_group_boxes_vbo: int
     selected_group_boxes_ibo: int
 

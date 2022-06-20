@@ -24,29 +24,44 @@ class NetworkGPUArrays(GPUArrayCollection):
 
     class PlottingGPUArrays(GPUArrayCollection):
         def __init__(self, device, shapes: NetworkArrayShapes,
-                     voltage_plot_vbo, firing_scatter_plot_vbo, bprint_allocated_memory):
+                     buffers: BufferCollection,
+                     bprint_allocated_memory):
 
             super().__init__(device=device, bprint_allocated_memory=bprint_allocated_memory)
 
             nbytes_float32 = 4
 
             self.voltage = RegisteredGPUArray.from_buffer(
-                voltage_plot_vbo,
-                config=GPUArrayConfig(shape=shapes.voltage_plot, strides=(shapes.voltage_plot[1] * nbytes_float32,
-                                                                          nbytes_float32),
+                buffers.voltage,
+                config=GPUArrayConfig(shape=shapes.voltage_plot,
+                                      strides=(shapes.voltage_plot[1] * nbytes_float32, nbytes_float32),
+                                      dtype=np.float32, device=self.device))
+
+            self.voltage_group_line_pos = RegisteredGPUArray.from_buffer(
+                buffers.voltage_group_line_pos,
+                config=GPUArrayConfig(shape=shapes.plot_group_line_pos,
+                                      strides=(shapes.plot_group_line_pos[1] * nbytes_float32, nbytes_float32),
+                                      dtype=np.float32, device=self.device))
+            self.voltage_group_line_colors = RegisteredGPUArray.from_buffer(
+                buffers.voltage_group_line_colors,
+                config=GPUArrayConfig(shape=shapes.plot_group_line_colors,
+                                      strides=(shapes.plot_group_line_colors[1] * nbytes_float32, nbytes_float32),
                                       dtype=np.float32, device=self.device))
 
             self.firings = RegisteredGPUArray.from_buffer(
-                firing_scatter_plot_vbo, config=GPUArrayConfig(shape=shapes.firings_scatter_plot,
-                                                               strides=(shapes.firings_scatter_plot[1] * nbytes_float32,
-                                                                        nbytes_float32),
-                                                               dtype=np.float32, device=self.device))
+                buffers.firings,
+                config=GPUArrayConfig(shape=shapes.firings_scatter_plot,
+                                      strides=(shapes.firings_scatter_plot[1] * nbytes_float32, nbytes_float32),
+                                      dtype=np.float32, device=self.device))
 
             self.voltage_map = self.izeros(shapes.voltage_plot_map)
             self.voltage_map[:] = torch.arange(shapes.voltage_plot_map)
 
             self.firings_map = self.izeros(shapes.firings_scatter_plot_map)
             self.firings_map[:] = torch.arange(shapes.firings_scatter_plot_map)
+
+            self.voltage_plot_slots = torch.arange(shapes.voltage_plot_map, device=self.device)
+            self.firings_plot_slots = torch.arange(shapes.firings_scatter_plot_map, device=self.device)
 
             # print(self.voltage.to_dataframe)
 
@@ -75,8 +90,7 @@ class NetworkGPUArrays(GPUArrayCollection):
 
         # self.selector_box = self._selector_box(())
 
-        self.plotting_arrays = self.PlottingGPUArrays(device=device, shapes=shapes, voltage_plot_vbo=buffers.voltage,
-                                                      firing_scatter_plot_vbo=buffers.firings,
+        self.plotting_arrays = self.PlottingGPUArrays(device=device, shapes=shapes, buffers=buffers,
                                                       bprint_allocated_memory=self.bprint_allocated_memory)
 
         self.curand_states = self._curand_states()
@@ -715,6 +729,20 @@ class NetworkGPUArrays(GPUArrayCollection):
             pass
         if n_selected < self._plotting_config.n_scatter_plots:
             pass
+
+        neuron_groups = self.N_G[:, 1][selected_neurons[: n_voltage_plots]]
+        neuron_groups_prev = self.izeros(neuron_groups.shape)
+        neuron_groups_prev[0] = -1
+        neuron_groups_prev[1:] = neuron_groups[0: -1]
+
+        separator_mask = neuron_groups != neuron_groups_prev
+        separators = self.plotting_arrays.voltage_plot_slots[separator_mask[: n_voltage_plots]].repeat_interleave(2).to(torch.float32)
+
+        self.plotting_arrays.voltage_group_line_pos.tensor[:len(separators), 1] = separators
+
+        self.plotting_arrays.voltage_group_line_colors.tensor[:, 3] = 0
+        self.plotting_arrays.voltage_group_line_colors.tensor[:len(separators)*4 , 3] = 1
+
 
     def redirect_synapses(self, groups, direction, rate):
         pass
