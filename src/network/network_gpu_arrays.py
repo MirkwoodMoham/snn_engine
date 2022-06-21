@@ -14,7 +14,7 @@ from gpu import (
     snn_construction_gpu,
     snn_simulation_gpu,
     GPUArrayConfig,
-    RegisteredGPUArray,
+    RegisteredVBO,
     GPUArrayCollection
 )
 
@@ -29,30 +29,22 @@ class NetworkGPUArrays(GPUArrayCollection):
 
             super().__init__(device=device, bprint_allocated_memory=bprint_allocated_memory)
 
-            nbytes_float32 = 4
+            self.voltage = RegisteredVBO(buffers.voltage, shapes.voltage_plot, self.device)
 
-            self.voltage = RegisteredGPUArray.from_buffer(
-                buffers.voltage,
-                config=GPUArrayConfig(shape=shapes.voltage_plot,
-                                      strides=(shapes.voltage_plot[1] * nbytes_float32, nbytes_float32),
-                                      dtype=np.float32, device=self.device))
+            self.voltage_group_line_pos = RegisteredVBO(buffers.voltage_group_line_pos, shapes.plot_group_line_pos,
+                                                        self.device)
+            self.voltage_group_line_colors = RegisteredVBO(buffers.voltage_group_line_colors,
+                                                           shapes.plot_group_line_colors,
+                                                           self.device)
 
-            self.voltage_group_line_pos = RegisteredGPUArray.from_buffer(
-                buffers.voltage_group_line_pos,
-                config=GPUArrayConfig(shape=shapes.plot_group_line_pos,
-                                      strides=(shapes.plot_group_line_pos[1] * nbytes_float32, nbytes_float32),
-                                      dtype=np.float32, device=self.device))
-            self.voltage_group_line_colors = RegisteredGPUArray.from_buffer(
-                buffers.voltage_group_line_colors,
-                config=GPUArrayConfig(shape=shapes.plot_group_line_colors,
-                                      strides=(shapes.plot_group_line_colors[1] * nbytes_float32, nbytes_float32),
-                                      dtype=np.float32, device=self.device))
+            self.firings = RegisteredVBO(buffers.firings, shapes.firings_scatter_plot, self.device)
 
-            self.firings = RegisteredGPUArray.from_buffer(
-                buffers.firings,
-                config=GPUArrayConfig(shape=shapes.firings_scatter_plot,
-                                      strides=(shapes.firings_scatter_plot[1] * nbytes_float32, nbytes_float32),
-                                      dtype=np.float32, device=self.device))
+            self.firings_group_line_pos = RegisteredVBO(buffers.firings_group_line_pos,
+                                                        shapes.plot_group_line_pos, self.device)
+
+            self.firings_group_line_colors = RegisteredVBO(buffers.firings_group_line_colors,
+                                                           shapes.plot_group_line_colors,
+                                                           self.device)
 
             self.voltage_map = self.izeros(shapes.voltage_plot_map)
             self.voltage_map[:] = torch.arange(shapes.voltage_plot_map)
@@ -60,8 +52,8 @@ class NetworkGPUArrays(GPUArrayCollection):
             self.firings_map = self.izeros(shapes.firings_scatter_plot_map)
             self.firings_map[:] = torch.arange(shapes.firings_scatter_plot_map)
 
-            self.voltage_plot_slots = torch.arange(shapes.voltage_plot_map, device=self.device)
-            self.firings_plot_slots = torch.arange(shapes.firings_scatter_plot_map, device=self.device)
+            self.voltage_plot_slots = torch.arange(shapes.voltage_plot_map + 1, device=self.device)
+            self.firings_plot_slots = torch.arange(shapes.firings_scatter_plot_map + 1, device=self.device)
 
             # print(self.voltage.to_dataframe)
 
@@ -73,6 +65,7 @@ class NetworkGPUArrays(GPUArrayCollection):
                  type_group_conn_dct: dict,
                  device: int,
                  T: int,
+                 shapes: NetworkArrayShapes,
                  plotting_config: PlottingConfig,
                  buffers: BufferCollection,
                  model=IzhikevichModel,
@@ -85,16 +78,13 @@ class NetworkGPUArrays(GPUArrayCollection):
         self._type_group_dct = type_group_dct
         self._type_group_conn_dct = type_group_conn_dct
 
-        shapes = NetworkArrayShapes(config=config, T=T, n_N_states=model.__len__(), plotting_config=plotting_config,
-                                    n_neuron_types=len(NeuronTypes))
-
-        # self.selector_box = self._selector_box(())
+        # self.selector_box = RegisteredVBO(vbo, shape, self.device)
 
         self.plotting_arrays = self.PlottingGPUArrays(device=device, shapes=shapes, buffers=buffers,
                                                       bprint_allocated_memory=self.bprint_allocated_memory)
 
         self.curand_states = self._curand_states()
-        self.N_pos: RegisteredGPUArray = self._N_pos(shape=shapes.N_pos, vbo=buffers.N_pos)
+        self.N_pos: RegisteredVBO = self._N_pos(shape=shapes.N_pos, vbo=buffers.N_pos)
 
         (self.N_G,
          self.G_neuron_counts,
@@ -104,7 +94,7 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.group_ids = torch.arange(config.G).to(device=self.device)
         self.group_indices = self._set_group_indices()
 
-        self.G_pos: RegisteredGPUArray = self._G_pos(shape=shapes.G_pos, vbo=buffers.selected_group_boxes_vbo)
+        self.G_pos: RegisteredVBO = RegisteredVBO(buffers.selected_group_boxes_vbo, shapes.G_pos, self.device)
         self.G_distance, self.G_delay_distance = self._G_delay_distance(self.G_pos)
         self._G_neuron_counts_2of2(self.G_delay_distance, self.G_neuron_counts)
         self.G_group_delay_counts = self._G_group_delay_counts(shapes.G_delay_counts, self.G_delay_distance)
@@ -295,7 +285,7 @@ class NetworkGPUArrays(GPUArrayCollection):
             G_neuron_counts=G_neuron_counts.data_ptr())
         self.validate_G_neuron_counts()
 
-    def _G_delay_distance(self, G_pos: RegisteredGPUArray):
+    def _G_delay_distance(self, G_pos: RegisteredVBO):
         G_pos_distance = torch.cdist(G_pos.tensor, G_pos.tensor)
         return G_pos_distance, ((self._config.D - 1) * G_pos_distance / G_pos_distance.max()).round().int()
 
@@ -313,43 +303,32 @@ class NetworkGPUArrays(GPUArrayCollection):
         return self.N_pos.tensor[:, 3:7]
 
     def _N_pos(self, shape, vbo):
-        nbytes_float32 = 4
-        N_pos = RegisteredGPUArray.from_buffer(
-            vbo, config=GPUArrayConfig(shape=shape, strides=(shape[1] * nbytes_float32, nbytes_float32),
-                                       dtype=np.float32, device=self.device))
-
+        N_pos = RegisteredVBO(vbo, shape, self.device)
         for g in self.type_groups:
             if g.ntype == NeuronTypes.INHIBITORY:
                 orange = torch.Tensor([1, .5, .2])
                 N_pos.tensor[g.start_idx:g.end_idx + 1, 7:10] = orange  # Inhibitory Neurons -> Orange
         return N_pos
 
-    def _selector_box(self, shape, vbo):
-        nbytes_float32 = 4
-        b = RegisteredGPUArray.from_buffer(
-            vbo, config=GPUArrayConfig(shape=shape, strides=(shape[1] * nbytes_float32, nbytes_float32),
-                                       dtype=np.float32, device=self.device))
-        return b
-
-    def _G_pos(self, shape, vbo) -> RegisteredGPUArray:
-        # groups = torch.arange(self._config.G, device=self.device)
-        # z = (groups / (self._config.G_shape[0] * self._config.G_shape[1])).floor()
-        # r = groups - z * (self._config.G_shape[0] * self._config.G_shape[1])
-        # y = (r / self._config.G_shape[0]).floor()
-        # x = r - y * self._config.G_shape[0]
-        #
-        # gpos = torch.zeros(shape, dtype=torch.float32, device=self.device)
-        #
-        # gpos[:, 0] = x * (self._config.N_pos_shape[0] / self._config.G_shape[0])
-        # gpos[:, 1] = y * (self._config.N_pos_shape[1] / self._config.G_shape[1])
-        # gpos[:, 2] = z * (self._config.N_pos_shape[2] / self._config.G_shape[2])
-
-        G_pos = RegisteredGPUArray.from_buffer(
-            vbo, config=GPUArrayConfig(shape=shape, strides=(shape[1] * 4, 4),
-                                       dtype=np.float32, device=self.device))
-
-        # self.validate_N_G()
-        return G_pos
+    # def _G_pos(self, shape, vbo) -> RegisteredVBO:
+    #     # groups = torch.arange(self._config.G, device=self.device)
+    #     # z = (groups / (self._config.G_shape[0] * self._config.G_shape[1])).floor()
+    #     # r = groups - z * (self._config.G_shape[0] * self._config.G_shape[1])
+    #     # y = (r / self._config.G_shape[0]).floor()
+    #     # x = r - y * self._config.G_shape[0]
+    #     #
+    #     # gpos = torch.zeros(shape, dtype=torch.float32, device=self.device)
+    #     #
+    #     # gpos[:, 0] = x * (self._config.N_pos_shape[0] / self._config.G_shape[0])
+    #     # gpos[:, 1] = y * (self._config.N_pos_shape[1] / self._config.G_shape[1])
+    #     # gpos[:, 2] = z * (self._config.N_pos_shape[2] / self._config.G_shape[2])
+    #
+    #     G_pos = RegisteredVBO.from_buffer(
+    #         vbo, config=GPUArrayConfig(shape=shape, strides=(shape[1] * 4, 4),
+    #                                    dtype=np.float32, device=self.device))
+    #
+    #     # self.validate_N_G()
+    #     return G_pos
 
     def _fill_syn_counts(self, shapes, G_neuron_counts):
 
@@ -714,6 +693,19 @@ class NetworkGPUArrays(GPUArrayCollection):
     def select_groups(self, mask):
         return self.group_ids[mask]
 
+    @staticmethod
+    def actualize_group_separator_lines(plot_slots_tensor, pos_tensor, color_tensor, separator_mask, n_plots):
+
+        separator_mask_ = separator_mask[: min(n_plots + 1, plot_slots_tensor[-1] + 1)].clone()
+        separator_mask_[-1] = True
+        separators = (plot_slots_tensor[: len(separator_mask_)][separator_mask_]
+                      .repeat_interleave(2).to(torch.float32))
+
+        separators = separators[: min(len(separators), pos_tensor.shape[0])]
+        pos_tensor[:len(separators), 1] = separators
+        color_tensor[:, 3] = 0
+        color_tensor[:len(separators), 3] = 1
+
     def actualize_plot_map(self, groups):
         selected_neurons = self.neuron_ids[self.selected_neuron_mask(groups)]
 
@@ -730,19 +722,28 @@ class NetworkGPUArrays(GPUArrayCollection):
         if n_selected < self._plotting_config.n_scatter_plots:
             pass
 
-        neuron_groups = self.N_G[:, 1][selected_neurons[: n_voltage_plots]]
+        neuron_groups = self.izeros(max(n_voltage_plots, n_scatter_plots) + 1)
+        neuron_groups[: -1] = self.N_G[:, 1][selected_neurons[: max(n_voltage_plots, n_scatter_plots)]]
         neuron_groups_prev = self.izeros(neuron_groups.shape)
         neuron_groups_prev[0] = -1
         neuron_groups_prev[1:] = neuron_groups[0: -1]
+        neuron_groups[-1] = -1
 
         separator_mask = neuron_groups != neuron_groups_prev
-        separators = self.plotting_arrays.voltage_plot_slots[separator_mask[: n_voltage_plots]].repeat_interleave(2).to(torch.float32)
 
-        self.plotting_arrays.voltage_group_line_pos.tensor[:len(separators), 1] = separators
+        self.actualize_group_separator_lines(
+            plot_slots_tensor=self.plotting_arrays.voltage_plot_slots,
+            separator_mask=separator_mask,
+            pos_tensor=self.plotting_arrays.voltage_group_line_pos.tensor,
+            color_tensor=self.plotting_arrays.voltage_group_line_colors.tensor,
+            n_plots=n_voltage_plots)
 
-        self.plotting_arrays.voltage_group_line_colors.tensor[:, 3] = 0
-        self.plotting_arrays.voltage_group_line_colors.tensor[:len(separators)*4 , 3] = 1
-
+        self.actualize_group_separator_lines(
+            plot_slots_tensor=self.plotting_arrays.firings_plot_slots,
+            separator_mask=separator_mask,
+            pos_tensor=self.plotting_arrays.firings_group_line_pos.tensor,
+            color_tensor=self.plotting_arrays.firings_group_line_colors.tensor,
+            n_plots=n_scatter_plots)
 
     def redirect_synapses(self, groups, direction, rate):
         pass

@@ -101,6 +101,8 @@ class RegisteredGPUArray:
                  ptr: int = None,
                  config: GPUArrayConfig = None):
 
+        numba.cuda.select_device(config.device.index)
+
         self.reg: RegisteredBuffer = reg
         self.mapping: RegisteredMapping = mapping
         self.ptr: int = ptr
@@ -136,12 +138,7 @@ class RegisteredGPUArray:
 
     # noinspection PyArgumentList
     @classmethod
-    def from_buffer(cls, buffer, config: GPUArrayConfig = None, cpu_array: np.array = None):
-
-        if config is not None:
-            assert cpu_array is None
-        else:
-            config = GPUArrayConfig.from_cpu_array(cpu_array)
+    def _read_buffer(cls, buffer):
 
         reg = RegisteredBuffer(buffer)
         mapping: RegisteredMapping = reg.map(None)
@@ -149,7 +146,16 @@ class RegisteredGPUArray:
         gpu_data = ExternalMemory(ptr, size)
         mapping.unmap()
 
-        return RegisteredGPUArray(gpu_data=gpu_data, reg=reg, mapping=mapping, ptr=ptr, config=config)
+        return dict(gpu_data=gpu_data, reg=reg, mapping=mapping, ptr=ptr)
+
+    @classmethod
+    def from_buffer(cls, buffer, config: GPUArrayConfig = None, cpu_array: np.array = None):
+
+        if config is not None:
+            assert cpu_array is None
+        else:
+            config = GPUArrayConfig.from_cpu_array(cpu_array)
+        return RegisteredGPUArray(config=config, **cls._read_buffer(buffer))
 
     def map(self):
         self.reg.map(None)
@@ -171,6 +177,18 @@ class RegisteredGPUArray:
     @property
     def to_dataframe(self) -> pd.DataFrame:
         return pd.DataFrame(self.tensor.cpu().numpy())
+
+
+class RegisteredVBO(RegisteredGPUArray):
+
+    def __init__(self, buffer, shape, device):
+        # if stride is None:
+        #     stride = shape[1]
+        stride = shape[1]
+        nbytes_float32 = 4
+        config = GPUArrayConfig(shape=shape, strides=(stride * nbytes_float32, nbytes_float32),
+                                dtype=np.float32, device=device)
+        RegisteredGPUArray.__init__(self, config=config, **self._read_buffer(buffer))
 
 
 class GPUArrayCollection:

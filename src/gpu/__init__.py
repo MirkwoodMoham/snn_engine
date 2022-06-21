@@ -8,7 +8,8 @@ from .kernel_launch_parameter import DeviceProperties
 from .gpu_arrays import (
     GPUArrayCollection,
     GPUArrayConfig,
-    RegisteredGPUArray
+    RegisteredGPUArray,
+    RegisteredVBO,
 )
 # print_random_numbers
 # def func2():

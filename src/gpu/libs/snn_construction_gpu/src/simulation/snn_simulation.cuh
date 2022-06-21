@@ -136,7 +136,7 @@ struct SnnSimulation
         int* G_syn_count_exc_
     );
     
-    void update_voltage_plot();
+    void update_plots();
     void print_info(bool bprint_idcs = false);
     void update(bool verbose);
 

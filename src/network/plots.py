@@ -8,7 +8,7 @@ from vispy.gloo.context import get_current_canvas
 
 class PlotData:
 
-    def __init__(self, n_plots, plot_length, n_groups=9):
+    def __init__(self, n_plots, plot_length, n_group_seperator_lines, group_separator_line_offset_left):
 
         self._n_plots = n_plots
         self._plot_length = plot_length
@@ -23,24 +23,27 @@ class PlotData:
         self.color[:, 0] = np.linspace(0, 1, size)
         self.color[:, 1] = self.color[::-1, 0]
 
-        self.group_separators_pos = np.zeros((n_groups * 2 * 2, 2))
-        self.group_separators_color = np.ones((n_groups * 2 * 2, 4), dtype=np.float32)
+        self.group_separators_pos = np.zeros((n_group_seperator_lines * 2, 2))
+        self.group_separators_color = np.ones((n_group_seperator_lines * 2, 4), dtype=np.float32)
         self.group_separators_color[:, 3] = 0
-        self.group_separators_pos[:, 0] = (np.expand_dims(np.array([-2, plot_length]), 0)
-                                           .repeat(n_groups * 2, 0)).flatten()
-        self.group_separators_pos[:, 1] = np.linspace(0, self._n_plots, n_groups * 2).repeat(2)
+        self.group_separators_pos[:, 0] = (
+            np.expand_dims(np.array([-group_separator_line_offset_left, plot_length]), 0)
+            .repeat(n_group_seperator_lines, 0)).flatten()
+        self.group_separators_pos[:, 1] = np.linspace(
+            0, self._n_plots, n_group_seperator_lines).repeat(2)
 
 
 # noinspection PyAbstractClass
 class BasePlot:
 
-    def __init__(self, n_plots, plot_length, n_groups, group_separator_width):
+    def __init__(self, n_plots, plot_length, n_group_separator_lines, group_line_offset_left,
+                 group_separator_line_width=1):
 
-        self.plot_data = PlotData(n_plots, plot_length, n_groups=n_groups)
+        self.plot_data = PlotData(n_plots, plot_length, n_group_separator_lines, group_line_offset_left)
 
         self.group_separator_lines = visuals.Line(pos=self.plot_data.group_separators_pos,
                                                   color=self.plot_data.group_separators_color,
-                                                  connect='segments', width=group_separator_width)
+                                                  connect='segments', width=group_separator_line_width)
 
     @property
     def group_lines_pos_vbo_glir_id(self):
@@ -62,9 +65,9 @@ class BasePlot:
 # noinspection PyAbstractClass
 class VoltagePlot(RenderedObjectNode, BasePlot):
 
-    def __init__(self, n_plots, plot_length, n_groups):
+    def __init__(self, n_plots, plot_length, n_group_separator_lines):
 
-        BasePlot.__init__(self, n_plots, plot_length, n_groups, 1)
+        BasePlot.__init__(self, n_plots, plot_length, n_group_separator_lines, 2)
 
         connect = np.ones(plot_length).astype(bool)
         connect[-1] = False
@@ -85,9 +88,9 @@ class VoltagePlot(RenderedObjectNode, BasePlot):
 # noinspection PyAbstractClass
 class FiringScatterPlot(RenderedObjectNode, BasePlot):
 
-    def __init__(self, n_plots, plot_length, n_groups):
+    def __init__(self, n_plots, plot_length, n_group_separator_lines):
 
-        BasePlot.__init__(self, n_plots, plot_length, n_groups, 1)
+        BasePlot.__init__(self, n_plots, plot_length, n_group_separator_lines, 20)
 
         self.plot_data.color[:, 3] = 0
 
@@ -106,3 +109,25 @@ class FiringScatterPlot(RenderedObjectNode, BasePlot):
         # noinspection PyProtectedMember
         return self._obj._vbo.id
 
+
+# noinspection PyAbstractClass
+class GroupFiringCountsPlot(RenderedObjectNode, BasePlot):
+
+    def __init__(self, n_plots, plot_length, n_groups):
+
+        BasePlot.__init__(self, n_plots, plot_length, n_groups + 1, 2)
+
+        connect = np.ones(plot_length).astype(bool)
+        connect[-1] = False
+        connect = connect.reshape(1, plot_length).repeat(n_plots, axis=0).flatten()
+
+        self._obj: visuals.Line = visuals.Line(pos=self.plot_data.pos,
+                                               color=self.plot_data.color,
+                                               connect=connect,
+                                               antialias=False, width=1, parent=None)
+
+        RenderedObjectNode.__init__(self, [self._obj, self.group_separator_lines])
+
+    @property
+    def vbo_glir_id(self):
+        return self._obj._line_visual._pos_vbo.id

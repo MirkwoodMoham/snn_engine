@@ -485,7 +485,7 @@ __global__ void update_current_(
 }
 
 
-void SnnSimulation::update_voltage_plot()
+void SnnSimulation::update_plots()
 {
 
 	update_voltage_plot_ KERNEL_ARGS2(lp_update_voltage_plot.grid3, 
@@ -610,7 +610,7 @@ void SnnSimulation::update(const bool verbose)
 
 	if (b_update_voltage_plot)
 	{
-		update_voltage_plot();
+		update_plots();
 	}
 
 	checkCudaErrors(cudaDeviceSynchronize());
@@ -1719,9 +1719,9 @@ void SnnSimulation::actualize_N_rep_pre_synaptic(){
 
 	std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
 
-	printf("done.\n");
+	printf(" done.\n");
 
-	std::cout << "Time difference = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]" << std::endl;
+	//std::cout << "Time difference = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]" << std::endl;
 }
 
 

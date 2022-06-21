@@ -38,6 +38,65 @@ class CanvasConfig:
     bgcolor: Union[str, Color] = 'black'
 
 
+class GridPlotView:
+
+    # noinspection PyTypeChecker
+    def __init__(self, grid: scene.widgets.Grid,
+                 row, col, title_str, n_plots: int, plot_length: int, cam_yscale: int = 1,
+                 width_min=None, width_max=None,
+                 height_min=None, height_max=None, view_col_span=1, view_row_span=1):
+
+        self.title = scene.Label(title_str, color='white')
+        self.title.height_min = 30
+        self.title.height_max = 30
+
+        yoffset = 0.05 * n_plots
+        self.y_axis = scene.AxisWidget(orientation='left')
+        self.y_axis.stretch = (0.12, 1)
+        self.y_axis.width_min = 50
+        self.y_axis.width_max = self.y_axis.width_min
+
+        xoffset = 0.05 * plot_length
+        self.x_axis = scene.AxisWidget(orientation='bottom')
+        self.x_axis.stretch = (1, 0.15)
+        self.x_axis.height_min = 20
+        self.x_axis.height_max = 30
+
+        grid.add_widget(self.title, row=row, col=col, col_span=view_col_span)
+        grid.add_widget(self.y_axis, row=row + 1, col=col - 1, row_span=view_row_span)
+        grid.add_widget(self.x_axis, row=row + view_row_span + 1, col=col, row_span=1, col_span=view_col_span)
+
+        self.view = grid.add_view(row=row + 1, col=col, border_color='w', row_span=view_row_span, col_span=view_col_span)
+        if width_min is not None:
+            self.view.width_min = width_min
+        if width_max is not None:
+            self.view.width_max = width_max
+        if height_min is not None:
+            self.view.height_min = height_min
+        if height_max is not None:
+            self.view.height_max = height_max
+
+        scene.visuals.GridLines(parent=self.view.scene)
+
+        self.view.camera = PanZoomCamera((-xoffset,
+                                          -yoffset * cam_yscale,
+                                          plot_length + xoffset + xoffset,
+                                          (n_plots + yoffset + yoffset) * cam_yscale))
+        self.x_axis.link_view(self.view)
+        self.y_axis.link_view(self.view)
+
+    @property
+    def visible(self):
+        return self.view.visible
+
+    @visible.setter
+    def visible(self, value):
+        self.view.visible = value
+        self.x_axis.visible = value
+        self.y_axis.visible = value
+        self.title.visible = value
+
+
 class EngineSceneCanvas(scene.SceneCanvas):
 
     # noinspection PyTypeChecker
@@ -63,10 +122,6 @@ class EngineSceneCanvas(scene.SceneCanvas):
 
         self.grid: scene.widgets.Grid = self.network_view.add_grid()
 
-        # self.network_view = vispy.scene.ViewBox()
-
-        # time_text.pos = 100, 100
-
         self.network_view.camera = 'turntable'  # or try 'arcball'
         # add a colored 3D axis for orientation
         axis = scene.visuals.XYZAxis(parent=self.network_view.scene)
@@ -77,12 +132,33 @@ class EngineSceneCanvas(scene.SceneCanvas):
         self.update_duration_value_txt = None
 
         plot_col = 1
-        self.info_grid_right()
+        self.info_grid_right(row=0, col=plot_col + 8)
 
-        self.voltage_plot_view = self._voltage_plot_view(row=0, col=plot_col)
-        self.voltage_plot_view.width_min = 450
-        self.voltage_plot_view.width_max = 600
-        self.scatter_plot_view = self._scatter_plot_view(row=3, col=plot_col)
+        self.voltage_plot = GridPlotView(self.grid, row=0, col=plot_col, title_str="Voltage Plot",
+                                         n_plots=self.n_voltage_plots, plot_length=self.voltage_plot_length,
+                                         width_min=450, width_max=600, height_min=350)
+        self.scatter_plot = GridPlotView(self.grid, row=3, col=plot_col, title_str="Scatter Plot",
+                                         n_plots=self.n_scatter_plots, plot_length=self.scatter_plot_length,
+                                         height_min=200, height_max=500, view_row_span=4)
+
+        self.group_firings_plot = GridPlotView(
+            self.grid,
+            row=3, col=plot_col + 5, title_str="Group Firings",
+            n_plots=network.network_config.G, plot_length=self.scatter_plot_length,
+            width_min=200, width_max=400,
+            cam_yscale=1, height_min=350, view_col_span=1, view_row_span=4)
+
+        self.group_firings_plot_single0 = GridPlotView(
+            self.grid,
+            row=3, col=plot_col + 7, title_str="Group Firings: XXX",
+            n_plots=1, plot_length=self.scatter_plot_length,
+            cam_yscale=1, height_min=200, width_min=400, width_max=600, view_col_span=2, view_row_span=1)
+
+        self.group_firings_plot_single1 = GridPlotView(
+            self.grid,
+            row=6, col=plot_col + 7, title_str="Group Firings: YYY",
+            n_plots=1, plot_length=self.scatter_plot_length,
+            height_min=200, view_col_span=2, view_row_span=1)
 
         self._clicked_obj = None
         self._selected_objects = []
@@ -100,15 +176,17 @@ class EngineSceneCanvas(scene.SceneCanvas):
         if network is not None:
             network.add_rendered_objects(
                 self.network_view,
-                self.voltage_plot_view,
-                self.scatter_plot_view)
+                self.voltage_plot.view,
+                self.scatter_plot.view,
+                self.group_firings_plot.view
+            )
 
             # self._select(network.selector_box, True)
             # self._selected_objects.append(network.selector_box)
 
-    def info_grid_right(self):
+    def info_grid_right(self, row, col):
         # noinspection PyTypeChecker
-        text_grid: scene.widgets.Grid = self.grid.add_grid(row=0, col=5, row_span=2, col_span=1,
+        text_grid: scene.widgets.Grid = self.grid.add_grid(row=row, col=col, row_span=2, col_span=1,
                                                            border_color='w')
         # noinspection PyTypeChecker
         time_txt = scene.Label('t', color='white')
@@ -125,9 +203,11 @@ class EngineSceneCanvas(scene.SceneCanvas):
         text_grid.add_widget(time_txt, row=0, col=0, row_span=1)
         text_grid.add_widget(self.time_txt2, row=0, col=1, row_span=1)
 
+        # noinspection PyTypeChecker
         update_duration_text = scene.Label('update\nduration', color='white')
         update_duration_text.height_max = 100
         update_duration_text.border_color = 'w'
+        # noinspection PyTypeChecker
         self.update_duration_value_txt = scene.Label('0', color='white')
         self.update_duration_value_txt.border_color = 'w'
 
@@ -138,67 +218,6 @@ class EngineSceneCanvas(scene.SceneCanvas):
     def _window_id(self):
         # noinspection PyProtectedMember
         return self._backend._id
-
-    # noinspection PyTypeChecker
-    def _plot_view(self,
-                   row, col, title_str, n_plots, plot_length, cam_yscale=1,
-                   height_min=None, height_max=None):
-
-        title = scene.Label(title_str, color='white')
-        title.height_min = 30
-        title.height_max = 30
-
-        yoffset = 0.05 * n_plots
-        y_axis = scene.AxisWidget(orientation='left',
-                                  # domain=(-yoffset, n_plots + yoffset)
-                                  )
-        y_axis.stretch = (0.12, 1)
-        y_axis.width_min = 50
-        y_axis.width_max = y_axis.width_min
-
-        xoffset = 0.05 * plot_length
-        x_axis = scene.AxisWidget(orientation='bottom',
-                                  # domain=(-xoffset, plot_length + xoffset)
-                                  )
-        x_axis.stretch = (1, 0.15)
-        x_axis.height_min = 20
-        x_axis.height_max = 30
-
-        self.grid.add_widget(title, row=row, col=col, col_span=1)
-        self.grid.add_widget(y_axis, row=row + 1, col=col - 1, row_span=1)
-        self.grid.add_widget(x_axis, row=row + 1 + 1, col=col, row_span=1)
-
-        # v.camera = PanZoomCamera((x_axis.axis.domain[0],
-        #                           y_axis.axis.domain[0] * cam_yscale,
-        #                           x_axis.axis.domain[1] + xoffset,
-        #                           (y_axis.axis.domain[1] + yoffset) * cam_yscale))
-        v = self.grid.add_view(row=row + 1, col=col, border_color='w', row_span=1)
-        if height_min is not None:
-            v.height_min = height_min
-        if height_max is not None:
-            v.height_max = height_max
-
-        scene.visuals.GridLines(parent=v.scene)
-        v.camera = PanZoomCamera((-xoffset,
-                                  -yoffset * cam_yscale,
-                                  plot_length + xoffset + xoffset,
-                                  (n_plots + yoffset + yoffset) * cam_yscale))
-        x_axis.link_view(v)
-        y_axis.link_view(v)
-        # v.camera.set_range()
-        return v
-
-    # noinspection PyTypeChecker
-    def _voltage_plot_view(self, row, col):
-        return self._plot_view(row=row, col=col, title_str="Voltage Plot",
-                               n_plots=self.n_voltage_plots, plot_length=self.voltage_plot_length,
-                               cam_yscale=1, height_min=350)
-
-    # noinspection PyTypeChecker
-    def _scatter_plot_view(self, row, col):
-        return self._plot_view(row=row, col=col, title_str="Scatter Plot",
-                               n_plots=self.n_scatter_plots, plot_length=self.scatter_plot_length, cam_yscale=1,
-                               height_min=200, height_max=500)
 
     def set_keys(self, keys_):
         self.unfreeze()

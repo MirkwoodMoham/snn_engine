@@ -8,6 +8,7 @@ from .network_config import (
     NetworkConfig,
     PlottingConfig, BufferCollection
 )
+from .network_array_shapes import NetworkArrayShapes
 from .network_gpu_arrays import NetworkGPUArrays
 from .network_structures import (
     NeuronTypes,
@@ -22,7 +23,8 @@ from .boxes import (
 )
 from .plots import (
     VoltagePlot,
-    FiringScatterPlot
+    FiringScatterPlot,
+    GroupFiringCountsPlot
 )
 from .neurons import Neurons
 from .network_states import IzhikevichModel
@@ -101,11 +103,15 @@ class SpikingNeuronNetwork:
         self.selector_box: Optional[SelectorBox] = None
         self.voltage_plot: Optional[VoltagePlot] = None
         self.firing_scatter_plot: Optional[VoltagePlot] = None
+        self.group_firing_counts_plot: Optional[GroupFiringCountsPlot] = None
         self.selected_group_boxes: Optional[BoxSystem] = None
         self.input_cells: Optional[InputCells] = None
         self.output_cells: Optional[OutputCells] = None
 
         self._all_rendered_objects_initialized = False
+
+        self.data_shapes = NetworkArrayShapes(config=self.network_config, T=T, n_N_states=model.__len__(), plotting_config=plotting_config,
+                                              n_neuron_types=len(NeuronTypes))
 
         self.validate()
 
@@ -142,10 +148,17 @@ class SpikingNeuronNetwork:
     def initialize_rendered_objs(self):
         self.voltage_plot = VoltagePlot(n_plots=self.plotting_config.n_voltage_plots,
                                         plot_length=self.plotting_config.voltage_plot_length,
-                                        n_groups=self.network_config.G)
+                                        n_group_separator_lines=self.data_shapes.n_group_separator_lines)
+
         self.firing_scatter_plot = FiringScatterPlot(n_plots=self.plotting_config.n_scatter_plots,
                                                      plot_length=self.plotting_config.scatter_plot_length,
-                                                     n_groups=self.network_config.G)
+                                                     n_group_separator_lines=self.data_shapes.n_group_separator_lines)
+
+        self.group_firing_counts_plot = GroupFiringCountsPlot(
+            n_plots=self.network_config.G,
+            plot_length=self.plotting_config.scatter_plot_length,
+            n_groups=self.network_config.G)
+
         self.outer_grid: visuals.Box = Box(shape=self.network_config.N_pos_shape,
                                            scale=[.99, .99, .99],
                                            segments=self.network_config.grid_segmentation,
@@ -194,11 +207,12 @@ class SpikingNeuronNetwork:
 
         self._all_rendered_objects_initialized = True
 
-    def add_rendered_objects(self, view_3d, vplot_view, fplot_view):
+    def add_rendered_objects(self, view_3d, vplot_view, fplot_view, gplot_view):
         if not self._all_rendered_objects_initialized:
             self.initialize_rendered_objs()
         vplot_view.add(self.voltage_plot)
         fplot_view.add(self.firing_scatter_plot)
+        gplot_view.add(self.group_firing_counts_plot)
         for o in self.rendered_3d_objs:
             view_3d.add(o)
 
@@ -226,6 +240,7 @@ class SpikingNeuronNetwork:
             type_group_conn_dct=self.type_group_conn_dict,
             device=device,
             T=self.T,
+            shapes=self.data_shapes,
             plotting_config=self.plotting_config,
             model=self.model,
             buffers=buffers)

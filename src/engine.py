@@ -24,7 +24,7 @@ class EngineConfig:
 
     network_config = NetworkConfig(N=N, N_pos_shape=(4, 4, 1))
     plotting_config = PlottingConfig(N=N,
-                                     n_voltage_plots=50, voltage_plot_length=100,
+                                     n_voltage_plots=100, voltage_plot_length=100,
                                      n_scatter_plots=1000, scatter_plot_length=1000)
 
 
@@ -142,10 +142,12 @@ class Engine:
             # self.buttons.toggle_outergrid.setText('Hide OuterGrid')
             self.buttons.toggle_outergrid.setChecked(True)
             self.actions.toggle_outergrid.setChecked(True)
+            self.window.scene_3d.group_firings_plot.visible = True
         else:
             # self.buttons.toggle_outergrid.setText('Show OuterGrid')
             self.buttons.toggle_outergrid.setChecked(False)
             self.actions.toggle_outergrid.setChecked(False)
+            self.window.scene_3d.group_firings_plot.visible = False
 
         from vispy.visuals.transforms import STTransform, TransformSystem
         # a: STTransform = self.network.selected_group_boxes.obj.transform
