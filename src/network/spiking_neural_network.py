@@ -103,7 +103,11 @@ class SpikingNeuronNetwork:
         self.selector_box: Optional[SelectorBox] = None
         self.voltage_plot: Optional[VoltagePlot] = None
         self.firing_scatter_plot: Optional[VoltagePlot] = None
+
         self.group_firing_counts_plot: Optional[GroupFiringCountsPlot] = None
+        self.group_firing_counts_plot_single0: Optional[GroupFiringCountsPlot] = None
+        self.group_firing_counts_plot_single1: Optional[GroupFiringCountsPlot] = None
+
         self.selected_group_boxes: Optional[BoxSystem] = None
         self.input_cells: Optional[InputCells] = None
         self.output_cells: Optional[OutputCells] = None
@@ -159,6 +163,15 @@ class SpikingNeuronNetwork:
             plot_length=self.plotting_config.scatter_plot_length,
             n_groups=self.network_config.G)
 
+        self.group_firing_counts_plot_single0 = GroupFiringCountsPlot(
+            n_plots=2,
+            plot_length=self.plotting_config.scatter_plot_length,
+            n_groups=0)
+        self.group_firing_counts_plot_single1 = GroupFiringCountsPlot(
+            n_plots=2,
+            plot_length=self.plotting_config.scatter_plot_length,
+            n_groups=0)
+
         self.outer_grid: visuals.Box = Box(shape=self.network_config.N_pos_shape,
                                            scale=[.99, .99, .99],
                                            segments=self.network_config.grid_segmentation,
@@ -175,7 +188,7 @@ class SpikingNeuronNetwork:
                                               connect=np.zeros((g + 1, 2)) + g)
 
         self.input_cells = InputCells(
-            data=np.array([0., 1., 0.]),
+            data=np.array([0, 1, 0], dtype=np.int32),
             pos=np.array([[int(self.network_config.N_pos_shape[0]/2 + 1) * self.grid.unit_shape[1],
                            0.,
                            self.network_config.N_pos_shape[2] - self.grid.unit_shape[2]]]),
@@ -184,7 +197,7 @@ class SpikingNeuronNetwork:
             compatible_groups=self.network_config.sensory_groups,
         )
         self.output_cells = OutputCells(
-            data=np.array([0., -1., 1.]),
+            data=np.array([0, -1, 1], dtype=np.int32),
             pos=np.array([[int(self._neurons._shape[0]/2 + 1) * self.grid.unit_shape[1],
                            self._neurons._shape[1] - self.grid.unit_shape[1],
                            self._neurons._shape[2] - self.grid.unit_shape[2]]]),
@@ -207,12 +220,15 @@ class SpikingNeuronNetwork:
 
         self._all_rendered_objects_initialized = True
 
-    def add_rendered_objects(self, view_3d, vplot_view, fplot_view, gplot_view):
+    def add_rendered_objects(self, view_3d, vplot_view, fplot_view,
+                             gplot_view, gplot_view_single0, gplot_view_single1):
         if not self._all_rendered_objects_initialized:
             self.initialize_rendered_objs()
         vplot_view.add(self.voltage_plot)
         fplot_view.add(self.firing_scatter_plot)
         gplot_view.add(self.group_firing_counts_plot)
+        gplot_view_single0.add(self.group_firing_counts_plot_single0)
+        gplot_view_single1.add(self.group_firing_counts_plot_single1)
         for o in self.rendered_3d_objs:
             view_3d.add(o)
 
@@ -231,6 +247,9 @@ class SpikingNeuronNetwork:
             firings_group_line_colors=self.firing_scatter_plot.group_lines_color_vbo,
             selected_group_boxes_vbo=self.selected_group_boxes.vbo,
             selected_group_boxes_ibo=self.selected_group_boxes.ibo,
+            group_firing_counts_plot=self.group_firing_counts_plot.vbo,
+            group_firing_counts_plot_single0=self.group_firing_counts_plot_single0.vbo,
+            group_firing_counts_plot_single1=self.group_firing_counts_plot_single1.vbo
         )
         self.GPU = NetworkGPUArrays(
             config=self.network_config,
@@ -245,10 +264,10 @@ class SpikingNeuronNetwork:
             model=self.model,
             buffers=buffers)
 
-        self.selector_box.init_cuda_attributes(self.GPU.device, self.GPU.G_props)
-        self.selected_group_boxes.init_cuda_attributes(self.GPU.device, self.GPU.G_props)
-        self.output_cells.init_cuda_attributes(self.GPU.device, self.GPU.G_props)
-        self.input_cells.init_cuda_attributes(self.GPU.device, self.GPU.G_props)
+        self.selector_box.init_cuda_attributes(self.GPU.device, self.GPU.G_flags, self.GPU.G_props)
+        self.selected_group_boxes.init_cuda_attributes(self.GPU.device, self.GPU.G_flags, self.GPU.G_props)
+        self.output_cells.init_cuda_attributes(self.GPU.device, self.GPU.G_flags, self.GPU.G_props)
+        self.input_cells.init_cuda_attributes(self.GPU.device, self.GPU.G_flags, self.GPU.G_props)
 
         self.input_cells.src_weight = self.network_config.InitValues.Weights.SensorySource
 

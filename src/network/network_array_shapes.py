@@ -25,7 +25,7 @@ class NetworkArrayShapes:
         self.firing_counts = 2 * T  # dtype=np.int32
 
         # pt, u, v, a, b, c, d, I
-        self.N_states = (n_N_states, config.N)  # dtype=np.float32
+        # self.N_states = (n_N_states, config.N)  # dtype=np.float32
 
         # GROUPS (location-based)
 
@@ -78,7 +78,6 @@ class NetworkArrayShapes:
         # self.relative_autapse_idcs = (3 * D, G)  # dtype=np.int32
 
         # dtype=np.int32;  selected_p, thalamic input (on/off), ...
-        self.G_props = (LocationGroupProperties.__len__(), config.G)
 
         self.voltage_plot = (plotting_config.n_voltage_plots * plotting_config.voltage_plot_length, 2)
 
@@ -92,8 +91,7 @@ class NetworkArrayShapes:
         self.voltage_plot_map = plotting_config.n_voltage_plots
         self.firings_scatter_plot_map = plotting_config.n_scatter_plots
 
-        assert config.G == self.G_props[1]
-        assert config.N == self.N_states[1]
+        # assert config.N == self.N_states[1]
 
     # noinspection PyPep8Naming
     @property

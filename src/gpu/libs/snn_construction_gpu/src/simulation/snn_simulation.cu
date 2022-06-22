@@ -8,13 +8,22 @@ __global__ void update_N_state_(
 	curandState* randstate, 
 	float* N_pos,
 	const int* N_G,
+	const int* G_flags,
 	const float* G_props,
 	float* N_states,
 	float* fired,
-	int* last_fired
-	// float* neuron_color,
-	// float* debug_i,
-	// float* debug_v
+	int* last_fired,
+	int* G_firing_count_hist, 
+	const int t_mod_scatter_plot_length,
+	const int row_sensory_input_type = 0,
+	const int row_b_thalamic_input = 1,
+	const int row_b_sensory_input = 3,
+	const int row_b_monitor_group_firing_count = 6,
+	const int row_thalamic_inh_input_current = 0,
+	const int row_thalamic_exc_input_current = 1,
+	const int row_sensory_input_current0 = 2,
+	const int row_sensory_input_current1 = 3,
+	bool b_monitor_group_firing_counts = true
 )
 {
 	const int n = blockIdx.x * blockDim.x + threadIdx.x;
@@ -25,7 +34,7 @@ __global__ void update_N_state_(
 		fired[n] = 0.f;
 		N_pos[n * 13 + 10] = .3f;
 
-		const float ntype = __int2float_rn(N_G[n * 2]) - 1;
+		const int ntype = N_G[n * 2] - 1;
 		const int src_G = N_G[n * 2 + 1];
 
 		float pt = N_states[n];
@@ -40,19 +49,19 @@ __global__ void update_N_state_(
 		// printf("\n (%d) (src_G=%d, pt=%f, u=%f, v=%f, a=%f, b=%f, c=%f, d=%f, i=%f)", 
 		// n, src_G, pt, u, v, a, b, c, d, i);
 
-		if ((G_props[src_G + G] > 0.f) && (pt > 0.f) && (curand_uniform(&local_state) < pt))
+		if ((G_flags[src_G + row_b_thalamic_input * G] == 1) && (pt > 0.f) && (curand_uniform(&local_state) < pt))
 		{
 			const float rt = curand_uniform(&local_state);
-			i += (G_props[src_G + 3 * G] * ntype + G_props[src_G + 2 * G] * (1.f - ntype)) * rt;
-			// printf("G_props[src_G + 3 * G]=%f, G_props[src_G + 2 * G]=%f \n", 
-			// 	   G_props[src_G + 3 * G], G_props[src_G + 2 * G]);
+			i += (G_props[src_G + row_thalamic_exc_input_current * G] * ntype 
+				+ G_props[src_G + row_thalamic_inh_input_current * G] * (1 - ntype)) * rt;
 		}
 		
-		if (G_props[src_G + 7 * G] > 0.f)
+		if (G_flags[src_G + row_b_sensory_input * G] == 1)
 		{
-			float input_type = G_props[src_G];	
-			if (input_type >= 0.){
-				i += G_props[src_G + 9 * G] * input_type + G_props[src_G + 8 * G] * (1.f - input_type);
+			const int input_type = G_flags[src_G + row_sensory_input_type * G];	
+			if (input_type >= 0){
+				i += (G_props[src_G + row_sensory_input_current1 * G] * input_type 
+				      + G_props[src_G + row_sensory_input_current0 * G] * (1 - input_type));
 			}
 		}
 
@@ -63,6 +72,15 @@ __global__ void update_N_state_(
 			fired[n] = t;
 			last_fired[n] = __float2int_rn(t);
 			N_pos[n * 13 + 10] = 1.f;
+
+			if ((b_monitor_group_firing_counts) &&
+			    (G_flags[src_G + row_b_monitor_group_firing_count * G] == 1)){
+				
+				atomicAdd(&G_firing_count_hist[src_G + t_mod_scatter_plot_length * G], 1);
+				// printf("\nG_firing_count_hist[%d]=%d", src_G + t_mod_scatter_plot_length * G, 
+				// 	G_firing_count_hist[src_G + t_mod_scatter_plot_length * G]);
+
+			}			
 		} 
 		
 		v = v + 0.5f * (0.04f * v * v + 5 * v + 140 - u + i);
@@ -161,6 +179,7 @@ SnnSimulation::SnnSimulation(
 	float* N_pos_,
 	int* N_G_,
 	int* G_group_delay_counts_,
+    int* G_flags_, 
     float* G_props_, 
     int* N_rep_, 
     int* N_rep_buffer_, 
@@ -174,6 +193,7 @@ SnnSimulation::SnnSimulation(
 	float* firing_times_,
 	int* firing_idcs_,
 	int* firing_counts_,
+	int* G_firing_count_hist_,
 	int* G_stdp_config0_,
 	int* G_stdp_config1_,
 	float* G_avg_weight_inh_,
@@ -203,6 +223,7 @@ SnnSimulation::SnnSimulation(
 	N_pos = N_pos_;
 	N_G = N_G_;
 	G_group_delay_counts = G_group_delay_counts_;
+    G_flags = G_flags_; 
     G_props = G_props_; 
     N_rep = N_rep_;
 
@@ -220,6 +241,7 @@ SnnSimulation::SnnSimulation(
 	firing_times = firing_times_;
 	firing_idcs = firing_idcs_;
 	firing_counts = firing_counts_;
+	G_firing_count_hist = G_firing_count_hist_;
 
 	firing_times_write = firing_times;
 	firing_times_read = firing_times;
@@ -277,6 +299,7 @@ __global__ void update_current_(
 	const float* firing_times_read,
 	const float* firing_times,
 	const int* N_G,
+	const int* G_flags,
 	const float* G_props,
 	const int* N_rep, 
 	// const int* Buffer,
@@ -298,7 +321,8 @@ __global__ void update_current_(
 	float a_r_p = .95f,
 	float a_p_m = -.95f,
 	float a_r_m = -.95f,
-	float a_p_p = .95f
+	float a_p_p = .95f,
+	const int row_b_sensory_input = 3
 )
 {
 	//const int tid_x = blockIdx.get_x * blockDim.get_x + threadIdx.get_x;
@@ -413,7 +437,7 @@ __global__ void update_current_(
 			idx = n + N * s;
 			snk_N = N_rep[idx];
 			snk_G = N_G[snk_N * 2 + 1];
-			is_sensory = G_props[snk_G + 7 * G] > 0.f;
+			is_sensory = G_flags[snk_G + row_b_sensory_input * G] == 1;
 
 			w  =  N_weights[idx];
 			if (!is_sensory)
@@ -450,7 +474,7 @@ __global__ void update_current_(
 			}
 		}
 
-		if (r_stdp && (delay == 0) && (!(G_props[src_G + 7 * G] > 0.f))){
+		if (r_stdp && (delay == 0) && (!(G_flags[src_G + row_b_sensory_input * G] == 1))){
 			int pre_src_N;
 			float w2;
 			s_end2 = N_rep_pre_synaptic_counts[n + 1];
@@ -590,10 +614,13 @@ void SnnSimulation::update(const bool verbose)
 		rand_states,
 		N_pos,
 		N_G,
+		G_flags,
 		G_props,
 		N_states,
 		fired,
-		last_fired
+		last_fired,
+		G_firing_count_hist,
+		t % scatter_plot_length
 		// debug_i.get_dp(),
 		// debug_v.get_dp()
     );
@@ -730,6 +757,7 @@ void SnnSimulation::update(const bool verbose)
 		firing_times_read,
 		firing_times,
 		N_G,
+		G_flags,
 		G_props,
 		N_rep,
 		// N_rep_buffer,

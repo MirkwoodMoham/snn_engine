@@ -9,7 +9,7 @@ from vispy.visuals.transforms import STTransform
 
 from network.network_config import NetworkConfig
 # from network.spiking_neural_network import SpikingNeuronNetwork
-from network.network_states import LocationGroupProperties
+from network.network_states import LocationGroupProperties, LocationGroupFlags
 from rendering import (
     Translate,
     BoxSystemLineVisual,
@@ -62,7 +62,8 @@ class SelectorBox(RenderedCudaObjectNode):
         self.interactive = True
         self.scale = Scale(self, _min_value=0, _max_value=int(3 * 1 / min(self.shape)))
         self.translate = Translate(self, _grid_unit_shape=self.shape, _min_value=-5, _max_value=5)
-        self.states_gpu: Optional[LocationGroupProperties] = None
+        self.G_flags: Optional[LocationGroupFlags] = None
+        self.G_props: Optional[LocationGroupProperties] = None
 
         # noinspection PyPep8Naming
         G = self.network_config.G
@@ -71,7 +72,7 @@ class SelectorBox(RenderedCudaObjectNode):
 
         self.group_numbers = np.arange(G)  # .reshape((G, 1))
 
-        self.selection_property = 'thalamic_input'
+        self.selection_flag = 'b_thalamic_input'
 
         self.freeze()
         
@@ -131,17 +132,18 @@ class SelectorBox(RenderedCudaObjectNode):
         #                                      self.selected_masks[:, 3], self.group_numbers)
         #
         # self.states_gpu.selected = torch.from_numpy(self.selected_masks[:, [3]]).to(self._cuda_device)
-        self.states_gpu.selected = torch.from_numpy(self.selected_masks[:, :3].all(axis=1)).to(self._cuda_device)
+        self.G_flags.selected = torch.from_numpy(self.selected_masks[:, :3].all(axis=1)).to(self._cuda_device)
 
     def on_select_callback(self, v: bool):
-        self.states_gpu.selection_property = self.selection_property if v is True else None
+        self.G_flags.selection_flag = self.selection_flag if v is True else None
         self.swap_select_color(v)
         self._visual.normals.visible = v
 
     # noinspection PyMethodOverriding
-    def init_cuda_attributes(self, device, property_tensor):
+    def init_cuda_attributes(self, device, G_flags: LocationGroupFlags, G_props: LocationGroupProperties):
         super().init_cuda_attributes(device)
-        self.states_gpu = property_tensor
+        self.G_flags = G_flags
+        self.G_props = G_props
         self.transform_connected = True
         self._visual.normals.visible = False
 
@@ -171,7 +173,8 @@ class BoxSystem(RenderedCudaObjectNode):
         self.transform = STTransform(translate=(0, 0, 0), scale=(1, 1, 1))
 
         self.unfreeze()
-        self.states_gpu: Optional[LocationGroupProperties] = None
+        self.G_flags: Optional[LocationGroupProperties] = None
+        self.G_props: Optional[LocationGroupProperties] = None
         self._input_color_array: Optional[RegisteredGPUArray] = None
         self._output_color_array: Optional[RegisteredGPUArray] = None
         self.freeze()
@@ -275,11 +278,12 @@ class BoxSystem(RenderedCudaObjectNode):
         self._output_color_array.tensor[:, 3] = .5
 
     # noinspection PyMethodOverriding
-    def init_cuda_attributes(self, device, property_tensor):
-        self.states_gpu: LocationGroupProperties = property_tensor
+    def init_cuda_attributes(self, device, G_flags: LocationGroupFlags, G_props: LocationGroupProperties):
+        self.G_flags: LocationGroupFlags = G_flags
+        self.G_props: LocationGroupProperties = G_props
         super().init_cuda_attributes(device)
-        self.states_gpu.input_face_colors = self._input_color_array.tensor
-        self.states_gpu.output_face_colors = self._output_color_array.tensor
+        self.G_props.input_face_colors = self._input_color_array.tensor
+        self.G_props.output_face_colors = self._output_color_array.tensor
 
     @property
     def color_vbo_glir_id(self):
@@ -337,7 +341,7 @@ class IOCells(RenderedCudaObjectNode):
             data = data.squeeze()
             if data.shape != self.data_shape:
                 raise ValueError
-        self.data_cpu = data.astype(np.float32)
+        self.data_cpu = data.astype(np.int32)
         if data_color_coding is None:
             data_color_coding = np.array([
                 [0., 0., 0., .6],
@@ -390,7 +394,8 @@ class IOCells(RenderedCudaObjectNode):
         self.scale = Scale(self, _min_value=0, _max_value=int(3 * 1 / max(self.shape)))
         self.translate = Translate(self, _grid_unit_shape=self.shape, _min_value=-5, _max_value=5)
 
-        self.states_gpu: Optional[LocationGroupProperties] = None
+        self.G_flags: Optional[LocationGroupFlags] = None
+        self.G_props: Optional[LocationGroupProperties] = None
 
         self._collision_tensor_gpu: Optional[torch.Tensor] = None
         self._cell_pos_start_xx_gpu: Optional[torch.Tensor] = None
@@ -479,7 +484,7 @@ class IOCells(RenderedCudaObjectNode):
 
     def on_select_callback(self, v: bool):
         # self.swap_select_color(v)
-        self.states_gpu.selection_property = None
+        self.G_flags.selection_flag = None
         self.normals.visible = v
         self.transform_changed()
 
@@ -530,7 +535,7 @@ class IOCells(RenderedCudaObjectNode):
         self.io_neuron_group_indices_gpu = torch.zeros(self.collision_shape[1],
                                                        dtype=torch.float32, device=self._cuda_device)
         self.io_neuron_group_values_gpu = torch.zeros(self.collision_shape[1],
-                                                      dtype=torch.float32, device=self._cuda_device)
+                                                      dtype=torch.int32, device=self._cuda_device)
         self.data_gpu = torch.from_numpy(self.data_cpu).to(device=self._cuda_device)
         self.data_color_coding_gpu = torch.from_numpy(self.data_color_coding_cpu).to(self._cuda_device)
 
@@ -541,7 +546,7 @@ class IOCells(RenderedCudaObjectNode):
                                                                                       2, 3))
         self.face_color_indices_gpu = self.face_color_indices_gpu.flip(0).transpose(0, 1).reshape(n_sens_gr, 2, 3)
         self.scale_gpu = torch.from_numpy(np.array(self.transform.scale)).to(self._cuda_device)
-        self.colors_gpu = getattr(self.states_gpu, self._colors_attr)
+        self.colors_gpu = getattr(self.G_props, self._colors_attr)
         self.transform_changed()
 
     def actualize_colors(self):
@@ -550,10 +555,12 @@ class IOCells(RenderedCudaObjectNode):
         for i in range(len(self.data_color_coding_cpu)):
             indices = self.face_color_indices_gpu[self.io_neuron_group_values_gpu == i].flatten()
             self.colors_gpu[indices, :] = self.data_color_coding_gpu[i]
+            # print(f"indices ({self.io_neuron_group_indices_gpu}) -> color ({self.data_color_coding_gpu[i]})")
 
     # noinspection PyMethodOverriding
-    def init_cuda_attributes(self, device, property_tensor):
-        self.states_gpu: LocationGroupProperties = property_tensor
+    def init_cuda_attributes(self, device, G_flags: LocationGroupFlags, G_props: LocationGroupProperties):
+        self.G_flags: LocationGroupFlags = G_flags
+        self.G_props: LocationGroupProperties = G_props
         super().init_cuda_attributes(device)
         self.transform_connected = True
         self.normals.visible = False
@@ -581,16 +588,16 @@ class InputCells(IOCells):
 
     def transform_changed(self):
         self.assign_sensory_input()
-        self.states_gpu.sensory_input_type[:] = -1.
-        self.states_gpu.sensory_input_type[self.network_config.sensory_groups] = self.io_neuron_group_values_gpu
-        mask = self.states_gpu.sensory_input_type != -1.
-        self.states_gpu.selected = mask
-        self.states_gpu.b_thalamic_input = 0
-        self.states_gpu.b_sensory_input = torch.where(mask, 1., 0.)
+        self.G_flags.sensory_input_type[:] = -1
+        self.G_flags.sensory_input_type[self.network_config.sensory_groups] = self.io_neuron_group_values_gpu
+        mask = self.G_flags.sensory_input_type != -1
+        self.G_flags.selected = mask
+        self.G_flags.b_thalamic_input = 0
+        self.G_flags.b_sensory_input = torch.where(mask, 1, 0)
         self.actualize_colors()
 
         self.network.GPU.actualize_plot_map(
-            self.network_config.sensory_groups[self.io_neuron_group_values_gpu.cpu() != -1.])
+            self.network_config.sensory_groups[self.io_neuron_group_values_gpu.cpu() != -1])
 
         self.network.GPU.plotting_arrays.voltage.map()
         self.network.GPU.plotting_arrays.firings.map()
@@ -613,13 +620,14 @@ class OutputCells(IOCells):
         prev_act_output_grs = self.network.GPU.active_output_groups
 
         self.assign_sensory_input()
-        self.states_gpu.output_type[:] = -1
-        self.states_gpu.output_type[self.network_config.output_groups] = self.io_neuron_group_values_gpu
-        mask = self.states_gpu.output_type != -1.
-        self.states_gpu.selected = mask
-        self.states_gpu.b_output_group = torch.where(mask, 1, 0)
+        self.G_flags.output_type[:] = -1
+        self.G_flags.output_type[self.network_config.output_groups] = self.io_neuron_group_values_gpu
+        mask = self.G_flags.output_type != -1
+        self.G_flags.selected = mask
+        self.G_flags.b_output_group = torch.where(mask, 1, 0)
 
         active_output_groups = self.network.GPU.active_output_groups
+        # noinspection PyUnresolvedReferences
         if ((self.network.GPU.active_output_groups is None) or
                 (len(active_output_groups) != len(prev_act_output_grs)) or
                 (not bool((active_output_groups == prev_act_output_grs).all()))):
@@ -628,7 +636,7 @@ class OutputCells(IOCells):
         self.actualize_colors()
 
         self.network.GPU.actualize_plot_map(
-            self.network_config.output_groups[self.io_neuron_group_values_gpu.cpu() != -1.])
+            self.network_config.output_groups[self.io_neuron_group_values_gpu.cpu() != -1])
 
         self.network.GPU.plotting_arrays.voltage.map()
         self.network.GPU.plotting_arrays.firings.map()

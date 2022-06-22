@@ -26,6 +26,7 @@ SnnSimulation make_SnnSimulation(
     const long N_pos_dp,
     const long N_G_dp,
     const long G_group_delay_counts_dp, 
+    const long G_flags_dp, 
     const long G_props_dp, 
     const long N_rep_dp, 
     const long N_rep_buffer_dp,
@@ -39,6 +40,7 @@ SnnSimulation make_SnnSimulation(
     const long firing_times_dp,
     const long firing_idcs_dp,
     const long firing_counts_dp,
+    const long G_firing_count_hist_dp,
     const long G_stdp_config0_dp,
     const long G_stdp_config1_dp,
     const long G_avg_weight_inh_dp,
@@ -54,6 +56,7 @@ SnnSimulation make_SnnSimulation(
     float* N_pos = reinterpret_cast<float*> (N_pos_dp);
     int* N_G = reinterpret_cast<int*> (N_G_dp);
     int* G_group_delay_counts = reinterpret_cast<int*> (G_group_delay_counts_dp);
+    int* G_flags = reinterpret_cast<int*> (G_flags_dp);
     float* G_props = reinterpret_cast<float*> (G_props_dp);
     int* N_rep = reinterpret_cast<int*> (N_rep_dp);
 
@@ -71,6 +74,7 @@ SnnSimulation make_SnnSimulation(
     float* firing_times = reinterpret_cast<float*> (firing_times_dp);
     int* firing_idcs = reinterpret_cast<int*> (firing_idcs_dp);
     int* firing_counts = reinterpret_cast<int*> (firing_counts_dp);
+    int* G_firing_count_hist = reinterpret_cast<int*> (G_firing_count_hist_dp);
 
     int* G_stdp_config0 = reinterpret_cast<int*> (G_stdp_config0_dp);
     int* G_stdp_config1 = reinterpret_cast<int*> (G_stdp_config0_dp);
@@ -99,6 +103,7 @@ SnnSimulation make_SnnSimulation(
         N_pos,
         N_G,
         G_group_delay_counts,
+        G_flags,
         G_props, 
         N_rep, 
         N_rep_buffer,
@@ -112,6 +117,7 @@ SnnSimulation make_SnnSimulation(
         firing_times,
         firing_idcs,
         firing_counts,
+        G_firing_count_hist,
         G_stdp_config0,
         G_stdp_config1,
         G_avg_weight_inh,
@@ -171,6 +177,7 @@ PYBIND11_MODULE(snn_simulation_gpu, m)
         py::arg("N_pos"),
         py::arg("N_G"),
         py::arg("G_group_delay_counts"),
+        py::arg("G_flags"),
         py::arg("G_props"),
         py::arg("N_rep"),
         py::arg("N_rep_buffer"),
@@ -184,6 +191,7 @@ PYBIND11_MODULE(snn_simulation_gpu, m)
         py::arg("firing_times"),
         py::arg("firing_idcs"),
         py::arg("firing_counts"),
+        py::arg("G_firing_count_hist"),
         py::arg("G_stdp_config0"),
         py::arg("G_stdp_config1"),
         py::arg("G_avg_weight_inh"),

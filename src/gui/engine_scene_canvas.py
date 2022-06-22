@@ -178,7 +178,9 @@ class EngineSceneCanvas(scene.SceneCanvas):
                 self.network_view,
                 self.voltage_plot.view,
                 self.scatter_plot.view,
-                self.group_firings_plot.view
+                self.group_firings_plot.view,
+                self.group_firings_plot_single0.view,
+                self.group_firings_plot_single1.view
             )
 
             # self._select(network.selector_box, True)

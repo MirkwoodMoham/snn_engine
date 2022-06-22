@@ -141,10 +141,11 @@ class IzhikevichModel(PropertyTensor):
         d: int = 6
         i: int = 7
 
-    def __init__(self, shape, device, types_tensor):
+    def __init__(self, n_neurons, device, types_tensor):
         self._rows = self.Rows()
+        shape = (len(self._rows), n_neurons)
         super().__init__(shape)
-        self._N = shape[1]
+        self._N = n_neurons
         self.selected = None
         self.set_tensor(shape, device, types_tensor)
         self.presets = IzhikevichPresets()
@@ -251,61 +252,57 @@ class Sliders:
             setattr(self, k, None)
 
 
-class LocationGroupProperties(PropertyTensor):
+class LocationGroupFlags(PropertyTensor):
 
     @dataclass(frozen=True)
     class Rows:
 
         sensory_input_type: int = 0
         b_thalamic_input: int = 1
-        thalamic_inh_input_current: int = 2
-        thalamic_exc_input_current: int = 3
-        b_sensory_group: int = 4
-        b_output_group: int = 5
-        output_type: int = 6
-        b_sensory_input: int = 7
-        sensory_input_current0: int = 8
-        sensory_input_current1: int = 9
+        b_sensory_group: int = 2
+        b_sensory_input: int = 3
+        b_output_group: int = 4
+        output_type: int = 5
+        b_monitor_group_firing_count: int = 6
 
         def __len__(self):
-            return 10
+            return 7
 
-    def __init__(self, shape, device, config, select_ibo, grid: NetworkGrid):
+    def __init__(self, n_groups, device, select_ibo, grid: NetworkGrid):
         self._rows = self.Rows()
+        self._G = n_groups
+        shape = (len(self._rows), n_groups)
         super().__init__(shape)
-        self._G = shape[1]
         nbytes = 4
         self.selected_array = RegisteredGPUArray.from_buffer(
             select_ibo, config=GPUArrayConfig(shape=(self._G, 1),
                                               strides=(2 * nbytes, nbytes),
                                               dtype=np.int32, device=device))
 
-        self.input_face_colors: Optional[torch.Tensor] = None
-        self.output_face_colors: Optional[torch.Tensor] = None
-        self.group_numbers_gpu: Optional[torch.Tensor] = None
+        # self.group_numbers_gpu: Optional[torch.Tensor] = None
+        self.set_tensor(shape, device, grid)
+        self.selection_flag = None
 
-        self.set_tensor(shape, device, config, grid)
-        self.selection_property = None
-
-        self.spin_box_sliders = Sliders(self.Rows())
-
-    def set_tensor(self, shape, device, config: NetworkConfig, grid: NetworkGrid):
-        self.tensor = torch.zeros(shape, dtype=torch.float32, device=device)
+    def set_tensor(self, shape, device, grid: NetworkGrid):
+        self.tensor = torch.zeros(shape, dtype=torch.int32, device=device)
         thalamic_input_arr = torch.zeros(self._G)
         thalamic_input_arr[: int(self._G/2)] = 1
         # self.b_thalamic_input = thalamic_input_arr
         self.b_thalamic_input = 0
         # self.thalamic_input = 1
-        self.thalamic_inh_input_current = config.InitValues.ThalamicInput.inh_current
-        self.thalamic_exc_input_current = config.InitValues.ThalamicInput.exc_current
-        self.sensory_input_current0 = config.InitValues.SensoryInput.input_current0
-        self.sensory_input_current1 = config.InitValues.SensoryInput.input_current1
 
         self.b_sensory_group = torch.from_numpy(grid.sensory_group_mask).to(device)
-        self.sensory_input_type = -1.
+        self.sensory_input_type = -1
 
-        self.group_numbers_gpu = (torch.arange(self._G).to(device=device)
-                                  .reshape((self._G, 1)))
+        self.group_ids = (torch.arange(self._G).to(device=device)
+                          .reshape((self._G, 1)))
+
+        # self.b_monitor_group_firing_count[67] = 1
+        # self.b_monitor_group_firing_count[68] = 1
+        # self.b_monitor_group_firing_count[69] = 1
+        # self.b_monitor_group_firing_count[123] = 1
+        # self.b_monitor_group_firing_count[125] = 1
+        self.b_monitor_group_firing_count = 1
 
     @property
     def selected(self):
@@ -315,9 +312,9 @@ class LocationGroupProperties(PropertyTensor):
     @selected.setter
     def selected(self, mask):
         self.selected_array.tensor[:] = torch.where(mask.reshape((self._G, 1)),
-                                                    self.group_numbers_gpu, self._G)
-        if self.selection_property is not None:
-            setattr(self, self.selection_property, mask)
+                                                    self.group_ids, self._G)
+        if self.selection_flag is not None:
+            setattr(self, self.selection_flag, mask)
 
     @property
     def sensory_input_type(self):
@@ -334,22 +331,6 @@ class LocationGroupProperties(PropertyTensor):
     @b_thalamic_input.setter
     def b_thalamic_input(self, v):
         self._tensor[self._rows.b_thalamic_input, :] = v
-
-    @property
-    def thalamic_inh_input_current(self):
-        return self._tensor[self._rows.thalamic_inh_input_current, :]
-
-    @thalamic_inh_input_current.setter
-    def thalamic_inh_input_current(self, v):
-        self._tensor[self._rows.thalamic_inh_input_current, :] = v
-
-    @property
-    def thalamic_exc_input_current(self):
-        return self._tensor[self._rows.thalamic_exc_input_current, :]
-
-    @thalamic_exc_input_current.setter
-    def thalamic_exc_input_current(self, v):
-        self._tensor[self._rows.thalamic_exc_input_current, :] = v
 
     @property
     def b_sensory_group(self):
@@ -382,6 +363,65 @@ class LocationGroupProperties(PropertyTensor):
     @b_sensory_input.setter
     def b_sensory_input(self, v):
         self._tensor[self._rows.b_sensory_input, :] = v
+
+    @property
+    def b_monitor_group_firing_count(self):
+        return self._tensor[self._rows.b_monitor_group_firing_count, :]
+
+    @b_monitor_group_firing_count.setter
+    def b_monitor_group_firing_count(self, v):
+        self._tensor[self._rows.b_monitor_group_firing_count, :] = v
+
+
+class LocationGroupProperties(PropertyTensor):
+
+    @dataclass(frozen=True)
+    class Rows:
+
+        thalamic_inh_input_current: int = 0
+        thalamic_exc_input_current: int = 1
+        sensory_input_current0: int = 2
+        sensory_input_current1: int = 3
+
+        def __len__(self):
+            return 4
+
+    def __init__(self, n_groups, device, config, grid: NetworkGrid):
+        self._rows = self.Rows()
+        self._G = n_groups
+        shape = (len(self._rows), n_groups)
+        super().__init__(shape)
+
+        self.input_face_colors: Optional[torch.Tensor] = None
+        self.output_face_colors: Optional[torch.Tensor] = None
+
+        self.set_tensor(shape, device, config, grid)
+
+        self.spin_box_sliders = Sliders(self.Rows())
+
+    def set_tensor(self, shape, device, config: NetworkConfig, grid: NetworkGrid):
+        self.tensor = torch.zeros(shape, dtype=torch.float32, device=device)
+
+        self.thalamic_inh_input_current = config.InitValues.ThalamicInput.inh_current
+        self.thalamic_exc_input_current = config.InitValues.ThalamicInput.exc_current
+        self.sensory_input_current0 = config.InitValues.SensoryInput.input_current0
+        self.sensory_input_current1 = config.InitValues.SensoryInput.input_current1
+
+    @property
+    def thalamic_inh_input_current(self):
+        return self._tensor[self._rows.thalamic_inh_input_current, :]
+
+    @thalamic_inh_input_current.setter
+    def thalamic_inh_input_current(self, v):
+        self._tensor[self._rows.thalamic_inh_input_current, :] = v
+
+    @property
+    def thalamic_exc_input_current(self):
+        return self._tensor[self._rows.thalamic_exc_input_current, :]
+
+    @thalamic_exc_input_current.setter
+    def thalamic_exc_input_current(self, v):
+        self._tensor[self._rows.thalamic_exc_input_current, :] = v
 
     @property
     def sensory_input_current0(self):

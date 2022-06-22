@@ -113,9 +113,12 @@ class FiringScatterPlot(RenderedObjectNode, BasePlot):
 # noinspection PyAbstractClass
 class GroupFiringCountsPlot(RenderedObjectNode, BasePlot):
 
-    def __init__(self, n_plots, plot_length, n_groups):
+    def __init__(self, n_plots, plot_length, n_groups, color=None):
 
         BasePlot.__init__(self, n_plots, plot_length, n_groups + 1, 2)
+
+        if color is not None:
+            self.plot_data.color = color
 
         connect = np.ones(plot_length).astype(bool)
         connect[-1] = False

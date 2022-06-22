@@ -4,7 +4,7 @@ import torch
 
 from network.network_array_shapes import NetworkArrayShapes
 from network.network_config import BufferCollection, NetworkConfig, PlottingConfig
-from network.network_states import IzhikevichModel, LocationGroupProperties
+from network.network_states import IzhikevichModel, LocationGroupProperties, LocationGroupFlags
 from network.network_structures import NeuronTypeGroup, NeuronTypeGroupConnection, NeuronTypes
 from .network_grid import NetworkGrid
 from .neurons import Neurons
@@ -23,7 +23,8 @@ from gpu import (
 class NetworkGPUArrays(GPUArrayCollection):
 
     class PlottingGPUArrays(GPUArrayCollection):
-        def __init__(self, device, shapes: NetworkArrayShapes,
+        def __init__(self, plotting_config: PlottingConfig,
+                     device, shapes: NetworkArrayShapes,
                      buffers: BufferCollection,
                      bprint_allocated_memory):
 
@@ -57,6 +58,14 @@ class NetworkGPUArrays(GPUArrayCollection):
 
             # print(self.voltage.to_dataframe)
 
+            self.group_firing_counts_plot_single0 = RegisteredVBO(buffers.group_firing_counts_plot_single0,
+                                                                  (plotting_config.scatter_plot_length * 2, 2), self.device)
+
+            self.group_firing_counts_plot_single1 = RegisteredVBO(buffers.group_firing_counts_plot_single1,
+                                                                  (plotting_config.scatter_plot_length * 2, 2),
+                                                                  self.device)
+
+
     def __init__(self,
                  config: NetworkConfig,
                  grid: NetworkGrid,
@@ -80,7 +89,8 @@ class NetworkGPUArrays(GPUArrayCollection):
 
         # self.selector_box = RegisteredVBO(vbo, shape, self.device)
 
-        self.plotting_arrays = self.PlottingGPUArrays(device=device, shapes=shapes, buffers=buffers,
+        self.plotting_arrays = self.PlottingGPUArrays(plotting_config,
+                                                      device=device, shapes=shapes, buffers=buffers,
                                                       bprint_allocated_memory=self.bprint_allocated_memory)
 
         self.curand_states = self._curand_states()
@@ -120,17 +130,20 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.N_weights = self._N_weights(shapes.N_weights)
         self.print_allocated_memory('weights')
 
-        self.N_states = model(shape=shapes.N_states, device=self.device,
+        self.N_states = model(self._config.N, device=self.device,
                               types_tensor=self.N_G[:, self._config.N_G_neuron_type_col])
 
-        self.G_props = LocationGroupProperties(shape=shapes.G_props, device=self.device, config=self._config,
-                                               grid=grid, select_ibo=buffers.selected_group_boxes_ibo)
+        self.G_flags = LocationGroupFlags(self._config.G, device=self.device, grid=grid,
+                                          select_ibo=buffers.selected_group_boxes_ibo)
+        self.G_props = LocationGroupProperties(self._config.G, device=self.device, config=self._config, grid=grid)
 
         self.Fired = self.fzeros(self._config.N)
         self.last_Fired = self.izeros(self._config.N) - self._config.D
         self.Firing_times = self.fzeros((15, self._config.N))
         self.Firing_idcs = self.izeros((15, self._config.N))
         self.Firing_counts = self.izeros((1, T * 2))
+
+        self.G_firing_count_hist = self.izeros((self._plotting_config.scatter_plot_length, self._config.G))
 
         self.G_stdp_config0 = self.izeros((self._config.G, self._config.G))
         self.G_stdp_config1 = self.izeros((self._config.G, self._config.G))
@@ -182,6 +195,7 @@ class NetworkGPUArrays(GPUArrayCollection):
             N_pos=self.N_pos.data_ptr(),
             N_G=self.N_G.data_ptr(),
             G_group_delay_counts=self.G_group_delay_counts.data_ptr(),
+            G_flags=self.G_flags.data_ptr(),
             G_props=self.G_props.data_ptr(),
             N_rep=self.N_rep.data_ptr(),
             N_rep_buffer=self.N_rep_buffer.data_ptr(),
@@ -195,6 +209,7 @@ class NetworkGPUArrays(GPUArrayCollection):
             firing_times=self.Firing_times.data_ptr(),
             firing_idcs=self.Firing_idcs.data_ptr(),
             firing_counts=self.Firing_counts.data_ptr(),
+            G_firing_count_hist=self.G_firing_count_hist.data_ptr(),
             G_stdp_config0=self.G_stdp_config0.data_ptr(),
             G_stdp_config1=self.G_stdp_config1.data_ptr(),
             G_avg_weight_inh=self.G_avg_weight_inh.data_ptr(),
@@ -777,6 +792,7 @@ class NetworkGPUArrays(GPUArrayCollection):
             raise ValueError
 
         swap_delay = self.G_delay_distance[groups.ravel()[0], groups.ravel()[n_groups]].item()
+        # noinspection PyUnresolvedReferences
         if not bool((self.G_delay_distance[
                          groups.ravel()[:groups.size().numel() - n_groups],
                          groups.ravel()[n_groups:groups.size().numel()]] == swap_delay).all()):
@@ -886,7 +902,7 @@ class NetworkGPUArrays(GPUArrayCollection):
         if output_groups is None:
             output_groups = self.active_output_groups
         assert len(output_groups) == 2
-        output_group_types = self.G_props.output_type[output_groups].type(torch.int64)
+        output_group_types = self.G_flags.output_type[output_groups].type(torch.int64)
 
         group0 = output_groups[output_group_types == 0].item()
         group1 = output_groups[output_group_types == 1].item()
@@ -898,18 +914,18 @@ class NetworkGPUArrays(GPUArrayCollection):
 
     @property
     def active_sensory_groups(self):
-        return self.select_groups(self.G_props.b_sensory_input.type(torch.bool))
+        return self.select_groups(self.G_flags.b_sensory_input.type(torch.bool))
 
     @property
     def active_output_groups(self):
-        return self.select_groups(self.G_props.b_output_group.type(torch.bool))
+        return self.select_groups(self.G_flags.b_output_group.type(torch.bool))
 
     def update(self):
 
         if self.Simulation.t % 1000 == 0:
             self.Simulation.calculate_avg_group_weight()
             a = self.to_dataframe(self.G_avg_weight_inh)
-            b = self.to_dataframe(self.G_avg_weight_exc)
+            b = self.to_dataframe(self.G_avg_weight_exc)`
             r = 6
             # self.look_up([(80, 72), (88, 80), (96, 88), (104, 96), (112, 104)],
             # self.G_stdp_config0.type(torch.float32))
@@ -924,4 +940,18 @@ class NetworkGPUArrays(GPUArrayCollection):
 
         for i in range(self._config.sim_updates_per_frame):
             self.Simulation.update(False)
+
+            # print(self.G_firing_count_hist.flatten()[67 + (self.Simulation.t-1) * self._config.G])
+            t_mod = (self.Simulation.t - 1) % self._plotting_config.scatter_plot_length
+
+            self.plotting_arrays.group_firing_counts_plot_single1.tensor[t_mod, 1] = \
+                self.G_firing_count_hist.flatten()[123 + t_mod * self._config.G] / 100
+
+            self.plotting_arrays.group_firing_counts_plot_single1.tensor[self._plotting_config.scatter_plot_length + t_mod, 1] = \
+                self.G_firing_count_hist.flatten()[125 + t_mod * self._config.G] / 100
+
+            if t_mod + 1 == self._plotting_config.scatter_plot_length:
+                self.G_firing_count_hist[:] = 0
+
+            return
 

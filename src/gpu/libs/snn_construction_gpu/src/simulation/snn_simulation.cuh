@@ -26,6 +26,7 @@ struct SnnSimulation
     float* N_pos; 
     int* N_G; 
     int* G_group_delay_counts; 
+    int* G_flags; 
     float* G_props; 
     int* N_rep; 
     int* N_rep_buffer; 
@@ -49,6 +50,7 @@ struct SnnSimulation
     
     int* firing_counts_write;
     int* firing_counts;
+    int* G_firing_count_hist;
 
     bool stdp_active = false;
     int* G_stdp_config0;
@@ -114,6 +116,7 @@ struct SnnSimulation
         float* N_pos_,
         int* N_G_,
         int* G_group_delay_counts_,
+        int* G_flags_, 
         float* G_props_, 
         int* N_rep_, 
         int* N_rep_buffer_,
@@ -127,6 +130,7 @@ struct SnnSimulation
         float* firing_times_,
         int* firing_idcs_,
         int* firing_counts_,
+        int* G_firing_count_hist_,
         
         int* G_stdp_config0_,
         int* G_stdp_config1_,
