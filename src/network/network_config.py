@@ -15,6 +15,8 @@ class PlottingConfig:
     n_scatter_plots: int
     scatter_plot_length: int
 
+    windowed_neuron_plots: bool = True
+
     _max_length: int = 10000
     _max_n_voltage_plots: int = 1000
     _max_n_scatter_plots: int = 1000
@@ -135,4 +137,5 @@ class BufferCollection:
 
     def __post_init__(self):
         for k, v in asdict(self).items():
-            setattr(self, k, int(v))
+            if v is not None:
+                setattr(self, k, int(v))

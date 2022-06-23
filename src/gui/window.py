@@ -17,7 +17,12 @@ from PyQt6.QtWidgets import (
 )
 
 from vispy.app import Application
-from .engine_scene_canvas import EngineSceneCanvas, CanvasConfig
+from .engine_scene_canvas import (
+    EngineSceneCanvas,
+    CanvasConfig,
+    BaseEngineSceneCanvas,
+    ScatterPlotSceneCanvas,
+    PlotSceneCanvas)
 
 from network import SpikingNeuronNetwork
 from .ui_element import ButtonMenuAction, SpinBoxSlider
@@ -151,9 +156,9 @@ class UI(object):
                                                     single_step_slider=100,
                                                     _min_value=0, _max_value=5)
 
-        def __init__(self, window, central_widget):
+        def __init__(self, window):
 
-            self.frame = QScrollArea(central_widget)
+            self.frame = QScrollArea(window.centralWidget())
             self.frame.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
             self.frame.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
             # self.frame.setGeometry(0, 0, 100, 100)
@@ -169,7 +174,7 @@ class UI(object):
             self.layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
             self.layout.setSpacing(2)
 
-            play_pause_widget = QWidget(central_widget)
+            play_pause_widget = QWidget(window.centralWidget())
             play_pause_widget.setFixedSize(95, 45)
             play_pause_hbox = QHBoxLayout(play_pause_widget)
             play_pause_hbox.setContentsMargins(0, 0, 0, 0)
@@ -200,44 +205,95 @@ class UI(object):
 
             self.layout.addWidget(self.buttons.exit)
 
-    def __init__(self, window, scene):
+    def __init__(self, window):
 
         self.ui_elements = ButtonMenuActions(window)
 
         self.menubar = self.MenuBar(window)
-        window.setMenuBar(self.menubar.bar)
-
-        self.central_widget = QWidget(window)
-
-        self.frame_3d = QFrame(self.central_widget)
-        self.frame_3d.setFrameShape(QFrame.Shape.StyledPanel)
-        self.frame_3d.setFrameShadow(QFrame.Shadow.Raised)
-        self.layout_3d = QVBoxLayout(self.frame_3d)
-        self.layout_3d.addWidget(scene)
         # self.grid_layout.addWidget(self.frame_3d, 0, 1, 1, 30)
 
-        self.ui_left = self.UiLeft(window, self.central_widget)
-        
+        self.ui_left = self.UiLeft(window)
+
         splitter = QSplitter(QtCore.Qt.Orientation.Horizontal)
         splitter.addWidget(self.ui_left.frame)
-        splitter.addWidget(self.frame_3d)
+        splitter.addWidget(window.frame_3d)
 
-        hbox = QHBoxLayout(self.central_widget)
+        hbox = QHBoxLayout(window.centralWidget())
         hbox.addWidget(splitter)
 
-        window.setCentralWidget(self.central_widget)
-
-        window.setStatusBar(QStatusBar(window))
-
+        window.setMenuBar(self.menubar.bar)
         splitter.setStretchFactor(0, 6)
         splitter.setStretchFactor(1, 3)
 
-        self.retranslate_ui(window)
 
-    @staticmethod
-    def retranslate_ui(window):
-        _translate = QtCore.QCoreApplication.translate
-        window.setWindowTitle(_translate("SNN Engine", "SNN Engine"))
+class NeuronPlotWindow(QtWidgets.QMainWindow):
+
+    def __init__(self,
+                 parent,
+                 name: str,
+                 app: Optional[Application],
+                 network,
+                 keys=None,
+                 show=True,
+                 ):
+        super().__init__(parent)
+
+        self.setWindowTitle(name)
+        self.setObjectName(name)
+        self.resize(1200, 800)
+        self.setCentralWidget(QWidget(self))
+
+        self.kwargs = dict(conf=CanvasConfig(keys=keys), app=app, network=network)
+
+        self.voltage_plot_sc = PlotSceneCanvas(conf=CanvasConfig(keys=keys), app=app, network=network)
+
+        voltage_plot_frame = QFrame(self.centralWidget())
+        voltage_plot_frame.setFrameShape(QFrame.Shape.StyledPanel)
+        voltage_plot_frame.setFrameShadow(QFrame.Shadow.Raised)
+        voltage_plot_layout = QVBoxLayout(voltage_plot_frame)
+        voltage_plot_layout.addWidget(self.voltage_plot_sc.native)
+
+        self.scatter_plot_sc = ScatterPlotSceneCanvas(**self.kwargs)
+        #
+        self.scatter_plot_frame = QFrame(self.centralWidget())
+        self.scatter_plot_frame.setFrameShape(QFrame.Shape.StyledPanel)
+        self.scatter_plot_frame.setFrameShadow(QFrame.Shadow.Raised)
+        self.scatter_plot_layout = QVBoxLayout(self.scatter_plot_frame)
+        self.scatter_plot_layout.addWidget(self.scatter_plot_sc.native)
+
+        self.scatter_plot_frame.setMinimumWidth(700)
+
+        self.frame_left = QFrame(self.centralWidget())
+
+        self.splitter = QSplitter(QtCore.Qt.Orientation.Horizontal)
+        self.splitter.addWidget(self.frame_left)
+        self.splitter.addWidget(voltage_plot_frame)
+        # self.splitter.addWidget(self.scatter_plot_frame)
+
+        hbox = QHBoxLayout(self.centralWidget())
+        hbox.addWidget(self.splitter)
+
+        self.splitter.setStretchFactor(0, 1)
+        self.splitter.setStretchFactor(1, 1)
+
+        self.setStatusBar(QStatusBar(self))
+
+        if show is True:
+            self.show()
+
+    def add_splitter0(self):
+        self.scatter_plot_sc = ScatterPlotSceneCanvas(**self.kwargs)
+        #
+        self.scatter_plot_frame = QFrame(self.centralWidget())
+        self.scatter_plot_frame.setFrameShape(QFrame.Shape.StyledPanel)
+        self.scatter_plot_frame.setFrameShadow(QFrame.Shadow.Raised)
+        scatter_plot_layout = QVBoxLayout(self.scatter_plot_frame)
+        scatter_plot_layout.addWidget(self.scatter_plot_sc.native)
+
+    def add_splitter1(self):
+        # self.scatter_plot_layout.addWidget(self.scatter_plot_sc.native)
+        self.splitter.addWidget(self.scatter_plot_frame)
+        self.splitter.setStretchFactor(2, 100)
 
 
 class EngineWindow(QtWidgets.QMainWindow):
@@ -251,16 +307,27 @@ class EngineWindow(QtWidgets.QMainWindow):
                  ):
         super().__init__()
 
-        for attr in ['gui', 'scene_3d', 'main_view']:
+        for attr in ['ui', 'scene_3d']:
             if hasattr(self, attr):
                 raise AttributeError(f'\'{attr}\' ')
 
+        self.setWindowTitle(name)
         self.setObjectName(name)
         self.resize(1200, 800)
+        self.setCentralWidget(QWidget(self))
 
-        # self.central_scene = self.set_central_scene(keys=keys, app=app)
         self.scene_3d = EngineSceneCanvas(conf=CanvasConfig(keys=keys), app=app, network=network)
-        self.ui = UI(self, self.scene_3d.native)
+        # self.scene_3d.resizable = True
+
+        self.frame_3d = QFrame(self.centralWidget())
+        self.frame_3d.setFrameShape(QFrame.Shape.StyledPanel)
+        self.frame_3d.setFrameShadow(QFrame.Shadow.Raised)
+        self.layout_3d = QVBoxLayout(self.frame_3d)
+        self.layout_3d.addWidget(self.scene_3d.native)
+
+        self.ui = UI(self)
+
+        self.setStatusBar(QStatusBar(self))
 
         if show is True:
             self.show()

@@ -150,6 +150,7 @@ class SpikingNeuronNetwork:
 
     # noinspection PyStatementEffect,PyTypeChecker
     def initialize_rendered_objs(self):
+
         self.voltage_plot = VoltagePlot(n_plots=self.plotting_config.n_voltage_plots,
                                         plot_length=self.plotting_config.voltage_plot_length,
                                         n_group_separator_lines=self.data_shapes.n_group_separator_lines)
@@ -170,7 +171,9 @@ class SpikingNeuronNetwork:
         self.group_firing_counts_plot_single1 = GroupFiringCountsPlot(
             n_plots=2,
             plot_length=self.plotting_config.scatter_plot_length,
-            n_groups=0)
+            n_groups=0,
+            color=[[1., 0., 0., 1.], [0., 1., 0., 1.]]
+        )
 
         self.outer_grid: visuals.Box = Box(shape=self.network_config.N_pos_shape,
                                            scale=[.99, .99, .99],
@@ -224,8 +227,9 @@ class SpikingNeuronNetwork:
                              gplot_view, gplot_view_single0, gplot_view_single1):
         if not self._all_rendered_objects_initialized:
             self.initialize_rendered_objs()
-        vplot_view.add(self.voltage_plot)
-        fplot_view.add(self.firing_scatter_plot)
+        if self._plotting_config.windowed_neuron_plots is False:
+            vplot_view.add(self.voltage_plot)
+            fplot_view.add(self.firing_scatter_plot)
         gplot_view.add(self.group_firing_counts_plot)
         gplot_view_single0.add(self.group_firing_counts_plot_single0)
         gplot_view_single1.add(self.group_firing_counts_plot_single1)
@@ -233,18 +237,25 @@ class SpikingNeuronNetwork:
             view_3d.add(o)
 
     # noinspection PyPep8Naming
-    def initialize_GPU_arrays(self, device):
+    def initialize_GPU_arrays(self, device, neuron_plot_window=None):
         if not self._all_rendered_objects_initialized:
             raise AssertionError('not self._all_rendered_objects_initialized')
 
+        if neuron_plot_window is not None:
+            neuron_plot_window.voltage_plot_sc.set_current()
+
+        voltage_vbo = self.voltage_plot.vbo
+        voltage_group_line_pos_vbo = self.voltage_plot.group_lines_pos_vbo
+        voltage_group_line_colors_vbo = self.voltage_plot.group_lines_color_vbo
+
         buffers = BufferCollection(
             N_pos=self._neurons.vbo,
-            voltage=self.voltage_plot.vbo,
-            voltage_group_line_pos=self.voltage_plot.group_lines_pos_vbo,
-            voltage_group_line_colors=self.voltage_plot.group_lines_color_vbo,
-            firings=self.firing_scatter_plot.vbo,
-            firings_group_line_pos=self.firing_scatter_plot.group_lines_pos_vbo,
-            firings_group_line_colors=self.firing_scatter_plot.group_lines_color_vbo,
+            voltage=voltage_vbo,
+            voltage_group_line_pos=voltage_group_line_pos_vbo,
+            voltage_group_line_colors=voltage_group_line_colors_vbo,
+            firings=self.firing_scatter_plot.vbo if self._plotting_config.windowed_neuron_plots is False else None,
+            firings_group_line_pos=self.firing_scatter_plot.group_lines_pos_vbo if self._plotting_config.windowed_neuron_plots is False else None,
+            firings_group_line_colors=self.firing_scatter_plot.group_lines_color_vbo if self._plotting_config.windowed_neuron_plots is False else None,
             selected_group_boxes_vbo=self.selected_group_boxes.vbo,
             selected_group_boxes_ibo=self.selected_group_boxes.ibo,
             group_firing_counts_plot=self.group_firing_counts_plot.vbo,

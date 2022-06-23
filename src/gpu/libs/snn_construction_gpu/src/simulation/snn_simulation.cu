@@ -1897,3 +1897,19 @@ void SnnSimulation::calculate_avg_group_weight(){
 	checkCudaErrors(cudaDeviceSynchronize());
 
 }
+
+
+void SnnSimulation::set_pointers(
+	float* voltage_plot_data_,
+	float* scatter_plot_data_
+){
+	voltage_plot_data = voltage_plot_data_;
+	scatter_plot_data = scatter_plot_data_;
+}
+void SnnSimulation::set_pointers_python(
+	const long voltage_plot_data_dp,
+	const long scatter_plot_data_dp
+){
+	set_pointers(reinterpret_cast<float*> (voltage_plot_data_dp),
+			     reinterpret_cast<float*> (scatter_plot_data_dp));
+}

@@ -23,6 +23,7 @@ from gpu import (
 class NetworkGPUArrays(GPUArrayCollection):
 
     class PlottingGPUArrays(GPUArrayCollection):
+
         def __init__(self, plotting_config: PlottingConfig,
                      device, shapes: NetworkArrayShapes,
                      buffers: BufferCollection,
@@ -30,22 +31,21 @@ class NetworkGPUArrays(GPUArrayCollection):
 
             super().__init__(device=device, bprint_allocated_memory=bprint_allocated_memory)
 
-            self.voltage = RegisteredVBO(buffers.voltage, shapes.voltage_plot, self.device)
+            self.buffers = buffers
+            self.shapes = shapes
 
-            self.voltage_group_line_pos = RegisteredVBO(buffers.voltage_group_line_pos, shapes.plot_group_line_pos,
-                                                        self.device)
-            self.voltage_group_line_colors = RegisteredVBO(buffers.voltage_group_line_colors,
-                                                           shapes.plot_group_line_colors,
-                                                           self.device)
+            self.voltage = None
+            self.voltage_group_line_pos = None
+            self.voltage_group_line_colors = None
 
-            self.firings = RegisteredVBO(buffers.firings, shapes.firings_scatter_plot, self.device)
+            self.firings = None
+            self.firings_group_line_pos = None
+            self.firings_group_line_colors = None
 
-            self.firings_group_line_pos = RegisteredVBO(buffers.firings_group_line_pos,
-                                                        shapes.plot_group_line_pos, self.device)
+            if plotting_config.windowed_neuron_plots is True:
 
-            self.firings_group_line_colors = RegisteredVBO(buffers.firings_group_line_colors,
-                                                           shapes.plot_group_line_colors,
-                                                           self.device)
+            self.init_firings_plot_arrays()
+            self.init_voltage_plot_arrays()
 
             self.voltage_map = self.izeros(shapes.voltage_plot_map)
             self.voltage_map[:] = torch.arange(shapes.voltage_plot_map)
@@ -65,6 +65,25 @@ class NetworkGPUArrays(GPUArrayCollection):
                                                                   (plotting_config.scatter_plot_length * 2, 2),
                                                                   self.device)
 
+        def init_voltage_plot_arrays(self):
+            self.voltage = RegisteredVBO(self.buffers.voltage, self.shapes.voltage_plot, self.device)
+
+            self.voltage_group_line_pos = RegisteredVBO(self.buffers.voltage_group_line_pos,
+                                                        self.shapes.plot_group_line_pos,
+                                                        self.device)
+            self.voltage_group_line_colors = RegisteredVBO(self.buffers.voltage_group_line_colors,
+                                                           self.shapes.plot_group_line_colors,
+                                                           self.device)
+
+        def init_firings_plot_arrays(self):
+            self.firings = RegisteredVBO(self.buffers.firings, self.shapes.firings_scatter_plot, self.device)
+
+            self.firings_group_line_pos = RegisteredVBO(self.buffers.firings_group_line_pos,
+                                                        self.shapes.plot_group_line_pos, self.device)
+
+            self.firings_group_line_colors = RegisteredVBO(self.buffers.firings_group_line_colors,
+                                                           self.shapes.plot_group_line_colors,
+                                                           self.device)
 
     def __init__(self,
                  config: NetworkConfig,
@@ -925,7 +944,7 @@ class NetworkGPUArrays(GPUArrayCollection):
         if self.Simulation.t % 1000 == 0:
             self.Simulation.calculate_avg_group_weight()
             a = self.to_dataframe(self.G_avg_weight_inh)
-            b = self.to_dataframe(self.G_avg_weight_exc)`
+            b = self.to_dataframe(self.G_avg_weight_exc)
             r = 6
             # self.look_up([(80, 72), (88, 80), (96, 88), (104, 96), (112, 104)],
             # self.G_stdp_config0.type(torch.float32))

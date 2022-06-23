@@ -184,5 +184,13 @@ struct SnnSimulation
 
     void calculate_avg_group_weight();
 
+    void set_pointers(
+        float* voltage_plot_data_,
+        float* scatter_plot_data_
+    );
 
+    void set_pointers_python(
+        const long voltage_plot_data_dp,
+        const long scatter_plot_data_dp
+    );
 };

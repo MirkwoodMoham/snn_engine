@@ -118,7 +118,12 @@ class GroupFiringCountsPlot(RenderedObjectNode, BasePlot):
         BasePlot.__init__(self, n_plots, plot_length, n_groups + 1, 2)
 
         if color is not None:
-            self.plot_data.color = color
+            if isinstance(color, list):
+                for i, c in enumerate(color):
+                    color_arr = np.repeat(np.array(c).reshape(1, 4), plot_length, 0)
+                    self.plot_data.color[i * plot_length: (i+1) * plot_length, :] = color_arr
+            else:
+                raise NotImplementedError
 
         connect = np.ones(plot_length).astype(bool)
         connect[-1] = False

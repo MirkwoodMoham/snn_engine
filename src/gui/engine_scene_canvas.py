@@ -59,14 +59,15 @@ class GridPlotView:
         xoffset = 0.05 * plot_length
         self.x_axis = scene.AxisWidget(orientation='bottom')
         self.x_axis.stretch = (1, 0.15)
-        self.x_axis.height_min = 20
+        self.x_axis.height_min = 30
         self.x_axis.height_max = 30
 
-        grid.add_widget(self.title, row=row, col=col, col_span=view_col_span)
-        grid.add_widget(self.y_axis, row=row + 1, col=col - 1, row_span=view_row_span)
-        grid.add_widget(self.x_axis, row=row + view_row_span + 1, col=col, row_span=1, col_span=view_col_span)
+        grid.add_widget(self.title, row=row, col=col+1, col_span=view_col_span)
+        grid.add_widget(self.y_axis, row=row + 1, col=col, row_span=view_row_span)
+        grid.add_widget(self.x_axis, row=row + view_row_span + 1, col=col + 1, row_span=1, col_span=view_col_span)
 
-        self.view = grid.add_view(row=row + 1, col=col, border_color='w', row_span=view_row_span, col_span=view_col_span)
+        self.view = grid.add_view(row=row + 1, col=col + 1, border_color='w', row_span=view_row_span,
+                                  col_span=view_col_span)
         if width_min is not None:
             self.view.width_min = width_min
         if width_max is not None:
@@ -97,7 +98,18 @@ class GridPlotView:
         self.title.visible = value
 
 
-class EngineSceneCanvas(scene.SceneCanvas):
+class BaseEngineSceneCanvas(scene.SceneCanvas):
+
+    # noinspection PyTypeChecker
+    def __init__(self,
+                 conf: CanvasConfig,
+                 app: Optional[Application]):
+
+        conf = conf or CanvasConfig()
+        super().__init__(**asdict(conf), app=app)
+
+
+class PlotSceneCanvas(BaseEngineSceneCanvas):
 
     # noinspection PyTypeChecker
     def __init__(self,
@@ -105,8 +117,56 @@ class EngineSceneCanvas(scene.SceneCanvas):
                  app: Optional[Application],
                  network: SpikingNeuronNetwork):
 
-        conf = conf or CanvasConfig()
-        super().__init__(**asdict(conf), app=app)
+        super().__init__(conf, app)
+
+        self.unfreeze()
+        self.network = network
+        self.n_voltage_plots = network.plotting_config.n_voltage_plots
+        self.voltage_plot_length = network.plotting_config.voltage_plot_length
+        self.n_scatter_plots = network.plotting_config.n_scatter_plots
+        self.scatter_plot_length = network.plotting_config.scatter_plot_length
+
+        voltage_grid: scene.widgets.Grid = self.central_widget.add_grid()
+        self.central_widget.margin = 10
+
+        self.voltage_plot = GridPlotView(voltage_grid, row=0, col=0, title_str="Voltage Plot",
+                                         n_plots=self.n_voltage_plots, plot_length=self.voltage_plot_length)
+        self.voltage_plot.view.add(network.voltage_plot)
+
+
+class ScatterPlotSceneCanvas(BaseEngineSceneCanvas):
+
+    # noinspection PyTypeChecker
+    def __init__(self,
+                 conf: CanvasConfig,
+                 app: Optional[Application],
+                 network: SpikingNeuronNetwork):
+
+        super().__init__(conf, app)
+
+        self.unfreeze()
+        self.network = network
+        self.n_scatter_plots = network.plotting_config.n_scatter_plots
+        self.scatter_plot_length = network.plotting_config.scatter_plot_length
+
+        self.grid: scene.widgets.Grid = self.central_widget.add_grid()
+        self.central_widget.margin = 10
+
+        self.scatter_plot = GridPlotView(self.grid, row=0, col=0, title_str="Scatter Plot",
+                                         n_plots=self.n_scatter_plots, plot_length=self.scatter_plot_length)
+
+        self.scatter_plot.view.add(network.firing_scatter_plot)
+
+
+class EngineSceneCanvas(BaseEngineSceneCanvas):
+
+    # noinspection PyTypeChecker
+    def __init__(self,
+                 conf: CanvasConfig,
+                 app: Optional[Application],
+                 network: SpikingNeuronNetwork):
+
+        super().__init__(conf, app)
 
         self.unfreeze()
         self.network = network
@@ -116,9 +176,9 @@ class EngineSceneCanvas(scene.SceneCanvas):
         self.scatter_plot_length = network.plotting_config.scatter_plot_length
 
         # self._central_view = None
-        grid: scene.widgets.Grid = self.central_widget.add_grid()
+        main_grid: scene.widgets.Grid = self.central_widget.add_grid()
         # row_span = 6
-        self.network_view = grid.add_view(row=0, col=0)
+        self.network_view = main_grid.add_view(row=0, col=0)
 
         self.grid: scene.widgets.Grid = self.network_view.add_grid()
 
@@ -131,8 +191,8 @@ class EngineSceneCanvas(scene.SceneCanvas):
         self.time_txt2 = None
         self.update_duration_value_txt = None
 
-        plot_col = 1
-        self.info_grid_right(row=0, col=plot_col + 8)
+        plot_col = 0
+        self.info_grid_right(row=0, col=plot_col + 9)
 
         self.voltage_plot = GridPlotView(self.grid, row=0, col=plot_col, title_str="Voltage Plot",
                                          n_plots=self.n_voltage_plots, plot_length=self.voltage_plot_length,

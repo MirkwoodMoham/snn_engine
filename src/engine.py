@@ -5,12 +5,14 @@ import sys
 
 from network import SpikingNeuronNetwork, NetworkConfig, PlottingConfig
 from gui import (
+    NeuronPlotWindow,
     EngineWindow,
     BackendApp,
     RenderedObjectSliders
 )
-# from simulation import vbodata2host
+
 from pycuda import autoinit
+from vispy.gloo.context import get_current_canvas, set_current_canvas, canvasses
 
 
 class EngineConfig:
@@ -25,7 +27,8 @@ class EngineConfig:
     network_config = NetworkConfig(N=N, N_pos_shape=(4, 4, 1))
     plotting_config = PlottingConfig(N=N,
                                      n_voltage_plots=100, voltage_plot_length=100,
-                                     n_scatter_plots=1000, scatter_plot_length=1000)
+                                     n_scatter_plots=1000, scatter_plot_length=1000,
+                                     windowed_neuron_plots=True)
 
 
 class Engine:
@@ -42,16 +45,36 @@ class Engine:
             plotting_config=EngineConfig.plotting_config,
             max_batch_size_mb=EngineConfig.max_batch_size_mb,
             T=EngineConfig.T)
+        # self.network.initialize_rendered_objs2()
+        # self.network.initialize_rendered_objs3()
 
         # keep order for vbo numbers (2/3)
+
         self.window = EngineWindow(name="SNN Engine",
                                    app=self.app.vs,
                                    network=self.network)
+        if EngineConfig.plotting_config.windowed_neuron_plots is True:
+            self.neuron_plot_window = NeuronPlotWindow(
+                self.window, name='Neuron Plots', app=self.app.vs, show=True, network=self.network)
+        else:
+            self.neuron_plot_window = None
+
+        self.window.scene_3d.set_current()
+        self.network.initialize_GPU_arrays(EngineConfig.device, self.neuron_plot_window)
+
+        if EngineConfig.plotting_config.windowed_neuron_plots is True:
+            self.neuron_plot_window.voltage_plot_sc.set_current()
+            # self.network.GPU.plotting_arrays.init_voltage2(self.network.voltage_plot)
+
+            self.neuron_plot_window.scatter_plot_sc.set_current()
+            # self.network.GPU.plotting_arrays.init_firings2(self.network.firing_scatter_plot)
+            self.network.GPU.Simulation.set_pointers(
+                voltage_plot_data=self.network.GPU.plotting_arrays.voltage2.data_ptr(),
+                scatter_plot_data=self.network.GPU.plotting_arrays.firings2.data_ptr()
+            )
+            self.neuron_plot_window.add_splitter1()
 
         # keep order for vbo numbers (3/3)
-        self.network.initialize_GPU_arrays(EngineConfig.device)
-
-        # self.window.scene_3d.add_to_network_view(self.network.selected_group_boxes.obj)
 
         self.window.set_keys({
             'left': self.network.selector_box.translate.mv_left,
@@ -143,11 +166,13 @@ class Engine:
             self.buttons.toggle_outergrid.setChecked(True)
             self.actions.toggle_outergrid.setChecked(True)
             self.window.scene_3d.group_firings_plot.visible = True
+            self.neuron_plot_window.hide()
         else:
             # self.buttons.toggle_outergrid.setText('Show OuterGrid')
             self.buttons.toggle_outergrid.setChecked(False)
             self.actions.toggle_outergrid.setChecked(False)
             self.window.scene_3d.group_firings_plot.visible = False
+            self.neuron_plot_window.show()
 
         from vispy.visuals.transforms import STTransform, TransformSystem
         # a: STTransform = self.network.selected_group_boxes.obj.transform
