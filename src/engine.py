@@ -5,14 +5,13 @@ import sys
 
 from network import SpikingNeuronNetwork, NetworkConfig, PlottingConfig
 from gui import (
+    LocationGroupInfoWindow,
     NeuronPlotWindow,
     EngineWindow,
     BackendApp,
     RenderedObjectSliders
 )
-
 from pycuda import autoinit
-from vispy.gloo.context import get_current_canvas, set_current_canvas, canvasses
 
 
 class EngineConfig:
@@ -24,16 +23,18 @@ class EngineConfig:
 
     max_batch_size_mb: int = 3000
 
-    network_config = NetworkConfig(N=N, N_pos_shape=(4, 4, 1))
-    plotting_config = PlottingConfig(N=N,
-                                     n_voltage_plots=100, voltage_plot_length=100,
-                                     n_scatter_plots=1000, scatter_plot_length=1000,
-                                     windowed_neuron_plots=True)
+    network = NetworkConfig(N=N, N_pos_shape=(4, 4, 1))
+    plotting = PlottingConfig(N=N,
+                              n_voltage_plots=100, voltage_plot_length=100,
+                              n_scatter_plots=1000, scatter_plot_length=1000,
+                              windowed_neuron_plots=True)
 
 
 class Engine:
 
-    def __init__(self):
+    def __init__(self, config=None):
+
+        self.config = EngineConfig() if config is None else config
 
         numba.cuda.select_device(EngineConfig.device)
 
@@ -41,38 +42,25 @@ class Engine:
 
         # keep order for vbo numbers (1/3)
         self.network = SpikingNeuronNetwork(
-            network_config=EngineConfig.network_config,
-            plotting_config=EngineConfig.plotting_config,
-            max_batch_size_mb=EngineConfig.max_batch_size_mb,
+            network_config=self.config.network,
+            plotting_config=self.config.plotting,
+            max_batch_size_mb=self.config.max_batch_size_mb,
             T=EngineConfig.T)
-        # self.network.initialize_rendered_objs2()
-        # self.network.initialize_rendered_objs3()
 
         # keep order for vbo numbers (2/3)
-
         self.window = EngineWindow(name="SNN Engine",
                                    app=self.app.vs,
                                    network=self.network)
-        if EngineConfig.plotting_config.windowed_neuron_plots is True:
+        if self.config.plotting.windowed_neuron_plots is True:
             self.neuron_plot_window = NeuronPlotWindow(
                 self.window, name='Neuron Plots', app=self.app.vs, show=True, network=self.network)
         else:
             self.neuron_plot_window = None
 
-        self.window.scene_3d.set_current()
-        self.network.initialize_GPU_arrays(EngineConfig.device, self.neuron_plot_window)
+        self.location_group_info_window = LocationGroupInfoWindow(
+            "Location Groups", app=self.app.vs, network=self.network)
 
-        if EngineConfig.plotting_config.windowed_neuron_plots is True:
-            self.neuron_plot_window.voltage_plot_sc.set_current()
-            # self.network.GPU.plotting_arrays.init_voltage2(self.network.voltage_plot)
-
-            self.neuron_plot_window.scatter_plot_sc.set_current()
-            # self.network.GPU.plotting_arrays.init_firings2(self.network.firing_scatter_plot)
-            self.network.GPU.Simulation.set_pointers(
-                voltage_plot_data=self.network.GPU.plotting_arrays.voltage2.data_ptr(),
-                scatter_plot_data=self.network.GPU.plotting_arrays.firings2.data_ptr()
-            )
-            self.neuron_plot_window.add_splitter1()
+        self.network.initialize_GPU_arrays(EngineConfig.device, self.window, self.neuron_plot_window)
 
         # keep order for vbo numbers (3/3)
 
@@ -114,19 +102,19 @@ class Engine:
 
         self.sliders.thalamic_inh_input_current.connect_property(
             self.network.GPU.G_props,
-            EngineConfig.network_config.InitValues.ThalamicInput.inh_current)
+            EngineConfig.network.InitValues.ThalamicInput.inh_current)
 
         self.sliders.thalamic_exc_input_current.connect_property(
             self.network.GPU.G_props,
-            EngineConfig.network_config.InitValues.ThalamicInput.exc_current)
+            EngineConfig.network.InitValues.ThalamicInput.exc_current)
 
         self.sliders.sensory_input_current0.connect_property(
             self.network.GPU.G_props,
-            EngineConfig.network_config.InitValues.SensoryInput.input_current0)
+            EngineConfig.network.InitValues.SensoryInput.input_current0)
 
         self.sliders.sensory_input_current1.connect_property(
             self.network.GPU.G_props,
-            EngineConfig.network_config.InitValues.SensoryInput.input_current1)
+            EngineConfig.network.InitValues.SensoryInput.input_current1)
 
         self.sliders.sensory_weight.connect_property(
             self.network.input_cells,
@@ -156,8 +144,11 @@ class Engine:
             # elapsed = event.elapsed + self.time_elapsed_until_last_off
             # self.set_scale(elapsed)
             self.network.GPU.update()
-            self.window.scene_3d.time_txt2.text = str(self.network.GPU.Simulation.t)
-            self.window.scene_3d.update_duration_value_txt.text = str(self.network.GPU.Simulation.update_duration)
+            if self.neuron_plot_window is not None:
+                self.neuron_plot_window.voltage_plot_sc.table.t.text = str(self.network.GPU.Simulation.t)
+                self.neuron_plot_window.scatter_plot_sc.table.t.text = str(self.network.GPU.Simulation.t)
+            self.window.scene_3d.table.t.text = str(self.network.GPU.Simulation.t)
+            self.window.scene_3d.table.update_duration.text = str(self.network.GPU.Simulation.update_duration)
 
     def toggle_outergrid(self):
         self.network.outer_grid.visible = not self.network.outer_grid.visible
@@ -166,13 +157,15 @@ class Engine:
             self.buttons.toggle_outergrid.setChecked(True)
             self.actions.toggle_outergrid.setChecked(True)
             self.window.scene_3d.group_firings_plot.visible = True
-            self.neuron_plot_window.hide()
+            if self.neuron_plot_window is not None:
+                self.neuron_plot_window.hide()
         else:
             # self.buttons.toggle_outergrid.setText('Show OuterGrid')
             self.buttons.toggle_outergrid.setChecked(False)
             self.actions.toggle_outergrid.setChecked(False)
             self.window.scene_3d.group_firings_plot.visible = False
-            self.neuron_plot_window.show()
+            if self.neuron_plot_window is not None:
+                self.neuron_plot_window.show()
 
         from vispy.visuals.transforms import STTransform, TransformSystem
         # a: STTransform = self.network.selected_group_boxes.obj.transform

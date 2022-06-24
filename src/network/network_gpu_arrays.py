@@ -27,7 +27,10 @@ class NetworkGPUArrays(GPUArrayCollection):
         def __init__(self, plotting_config: PlottingConfig,
                      device, shapes: NetworkArrayShapes,
                      buffers: BufferCollection,
-                     bprint_allocated_memory):
+                     bprint_allocated_memory,
+                     main_window,
+                     neuron_plot_window=None
+                     ):
 
             super().__init__(device=device, bprint_allocated_memory=bprint_allocated_memory)
 
@@ -42,10 +45,17 @@ class NetworkGPUArrays(GPUArrayCollection):
             self.firings_group_line_pos = None
             self.firings_group_line_colors = None
 
-            if plotting_config.windowed_neuron_plots is True:
+            if neuron_plot_window is not None:
+                neuron_plot_window.scatter_plot_sc.set_current()
+            if self.buffers.voltage is not None:
+                self.init_voltage_plot_arrays()
 
-            self.init_firings_plot_arrays()
-            self.init_voltage_plot_arrays()
+            if neuron_plot_window is not None:
+                neuron_plot_window.scatter_plot_sc.set_current()
+            if self.buffers.firings is not None:
+                self.init_firings_plot_arrays()
+
+            main_window.scene_3d.set_current()
 
             self.voltage_map = self.izeros(shapes.voltage_plot_map)
             self.voltage_map[:] = torch.arange(shapes.voltage_plot_map)
@@ -57,13 +67,14 @@ class NetworkGPUArrays(GPUArrayCollection):
             self.firings_plot_slots = torch.arange(shapes.firings_scatter_plot_map + 1, device=self.device)
 
             # print(self.voltage.to_dataframe)
+            if buffers.group_firing_counts_plot_single0 is not None:
+                self.group_firing_counts_plot_single0 = RegisteredVBO(buffers.group_firing_counts_plot_single0,
+                                                                      (plotting_config.scatter_plot_length * 2, 2), self.device)
 
-            self.group_firing_counts_plot_single0 = RegisteredVBO(buffers.group_firing_counts_plot_single0,
-                                                                  (plotting_config.scatter_plot_length * 2, 2), self.device)
-
-            self.group_firing_counts_plot_single1 = RegisteredVBO(buffers.group_firing_counts_plot_single1,
-                                                                  (plotting_config.scatter_plot_length * 2, 2),
-                                                                  self.device)
+            if buffers.group_firing_counts_plot_single1 is not None:
+                self.group_firing_counts_plot_single1 = RegisteredVBO(buffers.group_firing_counts_plot_single1,
+                                                                      (plotting_config.scatter_plot_length * 2, 2),
+                                                                      self.device)
 
         def init_voltage_plot_arrays(self):
             self.voltage = RegisteredVBO(self.buffers.voltage, self.shapes.voltage_plot, self.device)
@@ -96,7 +107,9 @@ class NetworkGPUArrays(GPUArrayCollection):
                  shapes: NetworkArrayShapes,
                  plotting_config: PlottingConfig,
                  buffers: BufferCollection,
+                 main_window,
                  model=IzhikevichModel,
+                 neuron_plot_window=None
                  ):
 
         super(NetworkGPUArrays, self).__init__(device=device, bprint_allocated_memory=config.N > 1000)
@@ -110,7 +123,10 @@ class NetworkGPUArrays(GPUArrayCollection):
 
         self.plotting_arrays = self.PlottingGPUArrays(plotting_config,
                                                       device=device, shapes=shapes, buffers=buffers,
-                                                      bprint_allocated_memory=self.bprint_allocated_memory)
+                                                      bprint_allocated_memory=self.bprint_allocated_memory,
+                                                      main_window=main_window,
+                                                      neuron_plot_window=neuron_plot_window
+                                                      )
 
         self.curand_states = self._curand_states()
         self.N_pos: RegisteredVBO = self._N_pos(shape=shapes.N_pos, vbo=buffers.N_pos)
@@ -963,7 +979,7 @@ class NetworkGPUArrays(GPUArrayCollection):
             # print(self.G_firing_count_hist.flatten()[67 + (self.Simulation.t-1) * self._config.G])
             t_mod = (self.Simulation.t - 1) % self._plotting_config.scatter_plot_length
 
-            self.plotting_arrays.group_firing_counts_plot_single1.tensor[t_mod, 1] = \
+            self.plotting_arrays.group_firing_counts_plot_single0.tensor[t_mod, 1] = \
                 self.G_firing_count_hist.flatten()[123 + t_mod * self._config.G] / 100
 
             self.plotting_arrays.group_firing_counts_plot_single1.tensor[self._plotting_config.scatter_plot_length + t_mod, 1] = \

@@ -175,6 +175,10 @@ class SpikingNeuronNetwork:
             color=[[1., 0., 0., 1.], [0., 1., 0., 1.]]
         )
 
+        # self.group_firing_counts_plot = None
+        # self.group_firing_counts_plot_single0 = None
+        # self.group_firing_counts_plot_single1 = None
+
         self.outer_grid: visuals.Box = Box(shape=self.network_config.N_pos_shape,
                                            scale=[.99, .99, .99],
                                            segments=self.network_config.grid_segmentation,
@@ -230,14 +234,20 @@ class SpikingNeuronNetwork:
         if self._plotting_config.windowed_neuron_plots is False:
             vplot_view.add(self.voltage_plot)
             fplot_view.add(self.firing_scatter_plot)
-        gplot_view.add(self.group_firing_counts_plot)
-        gplot_view_single0.add(self.group_firing_counts_plot_single0)
-        gplot_view_single1.add(self.group_firing_counts_plot_single1)
+
+        if gplot_view is not None:
+            gplot_view.add(self.group_firing_counts_plot)
+
+        if gplot_view_single0 is not None:
+            gplot_view_single0.add(self.group_firing_counts_plot_single0)
+        if gplot_view_single1 is not None:
+            gplot_view_single1.add(self.group_firing_counts_plot_single1)
+
         for o in self.rendered_3d_objs:
             view_3d.add(o)
 
     # noinspection PyPep8Naming
-    def initialize_GPU_arrays(self, device, neuron_plot_window=None):
+    def initialize_GPU_arrays(self, device, main_window, neuron_plot_window=None):
         if not self._all_rendered_objects_initialized:
             raise AssertionError('not self._all_rendered_objects_initialized')
 
@@ -248,19 +258,31 @@ class SpikingNeuronNetwork:
         voltage_group_line_pos_vbo = self.voltage_plot.group_lines_pos_vbo
         voltage_group_line_colors_vbo = self.voltage_plot.group_lines_color_vbo
 
+        if neuron_plot_window is not None:
+            neuron_plot_window.scatter_plot_sc.set_current()
+
+        firing_scatter_plot_vbo = self.firing_scatter_plot.vbo
+        firing_scatter_plot_group_lines_pos_vbo = self.firing_scatter_plot.group_lines_pos_vbo
+        firing_scatter_plot_group_lines_color_vbo = self.firing_scatter_plot.group_lines_color_vbo
+
+        main_window.scene_3d.set_current()
+
         buffers = BufferCollection(
             N_pos=self._neurons.vbo,
             voltage=voltage_vbo,
             voltage_group_line_pos=voltage_group_line_pos_vbo,
             voltage_group_line_colors=voltage_group_line_colors_vbo,
-            firings=self.firing_scatter_plot.vbo if self._plotting_config.windowed_neuron_plots is False else None,
-            firings_group_line_pos=self.firing_scatter_plot.group_lines_pos_vbo if self._plotting_config.windowed_neuron_plots is False else None,
-            firings_group_line_colors=self.firing_scatter_plot.group_lines_color_vbo if self._plotting_config.windowed_neuron_plots is False else None,
+            firings=firing_scatter_plot_vbo,
+            firings_group_line_pos=firing_scatter_plot_group_lines_pos_vbo,
+            firings_group_line_colors=firing_scatter_plot_group_lines_color_vbo,
             selected_group_boxes_vbo=self.selected_group_boxes.vbo,
             selected_group_boxes_ibo=self.selected_group_boxes.ibo,
-            group_firing_counts_plot=self.group_firing_counts_plot.vbo,
-            group_firing_counts_plot_single0=self.group_firing_counts_plot_single0.vbo,
+            group_firing_counts_plot=self.group_firing_counts_plot.vbo
+            if self.group_firing_counts_plot is not None else None,
+            group_firing_counts_plot_single0=self.group_firing_counts_plot_single0.vbo
+            if self.group_firing_counts_plot_single0 is not None else None,
             group_firing_counts_plot_single1=self.group_firing_counts_plot_single1.vbo
+            if self.group_firing_counts_plot_single1 is not None else None,
         )
         self.GPU = NetworkGPUArrays(
             config=self.network_config,
@@ -273,7 +295,9 @@ class SpikingNeuronNetwork:
             shapes=self.data_shapes,
             plotting_config=self.plotting_config,
             model=self.model,
-            buffers=buffers)
+            buffers=buffers,
+            main_window=main_window,
+            neuron_plot_window=neuron_plot_window)
 
         self.selector_box.init_cuda_attributes(self.GPU.device, self.GPU.G_flags, self.GPU.G_props)
         self.selected_group_boxes.init_cuda_attributes(self.GPU.device, self.GPU.G_flags, self.GPU.G_props)

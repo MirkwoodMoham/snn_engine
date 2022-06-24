@@ -1,6 +1,6 @@
 from .collapsible_widget.collapsible_widget import CollapsibleWidget
 from .ui_element import ButtonMenuAction, RenderedObjectSliders
-from .window import NeuronPlotWindow, EngineWindow
+from .window import NeuronPlotWindow, EngineWindow, LocationGroupInfoWindow
 from PyQt6 import QtWidgets
 import qdarktheme
 from vispy.app import Application

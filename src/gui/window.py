@@ -20,9 +20,9 @@ from vispy.app import Application
 from .engine_scene_canvas import (
     EngineSceneCanvas,
     CanvasConfig,
-    BaseEngineSceneCanvas,
+    LocationGroupInfoCanvas,
     ScatterPlotSceneCanvas,
-    PlotSceneCanvas)
+    VoltagePlotSceneCanvas)
 
 from network import SpikingNeuronNetwork
 from .ui_element import ButtonMenuAction, SpinBoxSlider
@@ -243,9 +243,7 @@ class NeuronPlotWindow(QtWidgets.QMainWindow):
         self.resize(1200, 800)
         self.setCentralWidget(QWidget(self))
 
-        self.kwargs = dict(conf=CanvasConfig(keys=keys), app=app, network=network)
-
-        self.voltage_plot_sc = PlotSceneCanvas(conf=CanvasConfig(keys=keys), app=app, network=network)
+        self.voltage_plot_sc = VoltagePlotSceneCanvas(conf=CanvasConfig(keys=keys), app=app, network=network)
 
         voltage_plot_frame = QFrame(self.centralWidget())
         voltage_plot_frame.setFrameShape(QFrame.Shape.StyledPanel)
@@ -253,7 +251,7 @@ class NeuronPlotWindow(QtWidgets.QMainWindow):
         voltage_plot_layout = QVBoxLayout(voltage_plot_frame)
         voltage_plot_layout.addWidget(self.voltage_plot_sc.native)
 
-        self.scatter_plot_sc = ScatterPlotSceneCanvas(**self.kwargs)
+        self.scatter_plot_sc = ScatterPlotSceneCanvas(conf=CanvasConfig(keys=keys), app=app, network=network)
         #
         self.scatter_plot_frame = QFrame(self.centralWidget())
         self.scatter_plot_frame.setFrameShape(QFrame.Shape.StyledPanel)
@@ -261,39 +259,22 @@ class NeuronPlotWindow(QtWidgets.QMainWindow):
         self.scatter_plot_layout = QVBoxLayout(self.scatter_plot_frame)
         self.scatter_plot_layout.addWidget(self.scatter_plot_sc.native)
 
-        self.scatter_plot_frame.setMinimumWidth(700)
-
         self.frame_left = QFrame(self.centralWidget())
 
         self.splitter = QSplitter(QtCore.Qt.Orientation.Horizontal)
         self.splitter.addWidget(self.frame_left)
-        self.splitter.addWidget(voltage_plot_frame)
-        # self.splitter.addWidget(self.scatter_plot_frame)
+
+        # keep order
 
         hbox = QHBoxLayout(self.centralWidget())
         hbox.addWidget(self.splitter)
+        self.splitter.addWidget(voltage_plot_frame)
+        self.splitter.addWidget(self.scatter_plot_frame)
 
-        self.splitter.setStretchFactor(0, 1)
-        self.splitter.setStretchFactor(1, 1)
-
-        self.setStatusBar(QStatusBar(self))
+        # self.setStatusBar(QStatusBar(self))
 
         if show is True:
             self.show()
-
-    def add_splitter0(self):
-        self.scatter_plot_sc = ScatterPlotSceneCanvas(**self.kwargs)
-        #
-        self.scatter_plot_frame = QFrame(self.centralWidget())
-        self.scatter_plot_frame.setFrameShape(QFrame.Shape.StyledPanel)
-        self.scatter_plot_frame.setFrameShadow(QFrame.Shadow.Raised)
-        scatter_plot_layout = QVBoxLayout(self.scatter_plot_frame)
-        scatter_plot_layout.addWidget(self.scatter_plot_sc.native)
-
-    def add_splitter1(self):
-        # self.scatter_plot_layout.addWidget(self.scatter_plot_sc.native)
-        self.splitter.addWidget(self.scatter_plot_frame)
-        self.splitter.setStretchFactor(2, 100)
 
 
 class EngineWindow(QtWidgets.QMainWindow):
@@ -334,3 +315,42 @@ class EngineWindow(QtWidgets.QMainWindow):
 
     def set_keys(self, keys):
         self.scene_3d.set_keys(keys)
+
+
+class LocationGroupInfoWindow(QtWidgets.QMainWindow):
+
+    def __init__(self,
+                 name: str,
+                 app: Optional[Application],
+                 network: SpikingNeuronNetwork,
+                 show=True,
+                 keys=None
+                 ):
+
+        super().__init__()
+
+        self.setWindowTitle(name)
+        self.setObjectName(name)
+        self.resize(1200, 800)
+        self.setCentralWidget(QWidget(self))
+
+        self.scene_3d = LocationGroupInfoCanvas(conf=CanvasConfig(keys=keys), app=app, network=network)
+
+        self.frame_3d = QFrame(self.centralWidget())
+        self.frame_3d.setFrameShape(QFrame.Shape.StyledPanel)
+        self.frame_3d.setFrameShadow(QFrame.Shadow.Raised)
+        self.layout_3d = QVBoxLayout(self.frame_3d)
+        self.layout_3d.addWidget(self.scene_3d.native)
+
+        self.frame_left = QFrame(self.centralWidget())
+
+        splitter = QSplitter(QtCore.Qt.Orientation.Horizontal)
+        splitter.addWidget(self.frame_left)
+        splitter.addWidget(self.frame_3d)
+
+        hbox = QHBoxLayout(self.centralWidget())
+        hbox.addWidget(splitter)
+
+        if show is True:
+            self.show()
+

@@ -3,6 +3,11 @@ from dataclasses import asdict, dataclass
 from typing import Union, Optional
 import numpy as np
 
+from PyQt6.QtWidgets import (
+    QWidget,
+    QFrame
+)
+
 from vispy.app import Application, Canvas
 from vispy.color import Color
 from vispy.gloo.context import GLContext
@@ -10,6 +15,7 @@ from vispy import scene
 from vispy.visuals.transforms import STTransform
 from vispy.scene.cameras import PanZoomCamera
 from vispy.util import keys
+from vispy.scene.widgets import Widget
 
 from network import SpikingNeuronNetwork
 from rendering import RenderedObject
@@ -38,13 +44,83 @@ class CanvasConfig:
     bgcolor: Union[str, Color] = 'black'
 
 
-class GridPlotView:
+class TextTableWidget(Widget):
+
+    def __init__(self, labels: list, heights_min=None, heights_max=None,
+                 height_min_global=None, height_max_global=None):
+
+        super().__init__()
+
+        self.unfreeze()
+        self.item_count = 0
+        self.grid = self.add_grid(border_color='w')
+        self.grid.width_min = 150
+        self.grid.width_max = 150
+
+        if height_min_global is None:
+            generate_height_min_global = True
+            height_min_global = 0
+            if height_max_global is None:
+                height_min_default = 100
+            else:
+                height_min_default = int(height_max_global / len(labels))
+        else:
+            generate_height_min_global = False
+            height_min_default = int(height_min_global / len(labels))
+
+        if height_max_global is None:
+            generate_height_max_global = True
+            height_max_global = 0
+            height_max_default = 100
+        else:
+            generate_height_max_global = False
+            height_max_default = int(height_max_global / len(labels)) + 1
+
+        for i, label in enumerate(labels):
+            height_min = heights_min[i] if heights_min is not None else height_min_default
+            height_max = heights_max[i] if heights_max is not None else height_max_default
+            if generate_height_min_global is True:
+                height_min_global += height_min
+            if generate_height_max_global is True:
+                height_max_global += height_max
+            self.add_label(label, height_min=height_min, height_max=height_max)
+
+        self.grid.height_min = (min(height_min_global, height_max_global)
+                                if generate_height_min_global is True else height_min_global)
+        self.grid.height_max = height_max_global
+
+        self.freeze()
 
     # noinspection PyTypeChecker
-    def __init__(self, grid: scene.widgets.Grid,
-                 row, col, title_str, n_plots: int, plot_length: int, cam_yscale: int = 1,
-                 width_min=None, width_max=None,
-                 height_min=None, height_max=None, view_col_span=1, view_row_span=1):
+    def add_label(self, label_name, initial_value='0', height_min=100, height_max=100):
+        label = scene.Label(label_name.replace('_', '\n'), color='white')
+        label.border_color = 'w'
+        label_value = scene.Label(initial_value, color='white')
+        label_value.border_color = 'w'
+        label.height_min = height_min
+        label.height_max = height_max
+        self.grid.add_widget(label, row=self.item_count, col=0)
+        self.grid.add_widget(label_value, row=self.item_count, col=1)
+        self.item_count += 1
+        setattr(self, label_name.replace('\n', '_'), label_value)
+
+
+class PlotWidget(Widget):
+
+    # noinspection PyTypeChecker
+    def __init__(self,
+                 title_str, n_plots: int, plot_length: int, cam_yscale: int = 1,
+                 width_min=100, width_max=None,
+                 height_min=100, height_max=None):
+
+        view_row_span, view_col_span = 1, 1
+
+        super().__init__()
+
+        self.unfreeze()
+
+        row, col = 0, 0
+        self.grid = self.add_grid()
 
         self.title = scene.Label(title_str, color='white')
         self.title.height_min = 30
@@ -62,20 +138,20 @@ class GridPlotView:
         self.x_axis.height_min = 30
         self.x_axis.height_max = 30
 
-        grid.add_widget(self.title, row=row, col=col+1, col_span=view_col_span)
-        grid.add_widget(self.y_axis, row=row + 1, col=col, row_span=view_row_span)
-        grid.add_widget(self.x_axis, row=row + view_row_span + 1, col=col + 1, row_span=1, col_span=view_col_span)
+        self.grid.add_widget(self.title, row=row, col=col+1, col_span=view_col_span)
+        self.grid.add_widget(self.y_axis, row=row + 1, col=col, row_span=view_row_span)
+        self.grid.add_widget(self.x_axis, row=row + view_row_span + 1, col=col + 1, row_span=1, col_span=view_col_span)
 
-        self.view = grid.add_view(row=row + 1, col=col + 1, border_color='w', row_span=view_row_span,
-                                  col_span=view_col_span)
+        self.view = self.grid.add_view(row=row + 1, col=col + 1, border_color='w', row_span=view_row_span,
+                                       col_span=view_col_span)
         if width_min is not None:
-            self.view.width_min = width_min
+            self.width_min = width_min
         if width_max is not None:
-            self.view.width_max = width_max
+            self.width_max = width_max
         if height_min is not None:
-            self.view.height_min = height_min
+            self.height_min = height_min
         if height_max is not None:
-            self.view.height_max = height_max
+            self.height_max = height_max
 
         scene.visuals.GridLines(parent=self.view.scene)
 
@@ -85,6 +161,8 @@ class GridPlotView:
                                           (n_plots + yoffset + yoffset) * cam_yscale))
         self.x_axis.link_view(self.view)
         self.y_axis.link_view(self.view)
+
+        self.freeze()
 
     @property
     def visible(self):
@@ -109,7 +187,7 @@ class BaseEngineSceneCanvas(scene.SceneCanvas):
         super().__init__(**asdict(conf), app=app)
 
 
-class PlotSceneCanvas(BaseEngineSceneCanvas):
+class VoltagePlotSceneCanvas(BaseEngineSceneCanvas):
 
     # noinspection PyTypeChecker
     def __init__(self,
@@ -123,14 +201,16 @@ class PlotSceneCanvas(BaseEngineSceneCanvas):
         self.network = network
         self.n_voltage_plots = network.plotting_config.n_voltage_plots
         self.voltage_plot_length = network.plotting_config.voltage_plot_length
-        self.n_scatter_plots = network.plotting_config.n_scatter_plots
-        self.scatter_plot_length = network.plotting_config.scatter_plot_length
 
         voltage_grid: scene.widgets.Grid = self.central_widget.add_grid()
         self.central_widget.margin = 10
 
-        self.voltage_plot = GridPlotView(voltage_grid, row=0, col=0, title_str="Voltage Plot",
-                                         n_plots=self.n_voltage_plots, plot_length=self.voltage_plot_length)
+        self.voltage_plot = PlotWidget(title_str="Voltage Plot",
+                                       n_plots=self.n_voltage_plots, plot_length=self.voltage_plot_length)
+        voltage_grid.add_widget(self.voltage_plot, row=0, row_span=9, col_span=4)
+        self.table = TextTableWidget(labels=['t'], height_max_global=25)
+        self.table.height_max = 25
+        voltage_grid.add_widget(self.table, 0, 3)
         self.voltage_plot.view.add(network.voltage_plot)
 
 
@@ -149,11 +229,17 @@ class ScatterPlotSceneCanvas(BaseEngineSceneCanvas):
         self.n_scatter_plots = network.plotting_config.n_scatter_plots
         self.scatter_plot_length = network.plotting_config.scatter_plot_length
 
-        self.grid: scene.widgets.Grid = self.central_widget.add_grid()
+        grid: scene.widgets.Grid = self.central_widget.add_grid()
         self.central_widget.margin = 10
 
-        self.scatter_plot = GridPlotView(self.grid, row=0, col=0, title_str="Scatter Plot",
-                                         n_plots=self.n_scatter_plots, plot_length=self.scatter_plot_length)
+        self.scatter_plot = PlotWidget(title_str="Scatter Plot",
+                                       n_plots=self.n_scatter_plots, plot_length=self.scatter_plot_length)
+
+        grid.add_widget(self.scatter_plot, row=0, row_span=9, col_span=4)
+
+        self.table = TextTableWidget(labels=['t'], height_max_global=25)
+        self.table.height_max = 25
+        grid.add_widget(self.table, 0, 3)
 
         self.scatter_plot.view.add(network.firing_scatter_plot)
 
@@ -175,50 +261,74 @@ class EngineSceneCanvas(BaseEngineSceneCanvas):
         self.n_scatter_plots = network.plotting_config.n_scatter_plots
         self.scatter_plot_length = network.plotting_config.scatter_plot_length
 
-        # self._central_view = None
         main_grid: scene.widgets.Grid = self.central_widget.add_grid()
-        # row_span = 6
         self.network_view = main_grid.add_view(row=0, col=0)
+
+        self.central_widget.margin = 10
 
         self.grid: scene.widgets.Grid = self.network_view.add_grid()
 
-        self.network_view.camera = 'turntable'  # or try 'arcball'
-        # add a colored 3D axis for orientation
+        self.network_view.camera = 'turntable'
         axis = scene.visuals.XYZAxis(parent=self.network_view.scene)
         axis.transform = STTransform()
         axis.transform.move((-0.1, -0.1, -0.1))
 
-        self.time_txt2 = None
-        self.update_duration_value_txt = None
+        # self.time_txt2 = None
+        # self.update_duration_value_txt = None
 
-        plot_col = 0
-        self.info_grid_right(row=0, col=plot_col + 9)
+        row_span_0 = 1
+        col_span0 = 2
+        plot_col0 = 0
+        plot_col1 = 4
+        plot_col2 = plot_col1 + col_span0
+        plot_row1 = 1
+        row_span10 = 2
+        row_span_11 = 1
+        height_min0 = 350
+        height_max1 = 500
 
-        self.voltage_plot = GridPlotView(self.grid, row=0, col=plot_col, title_str="Voltage Plot",
-                                         n_plots=self.n_voltage_plots, plot_length=self.voltage_plot_length,
-                                         width_min=450, width_max=600, height_min=350)
-        self.scatter_plot = GridPlotView(self.grid, row=3, col=plot_col, title_str="Scatter Plot",
-                                         n_plots=self.n_scatter_plots, plot_length=self.scatter_plot_length,
-                                         height_min=200, height_max=500, view_row_span=4)
+        self.table = TextTableWidget(labels=['t', 'update_duration'])
+        # self.info_grid_right(row=0, col=plot_col2 + 1, row_span=row_span_0, height_min=height_min0)
+        self.grid.add_widget(self.table, 0, plot_col2+1)
+        if network.plotting_config.windowed_neuron_plots is False:
+            self.voltage_plot = PlotWidget(title_str="Voltage Plot",
+                                           n_plots=self.n_voltage_plots, plot_length=self.voltage_plot_length,
+                                           width_min=200, width_max=600, height_min=height_min0
+                                           )
+            self.scatter_plot = PlotWidget(title_str="Scatter Plot",
+                                           n_plots=self.n_scatter_plots, plot_length=self.scatter_plot_length,
+                                           width_min=200, width_max=600, height_max=height_max1)
 
-        self.group_firings_plot = GridPlotView(
-            self.grid,
-            row=3, col=plot_col + 5, title_str="Group Firings",
+            self.grid.add_widget(self.voltage_plot, 0, plot_col0, row_span=row_span_0, col_span=col_span0)
+            self.grid.add_widget(self.scatter_plot, plot_row1, plot_col0, row_span=row_span10, col_span=col_span0)
+        else:
+            self.voltage_plot = None
+            self.scatter_plot = None
+
+        self.group_firings_plot = PlotWidget(
+            title_str="Group Firings",
             n_plots=network.network_config.G, plot_length=self.scatter_plot_length,
-            width_min=200, width_max=400,
-            cam_yscale=1, height_min=350, view_col_span=1, view_row_span=4)
+            width_min=200, width_max=600,
+            cam_yscale=1)
 
-        self.group_firings_plot_single0 = GridPlotView(
-            self.grid,
-            row=3, col=plot_col + 7, title_str="Group Firings: XXX",
+        self.group_firings_plot_single0 = PlotWidget(
+            title_str="Group Firings: XXX",
             n_plots=1, plot_length=self.scatter_plot_length,
-            cam_yscale=1, height_min=200, width_min=400, width_max=600, view_col_span=2, view_row_span=1)
+            cam_yscale=1)
 
-        self.group_firings_plot_single1 = GridPlotView(
-            self.grid,
-            row=6, col=plot_col + 7, title_str="Group Firings: YYY",
-            n_plots=1, plot_length=self.scatter_plot_length,
-            height_min=200, view_col_span=2, view_row_span=1)
+        self.group_firings_plot_single1 = PlotWidget(
+            title_str="Group Firings: YYY",
+            n_plots=1, plot_length=self.scatter_plot_length)
+
+        self.grid.add_widget(self.group_firings_plot, plot_row1, plot_col1, col_span=col_span0, row_span=row_span10)
+        self.grid.add_widget(self.group_firings_plot_single0, plot_row1, plot_col2,
+                             col_span=col_span0, row_span=row_span_11)
+        self.grid.add_widget(self.group_firings_plot_single1, plot_row1 + plot_row1, plot_col2,
+                             col_span=2, row_span=row_span_11)
+
+        # self.group_firings_plot = None
+        # self.group_firings_plot_single0 = None
+        # self.group_firings_plot_single1 = None
 
         self._clicked_obj = None
         self._selected_objects = []
@@ -236,45 +346,19 @@ class EngineSceneCanvas(BaseEngineSceneCanvas):
         if network is not None:
             network.add_rendered_objects(
                 self.network_view,
-                self.voltage_plot.view,
-                self.scatter_plot.view,
-                self.group_firings_plot.view,
-                self.group_firings_plot_single0.view,
-                self.group_firings_plot_single1.view
+                self.voltage_plot.view if self.voltage_plot is not None else None,
+                self.scatter_plot.view if self.scatter_plot is not None else None,
+                self.group_firings_plot.view if self.group_firings_plot is not None else None,
+                self.group_firings_plot_single0.view if self.group_firings_plot_single0 is not None else None,
+                self.group_firings_plot_single1.view if self.group_firings_plot_single1 is not None else None
             )
 
             # self._select(network.selector_box, True)
             # self._selected_objects.append(network.selector_box)
 
-    def info_grid_right(self, row, col):
+    def info_grid_right(self, row, col, row_span, height_min):
         # noinspection PyTypeChecker
-        text_grid: scene.widgets.Grid = self.grid.add_grid(row=row, col=col, row_span=2, col_span=1,
-                                                           border_color='w')
-        # noinspection PyTypeChecker
-        time_txt = scene.Label('t', color='white')
-        time_txt.border_color = 'w'
-        # noinspection PyTypeChecker
-        self.time_txt2 = scene.Label('0', color='white')
-        self.time_txt2.border_color = 'w'
-        time_txt.height_min = 100
-        time_txt.height_max = 100
-        # text_grid.height_min = 30
-        # text_grid.height_max = 30
-        text_grid.width_min = 150
-        text_grid.width_max = 150
-        text_grid.add_widget(time_txt, row=0, col=0, row_span=1)
-        text_grid.add_widget(self.time_txt2, row=0, col=1, row_span=1)
-
-        # noinspection PyTypeChecker
-        update_duration_text = scene.Label('update\nduration', color='white')
-        update_duration_text.height_max = 100
-        update_duration_text.border_color = 'w'
-        # noinspection PyTypeChecker
-        self.update_duration_value_txt = scene.Label('0', color='white')
-        self.update_duration_value_txt.border_color = 'w'
-
-        text_grid.add_widget(update_duration_text, row=1, col=0, row_span=1)
-        text_grid.add_widget(self.update_duration_value_txt, row=1, col=1, row_span=1)
+        pass
 
     @property
     def _window_id(self):
@@ -376,3 +460,27 @@ class EngineSceneCanvas(BaseEngineSceneCanvas):
                 # self._clicked_obj.
 
 
+class LocationGroupInfoCanvas(BaseEngineSceneCanvas):
+
+    def __init__(self,
+                 conf: CanvasConfig,
+                 app: Optional[Application],
+                 network: SpikingNeuronNetwork):
+
+        super().__init__(conf, app)
+        self.unfreeze()
+        main_grid: scene.widgets.Grid = self.central_widget.add_grid()
+        self.main_view = main_grid.add_view(row=0, col=0)
+        self.main_view.camera = 'turntable'
+        axis = scene.visuals.XYZAxis(parent=self.main_view.scene)
+        axis.transform = STTransform()
+        axis.transform.move((-0.1, -0.1, -0.1))
+
+        self.grid = self.main_view.add_grid()
+
+        self.table = TextTableWidget(labels=['t'], height_max_global=25)
+        self.table.height_max = 25
+
+        self.grid.add_widget(self.table, 0, 5)
+
+        self.freeze()
