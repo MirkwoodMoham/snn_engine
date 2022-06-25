@@ -110,7 +110,7 @@ class GridArrow(RenderedCudaObjectNode):
         return self._visual.shared_program.vert['base_color'].id
 
     def init_cuda_arrays(self):
-        self._gpu_array = self.face_color_array(self.visual)
+        self._gpu_array = self.face_color_array(buffer=self.color_vbo, mesh_data=self.visual.mesh_data)
 
 
 class InteractiveBoxNormals(DirectedObject):

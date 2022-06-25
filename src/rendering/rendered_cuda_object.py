@@ -1,6 +1,5 @@
-import numpy as np
 from .rendered_object import RenderedObjectNode
-from gpu import GPUArrayConfig, RegisteredGPUArray
+from gpu import RegisteredVBO
 
 
 class CudaObject:
@@ -18,11 +17,10 @@ class CudaObject:
 
     def _init_cuda_attributes(self, device, attr_list):
         for a in attr_list:
-            try:
+            if hasattr(self, a):
                 for o in getattr(self, a):
-                    o.init_cuda_attributes(device)
-            except AttributeError:
-                pass
+                    if hasattr(o, 'init_cuda_attributes'):
+                        o.init_cuda_attributes(device)
 
     def init_cuda_attributes(self, device):
         self._cuda_device = device
@@ -55,10 +53,6 @@ class RenderedCudaObjectNode(RenderedObjectNode, CudaObject):
 
         CudaObject.__init__(self)
 
-    def face_color_array(self, meshvisual, vbo=None):
-        nbytes = 4
-        shape = (meshvisual._meshdata.n_faces * 3, 4)
-        return RegisteredGPUArray.from_buffer(
-            self.color_vbo if vbo is None else vbo,
-            config=GPUArrayConfig(shape=shape, strides=(shape[1] * nbytes, nbytes),
-                                  dtype=np.float32, device=self._cuda_device))
+    def face_color_array(self, mesh_data, buffer):
+        from gpu import RegisteredVBO
+        return RegisteredVBO(buffer=buffer, shape=(mesh_data.n_faces * 3, 4), device=self._cuda_device)

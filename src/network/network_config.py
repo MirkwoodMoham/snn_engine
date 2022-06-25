@@ -1,31 +1,6 @@
-# import ctypes
 from dataclasses import dataclass, asdict
 import numpy as np
 from typing import Optional
-
-
-@dataclass
-class PlottingConfig:
-
-    N: int
-
-    n_voltage_plots: int
-    voltage_plot_length: int
-
-    n_scatter_plots: int
-    scatter_plot_length: int
-
-    windowed_neuron_plots: bool = True
-
-    _max_length: int = 10000
-    _max_n_voltage_plots: int = 1000
-    _max_n_scatter_plots: int = 1000
-
-    def __post_init__(self):
-        self.n_voltage_plots = min(min(self.N, self.n_voltage_plots), self._max_n_voltage_plots)
-        self.n_scatter_plots = min(min(self.N, self.n_scatter_plots), self._max_n_scatter_plots)
-        self.voltage_plot_length = min(self.voltage_plot_length, self._max_length)
-        self.scatter_plot_length = min(self.scatter_plot_length, self._max_length)
 
 
 @dataclass
@@ -117,6 +92,40 @@ class NetworkConfig:
         assert self.vispy_scatter_plot_stride == 13  # enforced by the vispy scatterplot memory layout
 
         self.swap_tensor_shape_multiplicators: tuple = (self.S, 10)
+
+
+@dataclass
+class PlottingConfig:
+
+    n_voltage_plots: int
+    voltage_plot_length: int
+
+    n_scatter_plots: int
+    scatter_plot_length: int
+
+    network_config: NetworkConfig
+
+    windowed_neuron_plots: bool = True
+
+    _max_length: int = 10000
+    _max_n_voltage_plots: int = 1000
+    _max_n_scatter_plots: int = 1000
+
+    def __post_init__(self):
+        self.n_voltage_plots = min(min(self.N, self.n_voltage_plots), self._max_n_voltage_plots)
+        self.n_scatter_plots = min(min(self.N, self.n_scatter_plots), self._max_n_scatter_plots)
+        self.voltage_plot_length = min(self.voltage_plot_length, self._max_length)
+        self.scatter_plot_length = min(self.scatter_plot_length, self._max_length)
+
+    # noinspection PyPep8Naming
+    @property
+    def N(self):
+        return self.network_config.N
+
+    # noinspection PyPep8Naming
+    @property
+    def G(self):
+        return self.network_config.G
 
 
 @dataclass

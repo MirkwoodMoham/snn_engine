@@ -1,32 +1,13 @@
-from dataclasses import asdict, dataclass
-from typing import Optional, Union
+from dataclasses import dataclass, asdict
+from typing import Optional
 
 from PyQt6 import QtWidgets, QtCore
 from PyQt6.QtGui import QAction
+from PyQt6.QtWidgets import QApplication, QPushButton, QScrollArea, QWidget, QVBoxLayout, QHBoxLayout, QStatusBar
 
-from PyQt6.QtWidgets import (
-    QApplication,
-    QFrame,
-    QHBoxLayout,
-    QPushButton,
-    QScrollArea,
-    QSplitter,
-    QStatusBar,
-    QVBoxLayout,
-    QWidget
-)
-
-from vispy.app import Application
-from .engine_scene_canvas import (
-    EngineSceneCanvas,
-    CanvasConfig,
-    LocationGroupInfoCanvas,
-    ScatterPlotSceneCanvas,
-    VoltagePlotSceneCanvas)
-
-from network import SpikingNeuronNetwork
-from .ui_element import ButtonMenuAction, SpinBoxSlider
-from .collapsible_widget.collapsible_widget import CollapsibleWidget
+from app import ButtonMenuAction
+from app.collapsible_widget.collapsible_widget import CollapsibleWidget
+from app.gui_element import SpinBoxSlider
 
 
 @dataclass
@@ -214,143 +195,5 @@ class UI(object):
 
         self.ui_left = self.UiLeft(window)
 
-        splitter = QSplitter(QtCore.Qt.Orientation.Horizontal)
-        splitter.addWidget(self.ui_left.frame)
-        splitter.addWidget(window.frame_3d)
-
-        hbox = QHBoxLayout(window.centralWidget())
-        hbox.addWidget(splitter)
-
         window.setMenuBar(self.menubar.bar)
-        splitter.setStretchFactor(0, 6)
-        splitter.setStretchFactor(1, 3)
-
-
-class NeuronPlotWindow(QtWidgets.QMainWindow):
-
-    def __init__(self,
-                 parent,
-                 name: str,
-                 app: Optional[Application],
-                 network,
-                 keys=None,
-                 show=True,
-                 ):
-        super().__init__(parent)
-
-        self.setWindowTitle(name)
-        self.setObjectName(name)
-        self.resize(1200, 800)
-        self.setCentralWidget(QWidget(self))
-
-        self.voltage_plot_sc = VoltagePlotSceneCanvas(conf=CanvasConfig(keys=keys), app=app, network=network)
-
-        voltage_plot_frame = QFrame(self.centralWidget())
-        voltage_plot_frame.setFrameShape(QFrame.Shape.StyledPanel)
-        voltage_plot_frame.setFrameShadow(QFrame.Shadow.Raised)
-        voltage_plot_layout = QVBoxLayout(voltage_plot_frame)
-        voltage_plot_layout.addWidget(self.voltage_plot_sc.native)
-
-        self.scatter_plot_sc = ScatterPlotSceneCanvas(conf=CanvasConfig(keys=keys), app=app, network=network)
-        #
-        self.scatter_plot_frame = QFrame(self.centralWidget())
-        self.scatter_plot_frame.setFrameShape(QFrame.Shape.StyledPanel)
-        self.scatter_plot_frame.setFrameShadow(QFrame.Shadow.Raised)
-        self.scatter_plot_layout = QVBoxLayout(self.scatter_plot_frame)
-        self.scatter_plot_layout.addWidget(self.scatter_plot_sc.native)
-
-        self.frame_left = QFrame(self.centralWidget())
-
-        self.splitter = QSplitter(QtCore.Qt.Orientation.Horizontal)
-        self.splitter.addWidget(self.frame_left)
-
-        # keep order
-
-        hbox = QHBoxLayout(self.centralWidget())
-        hbox.addWidget(self.splitter)
-        self.splitter.addWidget(voltage_plot_frame)
-        self.splitter.addWidget(self.scatter_plot_frame)
-
-        # self.setStatusBar(QStatusBar(self))
-
-        if show is True:
-            self.show()
-
-
-class EngineWindow(QtWidgets.QMainWindow):
-
-    def __init__(self,
-                 name: str,
-                 app: Optional[Application],
-                 network: SpikingNeuronNetwork,
-                 show=True,
-                 keys=None
-                 ):
-        super().__init__()
-
-        for attr in ['ui', 'scene_3d']:
-            if hasattr(self, attr):
-                raise AttributeError(f'\'{attr}\' ')
-
-        self.setWindowTitle(name)
-        self.setObjectName(name)
-        self.resize(1200, 800)
-        self.setCentralWidget(QWidget(self))
-
-        self.scene_3d = EngineSceneCanvas(conf=CanvasConfig(keys=keys), app=app, network=network)
-        # self.scene_3d.resizable = True
-
-        self.frame_3d = QFrame(self.centralWidget())
-        self.frame_3d.setFrameShape(QFrame.Shape.StyledPanel)
-        self.frame_3d.setFrameShadow(QFrame.Shadow.Raised)
-        self.layout_3d = QVBoxLayout(self.frame_3d)
-        self.layout_3d.addWidget(self.scene_3d.native)
-
-        self.ui = UI(self)
-
-        self.setStatusBar(QStatusBar(self))
-
-        if show is True:
-            self.show()
-
-    def set_keys(self, keys):
-        self.scene_3d.set_keys(keys)
-
-
-class LocationGroupInfoWindow(QtWidgets.QMainWindow):
-
-    def __init__(self,
-                 name: str,
-                 app: Optional[Application],
-                 network: SpikingNeuronNetwork,
-                 show=True,
-                 keys=None
-                 ):
-
-        super().__init__()
-
-        self.setWindowTitle(name)
-        self.setObjectName(name)
-        self.resize(1200, 800)
-        self.setCentralWidget(QWidget(self))
-
-        self.scene_3d = LocationGroupInfoCanvas(conf=CanvasConfig(keys=keys), app=app, network=network)
-
-        self.frame_3d = QFrame(self.centralWidget())
-        self.frame_3d.setFrameShape(QFrame.Shape.StyledPanel)
-        self.frame_3d.setFrameShadow(QFrame.Shadow.Raised)
-        self.layout_3d = QVBoxLayout(self.frame_3d)
-        self.layout_3d.addWidget(self.scene_3d.native)
-
-        self.frame_left = QFrame(self.centralWidget())
-
-        splitter = QSplitter(QtCore.Qt.Orientation.Horizontal)
-        splitter.addWidget(self.frame_left)
-        splitter.addWidget(self.frame_3d)
-
-        hbox = QHBoxLayout(self.centralWidget())
-        hbox.addWidget(splitter)
-
-        if show is True:
-            self.show()
-
+        window.setStatusBar(QStatusBar(window))

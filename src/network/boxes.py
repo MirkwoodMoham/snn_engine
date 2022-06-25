@@ -3,7 +3,7 @@ from numpy.lib import recfunctions as rfn
 import torch
 from typing import Optional
 
-from vispy.geometry import create_box, create_plane
+from vispy.geometry import create_box
 from vispy.visuals import MeshVisual
 from vispy.visuals.transforms import STTransform
 
@@ -19,9 +19,9 @@ from rendering import (
     RenderedCudaObjectNode,
     GridArrow
 )
-from geometry import initial_normal_vertices
-from gpu import RegisteredGPUArray
+from gpu import RegisteredVBO
 from .network_grid import NetworkGrid
+from .group_mesh_visual import GroupMeshVisual
 
 
 # noinspection PyAbstractClass
@@ -149,22 +149,18 @@ class SelectorBox(RenderedCudaObjectNode):
 
 
 # noinspection PyAbstractClass
-class BoxSystem(RenderedCudaObjectNode):
+class GroupBoxes(RenderedCudaObjectNode):
 
     def __init__(self, network_config: NetworkConfig, grid: NetworkGrid,
-                 connect, color=(0.1, 1., 1., 1.)):
-
-        self.network_config = network_config
-        self.grid = grid
-        self._visual = BoxSystemLineVisual(grid_unit_shape=grid.unit_shape, max_z=self.network_config.max_z,
+                 connect, color=(0.1, 1., 1., 1.), meshes=None):
+        if meshes is None:
+            meshes = []
+        self._visual = BoxSystemLineVisual(grid_unit_shape=grid.unit_shape,
+                                           max_z=network_config.max_z,
                                            connect=connect,
                                            pos=grid.pos, color=color)
 
-        self._output_planes: MeshVisual = self.create_mesh('+z', self.grid.output_grid_coord)
-        self._sensory_input_planes: MeshVisual = self.create_mesh('-y', self.grid.sensory_grid_coord)
-
-        super().__init__([self.visual, self._sensory_input_planes, self._output_planes])
-        # noinspection PyTypeChecker
+        super().__init__([self.visual] + meshes)
 
         # noinspection PyTypeChecker
         self.set_gl_state(polygon_offset_fill=True,
@@ -175,8 +171,6 @@ class BoxSystem(RenderedCudaObjectNode):
         self.unfreeze()
         self.G_flags: Optional[LocationGroupProperties] = None
         self.G_props: Optional[LocationGroupProperties] = None
-        self._input_color_array: Optional[RegisteredGPUArray] = None
-        self._output_color_array: Optional[RegisteredGPUArray] = None
         self.freeze()
 
     @property
@@ -187,115 +181,79 @@ class BoxSystem(RenderedCudaObjectNode):
     def ibo_glir_id(self):
         return self.visual._line_visual._connect_ibo.id
 
-    def create_planes(self, dir_, grid_coord, height=None, width=None, width_segments=None, height_segments=None):
+    # noinspection PyMethodOverriding
+    def init_cuda_attributes(self, device, G_flags: LocationGroupFlags, G_props: LocationGroupProperties):
+        super().init_cuda_attributes(device)
+        self.G_flags: LocationGroupFlags = G_flags
+        self.G_props: LocationGroupProperties = G_props
 
-        # dirs = ('x', 'y', 'z')
 
-        if 'y' in dir_:
-            i = 1
-        elif 'z' in dir_:
-            i = 2
-        else:
-            i = 0
-        i_planes = np.unique(grid_coord[:, i]) * self.grid.unit_shape[i]
-        # i_planes = np.nunique(grid_pos[:, (i + 1) % 3])
+# noinspection PyAbstractClass
+class GroupInfo(GroupBoxes):
 
-        n_planes = len(i_planes)
+    def __init__(self, network_config: NetworkConfig, grid: NetworkGrid,
+                 connect, color=(0.1, 1., 1., 1.)):
 
-        j = (i + 1) % 3
-        j_segments = np.unique(grid_coord[:, j])
-        n_j_segments = len(j_segments)
-        j_pos_shape = self.network_config.N_pos_shape[j]
-        k = (i + 2) % 3
-        k_segments = np.unique(grid_coord[:, k])
-        n_k_segments = len(k_segments)
-        k_pos_shape = self.network_config.N_pos_shape[k]
+        self._mesh: GroupMeshVisual = GroupMeshVisual(
+            network_config, grid, '+z', grid.grid_coord,
+            face_colors=np.array([0., 0., 1., 1.]))
 
-        height = height or [n_j_segments * self.grid.unit_shape[j]] * n_planes
-        width = width or [n_k_segments * self.grid.unit_shape[k]] * n_planes
-        width_segments = width_segments or [n_j_segments] * n_planes
-        height_segments = height_segments or [n_k_segments] * n_planes
+        super().__init__(network_config=network_config, grid=grid,
+                         connect=connect, color=color,
+                         meshes=[self._mesh])
 
-        planes_m = []
-
-        for idx, y in enumerate(i_planes):
-            vertices_p, faces_p, outline_p = create_plane(height[idx], width[idx],
-                                                          width_segments[idx], height_segments[idx], dir_)
-            vertices_p['position'][:, k] += ((np.min(k_segments) * self.grid.unit_shape[k] + k_pos_shape)
-                                             / 2)
-            vertices_p['position'][:, j] += ((np.min(j_segments) * self.grid.unit_shape[j] + j_pos_shape)
-                                             / 2)
-            vertices_p['position'][:, i] = y + self.grid.unit_shape[i] * int('+' in dir_)
-            planes_m.append((vertices_p, faces_p, outline_p))
-
-        # noinspection DuplicatedCode
-        positions = np.zeros((0, 3), dtype=np.float32)
-        texcoords = np.zeros((0, 2), dtype=np.float32)
-        normals = np.zeros((0, 3), dtype=np.float32)
-
-        faces = np.zeros((0, 3), dtype=np.uint32)
-        outline = np.zeros((0, 2), dtype=np.uint32)
-        offset = 0
-        for vertices_p, faces_p, outline_p in planes_m:
-            positions = np.vstack((positions, vertices_p['position']))
-            texcoords = np.vstack((texcoords, vertices_p['texcoord']))
-            normals = np.vstack((normals, vertices_p['normal']))
-
-            faces = np.vstack((faces, faces_p + offset))
-            outline = np.vstack((outline, outline_p + offset))
-            offset += vertices_p['position'].shape[0]
-
-        vertices = np.zeros(positions.shape[0],
-                            [('position', np.float32, 3),
-                             ('texcoord', np.float32, 2),
-                             ('normal', np.float32, 3),
-                             ('color', np.float32, 4)])
-
-        colors = np.ravel(positions)
-        colors = np.hstack((np.reshape(np.interp(colors,
-                                                 (np.min(colors),
-                                                  np.max(colors)),
-                                                 (0, 1)),
-                                       positions.shape),
-                            np.ones((positions.shape[0], 1))))
-
-        vertices['position'] = positions
-        vertices['texcoord'] = texcoords
-        vertices['normal'] = normals
-        vertices['color'] = colors
-
-        return vertices, faces, outline
-
-    def create_mesh(self, dir_, grid_coord) -> MeshVisual:
-        vertices, faces, outline = self.create_planes(dir_, grid_coord)
-        face_colors = np.repeat(np.array([[0., 0., 0., 1.]]), len(faces), axis=0)
-        return MeshVisual(vertices['position'], faces, None, face_colors, None)
+        self.unfreeze()
+        self.colors_gpu: Optional[RegisteredVBO] = None
+        self.vertices_gpu: Optional[RegisteredVBO] = None
+        self.freeze()
 
     def init_cuda_arrays(self):
-        self._input_color_array = self.face_color_array(self._sensory_input_planes)
+        self.colors_gpu = self._mesh.face_color_array(self._cuda_device)
+        self.colors_gpu.tensor[:, 3] = .7
+        self.vertices_gpu = self._mesh.vbo_array(self._cuda_device)
+        import pandas as pd
+        a = pd.DataFrame(self.vertices_gpu.tensor.cpu().numpy())
+
+        self.vertices_gpu.tensor[: 6] *= 2
+
+        return
+
+
+# noinspection PyAbstractClass
+class SelectedGroups(GroupBoxes):
+
+    def __init__(self, network_config: NetworkConfig, grid: NetworkGrid,
+                 connect, color=(0.1, 1., 1., 1.)):
+
+        self._output_planes: GroupMeshVisual = GroupMeshVisual(
+            network_config, grid, '+z', grid.output_grid_coord)
+        self._sensory_input_planes: GroupMeshVisual = GroupMeshVisual(
+            network_config, grid, '-y', grid.sensory_grid_coord)
+
+        super().__init__(network_config=network_config, grid=grid,
+                         connect=connect, color=color,
+                         meshes=[self._sensory_input_planes, self._output_planes])
+
+        self.unfreeze()
+        self._input_color_array: Optional[RegisteredVBO] = None
+        self._output_color_array: Optional[RegisteredVBO] = None
+        self.freeze()
+
+    def init_cuda_arrays(self):
+        self._input_color_array = self._sensory_input_planes.face_color_array(self._cuda_device)
         self._input_color_array.tensor[:, 3] = .5
-        self._output_color_array = self.face_color_array(self._output_planes, self.output_color_vbo)
+        self._output_color_array = self._output_planes.face_color_array(self._cuda_device)
         self._output_color_array.tensor[:, 3] = .5
 
     # noinspection PyMethodOverriding
     def init_cuda_attributes(self, device, G_flags: LocationGroupFlags, G_props: LocationGroupProperties):
-        self.G_flags: LocationGroupFlags = G_flags
-        self.G_props: LocationGroupProperties = G_props
-        super().init_cuda_attributes(device)
+        super().init_cuda_attributes(device, G_flags=G_flags, G_props=G_props)
         self.G_props.input_face_colors = self._input_color_array.tensor
         self.G_props.output_face_colors = self._output_color_array.tensor
 
-    @property
-    def color_vbo_glir_id(self):
-        return self._sensory_input_planes.shared_program.vert['base_color'].id
-    
-    @property
-    def output_color_vbo(self):
-        return self.buffer_id(self._output_planes.shared_program.vert['base_color'].id)
-
 
 # noinspection PyAbstractClass
-class IOCells(RenderedCudaObjectNode):
+class IOGroups(RenderedCudaObjectNode):
 
     count: int = 0
 
@@ -358,7 +316,7 @@ class IOCells(RenderedCudaObjectNode):
 
         self.pos[:-1] -= center
 
-        self.name = name or f'{self.__class__.__name__}{InputCells.count}'
+        self.name = name or f'{self.__class__.__name__}{InputGroups.count}'
 
         filled_indices, vertices = self.create_input_cell_mesh(center, face_dir)
 
@@ -567,7 +525,7 @@ class IOCells(RenderedCudaObjectNode):
 
 
 # noinspection PyAbstractClass
-class InputCells(IOCells):
+class InputGroups(IOGroups):
 
     def __init__(self, pos,
                  data: np.array,
@@ -613,7 +571,7 @@ class InputCells(IOCells):
 
 
 # noinspection PyAbstractClass
-class OutputCells(IOCells):
+class OutputGroups(IOGroups):
 
     def transform_changed(self):
 

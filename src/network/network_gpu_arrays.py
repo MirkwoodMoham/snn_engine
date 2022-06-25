@@ -17,6 +17,7 @@ from gpu import (
     RegisteredVBO,
     GPUArrayCollection
 )
+# from app import App
 
 
 # noinspection PyPep8Naming
@@ -28,8 +29,7 @@ class NetworkGPUArrays(GPUArrayCollection):
                      device, shapes: NetworkArrayShapes,
                      buffers: BufferCollection,
                      bprint_allocated_memory,
-                     main_window,
-                     neuron_plot_window=None
+                     app
                      ):
 
             super().__init__(device=device, bprint_allocated_memory=bprint_allocated_memory)
@@ -45,17 +45,17 @@ class NetworkGPUArrays(GPUArrayCollection):
             self.firings_group_line_pos = None
             self.firings_group_line_colors = None
 
-            if neuron_plot_window is not None:
-                neuron_plot_window.scatter_plot_sc.set_current()
+            if app.neuron_plot_window is not None:
+                app.neuron_plot_window.scatter_plot_sc.set_current()
             if self.buffers.voltage is not None:
                 self.init_voltage_plot_arrays()
 
-            if neuron_plot_window is not None:
-                neuron_plot_window.scatter_plot_sc.set_current()
+            if app.neuron_plot_window is not None:
+                app.neuron_plot_window.scatter_plot_sc.set_current()
             if self.buffers.firings is not None:
                 self.init_firings_plot_arrays()
 
-            main_window.scene_3d.set_current()
+            app.main_window.scene_3d.set_current()
 
             self.voltage_map = self.izeros(shapes.voltage_plot_map)
             self.voltage_map[:] = torch.arange(shapes.voltage_plot_map)
@@ -107,9 +107,8 @@ class NetworkGPUArrays(GPUArrayCollection):
                  shapes: NetworkArrayShapes,
                  plotting_config: PlottingConfig,
                  buffers: BufferCollection,
-                 main_window,
+                 app,
                  model=IzhikevichModel,
-                 neuron_plot_window=None
                  ):
 
         super(NetworkGPUArrays, self).__init__(device=device, bprint_allocated_memory=config.N > 1000)
@@ -124,9 +123,7 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.plotting_arrays = self.PlottingGPUArrays(plotting_config,
                                                       device=device, shapes=shapes, buffers=buffers,
                                                       bprint_allocated_memory=self.bprint_allocated_memory,
-                                                      main_window=main_window,
-                                                      neuron_plot_window=neuron_plot_window
-                                                      )
+                                                      app=app)
 
         self.curand_states = self._curand_states()
         self.N_pos: RegisteredVBO = self._N_pos(shape=shapes.N_pos, vbo=buffers.N_pos)
@@ -256,6 +253,7 @@ class NetworkGPUArrays(GPUArrayCollection):
 
         return sim
 
+    # noinspection PyUnusedLocal
     def actualize_N_rep_pre_synaptic_idx(self, shapes):
 
         self.N_rep_buffer = self.N_rep_buffer.reshape(shapes.N_rep_inv)
@@ -268,11 +266,13 @@ class NetworkGPUArrays(GPUArrayCollection):
             ac = self.to_dataframe(self.N_rep_pre_synaptic_idx)
             ad = self.to_dataframe(self.N_rep)
 
+            # noinspection PyTypeChecker
             assert len(self.N_rep_pre_synaptic_idx[self.N_rep.flatten()[
                 self.N_rep_pre_synaptic_idx.type(torch.int64)] != self.N_rep_buffer]) == 0
 
         self.N_rep_buffer[:] = -1
 
+    # noinspection PyUnusedLocal
     def look_up(self, tuples, input_tensor, output_tensor=None, precision=6):
         if output_tensor is None:
             if len(self.output_tensor) != len(tuples):
@@ -817,6 +817,7 @@ class NetworkGPUArrays(GPUArrayCollection):
         m = self._config.swap_tensor_shape_multiplicators
         return self.izeros((m[0], m[1] * max_neurons_per_group)) - 1
 
+    # noinspection PyUnusedLocal
     def swap_group_synapses(self, groups, self_swap=True):
 
         # groups = groups[:3:, [0]]
@@ -902,6 +903,7 @@ class NetworkGPUArrays(GPUArrayCollection):
             self.G_delay_distance.data_ptr(),
             self.N_relative_G_indices.data_ptr(), self.G_neuron_typed_ccount.data_ptr(), neuron_group_counts.data_ptr(),
             print_idx)
+        # noinspection PyUnusedLocal
         a, b = self.swap_validation(print_idx, neurons)
         # assert (neuron_group_counts[0].any() == False)
         self.N_rep_groups_cpu[:, neurons] = self.G_swap_tensor[:, :n_neurons].cpu()
@@ -927,10 +929,12 @@ class NetworkGPUArrays(GPUArrayCollection):
 
         xx = distance_to_target_group.reshape(self._config.G, 1).repeat(1, self._config.G)
 
+        # noinspection PyUnresolvedReferences
         mask = (xx > distance_to_target_group).T
 
         target_config[mask] = 1
         target_config[~mask] = -1
+        # noinspection PyUnresolvedReferences
         target_config[(xx == distance_to_target_group).T] = 0
 
     def set_active_output_groups(self, output_groups=None):
@@ -943,6 +947,7 @@ class NetworkGPUArrays(GPUArrayCollection):
         group1 = output_groups[output_group_types == 1].item()
 
         self._stdp_distance_based_config(group0, self.G_stdp_config0)
+        # noinspection PyUnusedLocal
         b = self.to_dataframe(self.G_stdp_config0)
 
         self._stdp_distance_based_config(group1, self.G_stdp_config1)

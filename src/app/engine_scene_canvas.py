@@ -3,11 +3,6 @@ from dataclasses import asdict, dataclass
 from typing import Union, Optional
 import numpy as np
 
-from PyQt6.QtWidgets import (
-    QWidget,
-    QFrame
-)
-
 from vispy.app import Application, Canvas
 from vispy.color import Color
 from vispy.gloo.context import GLContext
@@ -19,6 +14,7 @@ from vispy.scene.widgets import Widget
 
 from network import SpikingNeuronNetwork
 from rendering import RenderedObject
+from network import PlottingConfig
 
 
 @dataclass
@@ -175,6 +171,9 @@ class PlotWidget(Widget):
         self.y_axis.visible = value
         self.title.visible = value
 
+    def add(self, widget):
+        self.view.add(widget)
+
 
 class BaseEngineSceneCanvas(scene.SceneCanvas):
 
@@ -193,25 +192,23 @@ class VoltagePlotSceneCanvas(BaseEngineSceneCanvas):
     def __init__(self,
                  conf: CanvasConfig,
                  app: Optional[Application],
-                 network: SpikingNeuronNetwork):
+                 plotting_config: PlottingConfig):
 
         super().__init__(conf, app)
 
         self.unfreeze()
-        self.network = network
-        self.n_voltage_plots = network.plotting_config.n_voltage_plots
-        self.voltage_plot_length = network.plotting_config.voltage_plot_length
+        self.n_voltage_plots = plotting_config.n_voltage_plots
+        self.voltage_plot_length = plotting_config.voltage_plot_length
 
-        voltage_grid: scene.widgets.Grid = self.central_widget.add_grid()
+        main_grid: scene.widgets.Grid = self.central_widget.add_grid()
         self.central_widget.margin = 10
 
-        self.voltage_plot = PlotWidget(title_str="Voltage Plot",
-                                       n_plots=self.n_voltage_plots, plot_length=self.voltage_plot_length)
-        voltage_grid.add_widget(self.voltage_plot, row=0, row_span=9, col_span=4)
+        self.plot = PlotWidget(title_str="Voltage Plot",
+                               n_plots=self.n_voltage_plots, plot_length=self.voltage_plot_length)
+        main_grid.add_widget(self.plot, row=0, row_span=9, col_span=4)
         self.table = TextTableWidget(labels=['t'], height_max_global=25)
         self.table.height_max = 25
-        voltage_grid.add_widget(self.table, 0, 3)
-        self.voltage_plot.view.add(network.voltage_plot)
+        main_grid.add_widget(self.table, 0, 3)
 
 
 class ScatterPlotSceneCanvas(BaseEngineSceneCanvas):
@@ -220,28 +217,25 @@ class ScatterPlotSceneCanvas(BaseEngineSceneCanvas):
     def __init__(self,
                  conf: CanvasConfig,
                  app: Optional[Application],
-                 network: SpikingNeuronNetwork):
+                 plotting_config: PlottingConfig):
 
         super().__init__(conf, app)
 
         self.unfreeze()
-        self.network = network
-        self.n_scatter_plots = network.plotting_config.n_scatter_plots
-        self.scatter_plot_length = network.plotting_config.scatter_plot_length
+        self.n_scatter_plots = plotting_config.n_scatter_plots
+        self.scatter_plot_length = plotting_config.scatter_plot_length
 
         grid: scene.widgets.Grid = self.central_widget.add_grid()
         self.central_widget.margin = 10
 
-        self.scatter_plot = PlotWidget(title_str="Scatter Plot",
-                                       n_plots=self.n_scatter_plots, plot_length=self.scatter_plot_length)
+        self.plot = PlotWidget(title_str="Scatter Plot",
+                               n_plots=self.n_scatter_plots, plot_length=self.scatter_plot_length)
 
-        grid.add_widget(self.scatter_plot, row=0, row_span=9, col_span=4)
+        grid.add_widget(self.plot, row=0, row_span=9, col_span=4)
 
         self.table = TextTableWidget(labels=['t'], height_max_global=25)
         self.table.height_max = 25
         grid.add_widget(self.table, 0, 3)
-
-        self.scatter_plot.view.add(network.firing_scatter_plot)
 
 
 class EngineSceneCanvas(BaseEngineSceneCanvas):
@@ -250,16 +244,18 @@ class EngineSceneCanvas(BaseEngineSceneCanvas):
     def __init__(self,
                  conf: CanvasConfig,
                  app: Optional[Application],
-                 network: SpikingNeuronNetwork):
+                 plotting_config: PlottingConfig):
 
         super().__init__(conf, app)
 
         self.unfreeze()
-        self.network = network
-        self.n_voltage_plots = network.plotting_config.n_voltage_plots
-        self.voltage_plot_length = network.plotting_config.voltage_plot_length
-        self.n_scatter_plots = network.plotting_config.n_scatter_plots
-        self.scatter_plot_length = network.plotting_config.scatter_plot_length
+
+        self.network: Optional[SpikingNeuronNetwork] = None
+
+        self.n_voltage_plots = plotting_config.n_voltage_plots
+        self.voltage_plot_length = plotting_config.voltage_plot_length
+        self.n_scatter_plots = plotting_config.n_scatter_plots
+        self.scatter_plot_length = plotting_config.scatter_plot_length
 
         main_grid: scene.widgets.Grid = self.central_widget.add_grid()
         self.network_view = main_grid.add_view(row=0, col=0)
@@ -290,7 +286,7 @@ class EngineSceneCanvas(BaseEngineSceneCanvas):
         self.table = TextTableWidget(labels=['t', 'update_duration'])
         # self.info_grid_right(row=0, col=plot_col2 + 1, row_span=row_span_0, height_min=height_min0)
         self.grid.add_widget(self.table, 0, plot_col2+1)
-        if network.plotting_config.windowed_neuron_plots is False:
+        if plotting_config.windowed_neuron_plots is False:
             self.voltage_plot = PlotWidget(title_str="Voltage Plot",
                                            n_plots=self.n_voltage_plots, plot_length=self.voltage_plot_length,
                                            width_min=200, width_max=600, height_min=height_min0
@@ -307,7 +303,7 @@ class EngineSceneCanvas(BaseEngineSceneCanvas):
 
         self.group_firings_plot = PlotWidget(
             title_str="Group Firings",
-            n_plots=network.network_config.G, plot_length=self.scatter_plot_length,
+            n_plots=plotting_config.G, plot_length=self.scatter_plot_length,
             width_min=200, width_max=600,
             cam_yscale=1)
 
@@ -342,19 +338,6 @@ class EngineSceneCanvas(BaseEngineSceneCanvas):
         self.grid_transform = self.scene.node_transform(self.grid)
 
         self.freeze()
-
-        if network is not None:
-            network.add_rendered_objects(
-                self.network_view,
-                self.voltage_plot.view if self.voltage_plot is not None else None,
-                self.scatter_plot.view if self.scatter_plot is not None else None,
-                self.group_firings_plot.view if self.group_firings_plot is not None else None,
-                self.group_firings_plot_single0.view if self.group_firings_plot_single0 is not None else None,
-                self.group_firings_plot_single1.view if self.group_firings_plot_single1 is not None else None
-            )
-
-            # self._select(network.selector_box, True)
-            # self._selected_objects.append(network.selector_box)
 
     def info_grid_right(self, row, col, row_span, height_min):
         # noinspection PyTypeChecker
@@ -464,8 +447,7 @@ class LocationGroupInfoCanvas(BaseEngineSceneCanvas):
 
     def __init__(self,
                  conf: CanvasConfig,
-                 app: Optional[Application],
-                 network: SpikingNeuronNetwork):
+                 app: Optional[Application]):
 
         super().__init__(conf, app)
         self.unfreeze()
