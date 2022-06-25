@@ -13,12 +13,12 @@ class GroupMeshVisual(MeshVisual):
     def __init__(
             self,
             network_config: NetworkConfig, grid: NetworkGrid,
-            dir_, grid_coord, face_colors=np.array([0., 0., 0., 1.])):
-
-        vertices, faces, outline = self.create_planes(network_config, grid, dir_, grid_coord)
+            orientation, grid_coord, face_colors=np.array([0., 0., 0., 1.])):
+        assert orientation in ['+x', '-x', '+y', '-y', '+z', '-z']
+        vertices, faces, outline = self.create_planes(network_config, grid, orientation, grid_coord)
         if face_colors.shape == (4,):
             face_colors = np.repeat(face_colors.reshape(1, 4), len(faces), axis=0)
-
+        self.orientation = orientation
         self._color_vbo = None
         super().__init__(vertices['position'], faces, None, face_colors, None)
 

@@ -192,10 +192,13 @@ class App:
             # elapsed = event.elapsed + self.time_elapsed_until_last_off
             # self.set_scale(elapsed)
             self.network.GPU.update()
+            t = str(self.network.GPU.Simulation.t)
             if self.neuron_plot_window is not None:
-                self.neuron_plot_window.voltage_plot_sc.table.t.text = str(self.network.GPU.Simulation.t)
-                self.neuron_plot_window.scatter_plot_sc.table.t.text = str(self.network.GPU.Simulation.t)
-            self.main_window.scene_3d.table.t.text = str(self.network.GPU.Simulation.t)
+                self.neuron_plot_window.voltage_plot_sc.table.t.text = t
+                self.neuron_plot_window.scatter_plot_sc.table.t.text = t
+            if self.network.plotting_config.group_info_view_mode.split is True:
+                self.main_window.group_info_scene.table.t.text = t
+            self.main_window.scene_3d.table.t.text = t
             self.main_window.scene_3d.table.update_duration.text = str(self.network.GPU.Simulation.update_duration)
 
 

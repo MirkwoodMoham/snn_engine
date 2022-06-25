@@ -154,7 +154,7 @@ class GroupBoxes(RenderedCudaObjectNode):
                                            max_z=network_config.max_z,
                                            connect=connect,
                                            pos=grid.pos, color=color)
-
+        self.grid = grid
         super().__init__([self.visual] + meshes)
 
         # noinspection PyTypeChecker
@@ -210,6 +210,28 @@ class GroupInfo(GroupBoxes):
         a = pd.DataFrame(self.vertices_gpu.tensor.cpu().numpy())
 
         self.vertices_gpu.tensor[: 6] *= 2
+
+        if '+' in self._mesh.orientation:
+            factor = -1
+            p0 = self.grid.pos_end[: -1]
+        else:
+            factor = 1
+            p0 = self.grid.pos[: -1]
+
+        if 'x' in self._mesh.orientation:
+            p1 = p0 + factor * self.grid.unit_shape[0]
+            p2 = p0 + factor * self.grid.unit_shape[2]
+            p3 = p1 + factor * self.grid.unit_shape[2]
+        elif 'y' in self._mesh.orientation:
+            p1 = p0 + factor * self.grid.unit_shape[1]
+            p2 = p0 + factor * self.grid.unit_shape[2]
+            p3 = p1 + factor * self.grid.unit_shape[2]
+        elif 'z' in self._mesh.orientation:
+            p1 = p0 + factor * self.grid.unit_shape[0]
+            p2 = p0 + factor * self.grid.unit_shape[1]
+            p3 = p1 + factor * self.grid.unit_shape[1]
+
+        p = np.vstack((p0, p1, p2))
 
         return
 
