@@ -18,6 +18,8 @@ class GroupMeshVisual(MeshVisual):
         vertices, faces, outline = self.create_planes(network_config, grid, dir_, grid_coord)
         if face_colors.shape == (4,):
             face_colors = np.repeat(face_colors.reshape(1, 4), len(faces), axis=0)
+
+        self._color_vbo = None
         super().__init__(vertices['position'], faces, None, face_colors, None)
 
     @staticmethod
@@ -115,7 +117,9 @@ class GroupMeshVisual(MeshVisual):
 
     @property
     def color_vbo(self):
-        return self.buffer_id(self.shared_program.vert['base_color'].id)
+        if self._color_vbo is None:
+            self._color_vbo = self.buffer_id(self.shared_program.vert['base_color'].id)
+        return self._color_vbo
 
     @property
     def pos_vbo(self):

@@ -1,6 +1,6 @@
 from dataclasses import dataclass, asdict
 import numpy as np
-from typing import Optional
+from typing import Optional, Union
 
 
 @dataclass
@@ -94,6 +94,31 @@ class NetworkConfig:
         self.swap_tensor_shape_multiplicators: tuple = (self.S, 10)
 
 
+@dataclass(frozen=True)
+class ViewModeOption:
+
+    mode: str
+
+    def __post_init__(self):
+        view_modes = ['scene', 'windowed', 'split']
+        assert self.mode in view_modes
+
+    def __eq__(self, other):
+        return self.mode == other
+
+    @property
+    def scene(self):
+        return self.mode == 'scene'
+
+    @property
+    def split(self):
+        return self.mode == 'split'
+
+    @property
+    def windowed(self):
+        return self.mode == 'windowed'
+
+
 @dataclass
 class PlottingConfig:
 
@@ -106,12 +131,19 @@ class PlottingConfig:
     network_config: NetworkConfig
 
     windowed_neuron_plots: bool = True
+    group_info_view_mode: Optional[Union[ViewModeOption, str]] = 'split'
 
     _max_length: int = 10000
     _max_n_voltage_plots: int = 1000
     _max_n_scatter_plots: int = 1000
 
     def __post_init__(self):
+
+        if isinstance(self.group_info_view_mode, str):
+            self.group_info_view_mode = ViewModeOption(self.group_info_view_mode)
+        elif not isinstance(self.group_info_view_mode, ViewModeOption):
+            raise TypeError
+
         self.n_voltage_plots = min(min(self.N, self.n_voltage_plots), self._max_n_voltage_plots)
         self.n_scatter_plots = min(min(self.N, self.n_scatter_plots), self._max_n_scatter_plots)
         self.voltage_plot_length = min(self.voltage_plot_length, self._max_length)

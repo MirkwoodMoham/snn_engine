@@ -188,7 +188,9 @@ class SpikingNeuronNetwork:
                                      polygon_offset=(1, 1), depth_test=False, blend=True)
 
         g = self.network_config.G
+
         self.group_info_mesh = GroupInfo(self.network_config, self.grid, connect=np.zeros((g + 1, 2)) + g)
+
         self.selector_box = SelectorBox(self.network_config, self.grid)
         self.selected_group_boxes = SelectedGroups(network_config=self.network_config,
                                                    grid=self.grid,
@@ -219,20 +221,20 @@ class SpikingNeuronNetwork:
             face_dir='+z',
         )
 
-
         self.rendered_3d_objs.append(self.outer_grid)
         self.rendered_3d_objs.append(self.selector_box)
         self.rendered_3d_objs.append(self.selected_group_boxes)
         self.rendered_3d_objs.append(self.output_cells)
         self.rendered_3d_objs.append(self.input_cells)
-        self.rendered_3d_objs.append(self.group_info_mesh)
+        if self.plotting_config.group_info_view_mode.scene is True:
+            self.rendered_3d_objs.append(self.group_info_mesh)
 
         self._all_rendered_objects_initialized = True
 
     # noinspection PyPep8Naming
     def initialize_GPU_arrays(self, device, app):
 
-        app.main_window.scene_3d.set_current()
+        app.set_main_context_as_current()
 
         if not self._all_rendered_objects_initialized:
             raise AssertionError('not self._all_rendered_objects_initialized')
@@ -244,14 +246,23 @@ class SpikingNeuronNetwork:
         voltage_group_line_pos_vbo = self.voltage_plot.group_lines_pos_vbo
         voltage_group_line_colors_vbo = self.voltage_plot.group_lines_color_vbo
 
-        if app.neuron_plot_window is not None:
+        if self.plotting_config.windowed_neuron_plots is True:
             app.neuron_plot_window.scatter_plot_sc.set_current()
 
         firing_scatter_plot_vbo = self.firing_scatter_plot.vbo
         firing_scatter_plot_group_lines_pos_vbo = self.firing_scatter_plot.group_lines_pos_vbo
         firing_scatter_plot_group_lines_color_vbo = self.firing_scatter_plot.group_lines_color_vbo
 
-        app.main_window.scene_3d.set_current()
+        app.set_main_context_as_current()
+
+        if self.group_firing_counts_plot is not None:
+            app.set_group_info_context_as_current()
+            group_firing_counts_plot_vbo = self.group_firing_counts_plot.vbo
+            self.group_info_mesh._mesh.color_vbo
+        else:
+            group_firing_counts_plot_vbo = None
+
+        app.set_main_context_as_current()
 
         buffers = BufferCollection(
             N_pos=self._neurons.vbo,
@@ -263,8 +274,7 @@ class SpikingNeuronNetwork:
             firings_group_line_colors=firing_scatter_plot_group_lines_color_vbo,
             selected_group_boxes_vbo=self.selected_group_boxes.vbo,
             selected_group_boxes_ibo=self.selected_group_boxes.ibo,
-            group_firing_counts_plot=self.group_firing_counts_plot.vbo
-            if self.group_firing_counts_plot is not None else None,
+            group_firing_counts_plot=group_firing_counts_plot_vbo,
             group_firing_counts_plot_single0=self.group_firing_counts_plot_single0.vbo
             if self.group_firing_counts_plot_single0 is not None else None,
             group_firing_counts_plot_single1=self.group_firing_counts_plot_single1.vbo
@@ -289,7 +299,9 @@ class SpikingNeuronNetwork:
         self.output_cells.init_cuda_attributes(self.GPU.device, self.GPU.G_flags, self.GPU.G_props)
         self.input_cells.init_cuda_attributes(self.GPU.device, self.GPU.G_flags, self.GPU.G_props)
 
+        app.set_group_info_context_as_current()
         self.group_info_mesh.init_cuda_attributes(self.GPU.device, self.GPU.G_flags, self.GPU.G_props)
+        app.set_main_context_as_current()
 
         self.input_cells.src_weight = self.network_config.InitValues.Weights.SensorySource
 

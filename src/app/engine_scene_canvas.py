@@ -8,10 +8,14 @@ from vispy.color import Color
 from vispy.gloo.context import GLContext
 from vispy import scene
 from vispy.visuals.transforms import STTransform
-from vispy.scene.cameras import PanZoomCamera
 from vispy.util import keys
 from vispy.scene.widgets import Widget
 
+from .plot_widgets import (
+    GroupFiringsPlotWidget,
+    PlotWidget,
+    VoltagePlotWidget,
+    ScatterPlotWidget)
 from network import SpikingNeuronNetwork
 from rendering import RenderedObject
 from network import PlottingConfig
@@ -101,80 +105,6 @@ class TextTableWidget(Widget):
         setattr(self, label_name.replace('\n', '_'), label_value)
 
 
-class PlotWidget(Widget):
-
-    # noinspection PyTypeChecker
-    def __init__(self,
-                 title_str, n_plots: int, plot_length: int, cam_yscale: int = 1,
-                 width_min=100, width_max=None,
-                 height_min=100, height_max=None):
-
-        view_row_span, view_col_span = 1, 1
-
-        super().__init__()
-
-        self.unfreeze()
-
-        row, col = 0, 0
-        self.grid = self.add_grid()
-
-        self.title = scene.Label(title_str, color='white')
-        self.title.height_min = 30
-        self.title.height_max = 30
-
-        yoffset = 0.05 * n_plots
-        self.y_axis = scene.AxisWidget(orientation='left')
-        self.y_axis.stretch = (0.12, 1)
-        self.y_axis.width_min = 50
-        self.y_axis.width_max = self.y_axis.width_min
-
-        xoffset = 0.05 * plot_length
-        self.x_axis = scene.AxisWidget(orientation='bottom')
-        self.x_axis.stretch = (1, 0.15)
-        self.x_axis.height_min = 30
-        self.x_axis.height_max = 30
-
-        self.grid.add_widget(self.title, row=row, col=col+1, col_span=view_col_span)
-        self.grid.add_widget(self.y_axis, row=row + 1, col=col, row_span=view_row_span)
-        self.grid.add_widget(self.x_axis, row=row + view_row_span + 1, col=col + 1, row_span=1, col_span=view_col_span)
-
-        self.view = self.grid.add_view(row=row + 1, col=col + 1, border_color='w', row_span=view_row_span,
-                                       col_span=view_col_span)
-        if width_min is not None:
-            self.width_min = width_min
-        if width_max is not None:
-            self.width_max = width_max
-        if height_min is not None:
-            self.height_min = height_min
-        if height_max is not None:
-            self.height_max = height_max
-
-        scene.visuals.GridLines(parent=self.view.scene)
-
-        self.view.camera = PanZoomCamera((-xoffset,
-                                          -yoffset * cam_yscale,
-                                          plot_length + xoffset + xoffset,
-                                          (n_plots + yoffset + yoffset) * cam_yscale))
-        self.x_axis.link_view(self.view)
-        self.y_axis.link_view(self.view)
-
-        self.freeze()
-
-    @property
-    def visible(self):
-        return self.view.visible
-
-    @visible.setter
-    def visible(self, value):
-        self.view.visible = value
-        self.x_axis.visible = value
-        self.y_axis.visible = value
-        self.title.visible = value
-
-    def add(self, widget):
-        self.view.add(widget)
-
-
 class BaseEngineSceneCanvas(scene.SceneCanvas):
 
     # noinspection PyTypeChecker
@@ -184,58 +114,6 @@ class BaseEngineSceneCanvas(scene.SceneCanvas):
 
         conf = conf or CanvasConfig()
         super().__init__(**asdict(conf), app=app)
-
-
-class VoltagePlotSceneCanvas(BaseEngineSceneCanvas):
-
-    # noinspection PyTypeChecker
-    def __init__(self,
-                 conf: CanvasConfig,
-                 app: Optional[Application],
-                 plotting_config: PlottingConfig):
-
-        super().__init__(conf, app)
-
-        self.unfreeze()
-        self.n_voltage_plots = plotting_config.n_voltage_plots
-        self.voltage_plot_length = plotting_config.voltage_plot_length
-
-        main_grid: scene.widgets.Grid = self.central_widget.add_grid()
-        self.central_widget.margin = 10
-
-        self.plot = PlotWidget(title_str="Voltage Plot",
-                               n_plots=self.n_voltage_plots, plot_length=self.voltage_plot_length)
-        main_grid.add_widget(self.plot, row=0, row_span=9, col_span=4)
-        self.table = TextTableWidget(labels=['t'], height_max_global=25)
-        self.table.height_max = 25
-        main_grid.add_widget(self.table, 0, 3)
-
-
-class ScatterPlotSceneCanvas(BaseEngineSceneCanvas):
-
-    # noinspection PyTypeChecker
-    def __init__(self,
-                 conf: CanvasConfig,
-                 app: Optional[Application],
-                 plotting_config: PlottingConfig):
-
-        super().__init__(conf, app)
-
-        self.unfreeze()
-        self.n_scatter_plots = plotting_config.n_scatter_plots
-        self.scatter_plot_length = plotting_config.scatter_plot_length
-
-        grid: scene.widgets.Grid = self.central_widget.add_grid()
-        self.central_widget.margin = 10
-
-        self.plot = PlotWidget(title_str="Scatter Plot",
-                               n_plots=self.n_scatter_plots, plot_length=self.scatter_plot_length)
-
-        grid.add_widget(self.plot, row=0, row_span=9, col_span=4)
-
-        self.table = TextTableWidget(labels=['t'], height_max_global=25)
-        self.table.height_max = 25
-        grid.add_widget(self.table, 0, 3)
 
 
 class EngineSceneCanvas(BaseEngineSceneCanvas):
@@ -287,13 +165,11 @@ class EngineSceneCanvas(BaseEngineSceneCanvas):
         # self.info_grid_right(row=0, col=plot_col2 + 1, row_span=row_span_0, height_min=height_min0)
         self.grid.add_widget(self.table, 0, plot_col2+1)
         if plotting_config.windowed_neuron_plots is False:
-            self.voltage_plot = PlotWidget(title_str="Voltage Plot",
-                                           n_plots=self.n_voltage_plots, plot_length=self.voltage_plot_length,
-                                           width_min=200, width_max=600, height_min=height_min0
-                                           )
-            self.scatter_plot = PlotWidget(title_str="Scatter Plot",
-                                           n_plots=self.n_scatter_plots, plot_length=self.scatter_plot_length,
-                                           width_min=200, width_max=600, height_max=height_max1)
+            self.voltage_plot = VoltagePlotWidget(plotting_confing=plotting_config,
+                                                  width_max=600, height_min=height_min0)
+
+            self.scatter_plot = ScatterPlotWidget(plotting_confing=plotting_config,
+                                                  width_max=600, height_max=height_max1)
 
             self.grid.add_widget(self.voltage_plot, 0, plot_col0, row_span=row_span_0, col_span=col_span0)
             self.grid.add_widget(self.scatter_plot, plot_row1, plot_col0, row_span=row_span10, col_span=col_span0)
@@ -301,11 +177,11 @@ class EngineSceneCanvas(BaseEngineSceneCanvas):
             self.voltage_plot = None
             self.scatter_plot = None
 
-        self.group_firings_plot = PlotWidget(
-            title_str="Group Firings",
-            n_plots=plotting_config.G, plot_length=self.scatter_plot_length,
-            width_min=200, width_max=600,
-            cam_yscale=1)
+        if plotting_config.group_info_view_mode.scene is True:
+            self.group_firings_plot = GroupFiringsPlotWidget(plotting_confing=plotting_config)
+            self.grid.add_widget(self.group_firings_plot, plot_row1, plot_col1, col_span=col_span0, row_span=row_span10)
+        else:
+            self.group_firings_plot = None
 
         self.group_firings_plot_single0 = PlotWidget(
             title_str="Group Firings: XXX",
@@ -316,7 +192,6 @@ class EngineSceneCanvas(BaseEngineSceneCanvas):
             title_str="Group Firings: YYY",
             n_plots=1, plot_length=self.scatter_plot_length)
 
-        self.grid.add_widget(self.group_firings_plot, plot_row1, plot_col1, col_span=col_span0, row_span=row_span10)
         self.grid.add_widget(self.group_firings_plot_single0, plot_row1, plot_col2,
                              col_span=col_span0, row_span=row_span_11)
         self.grid.add_widget(self.group_firings_plot_single1, plot_row1 + plot_row1, plot_col2,
@@ -443,26 +318,78 @@ class EngineSceneCanvas(BaseEngineSceneCanvas):
                 # self._clicked_obj.
 
 
-class LocationGroupInfoCanvas(BaseEngineSceneCanvas):
+class VoltagePlotSceneCanvas(BaseEngineSceneCanvas):
 
+    # noinspection PyTypeChecker
     def __init__(self,
                  conf: CanvasConfig,
-                 app: Optional[Application]):
+                 app: Optional[Application],
+                 plotting_config: PlottingConfig):
+
+        super().__init__(conf, app)
+
+        self.unfreeze()
+        self.n_voltage_plots = plotting_config.n_voltage_plots
+        self.voltage_plot_length = plotting_config.voltage_plot_length
+
+        main_grid: scene.widgets.Grid = self.central_widget.add_grid()
+        self.central_widget.margin = 10
+
+        self.plot = VoltagePlotWidget(plotting_confing=plotting_config, height_min=200)
+        main_grid.add_widget(self.plot, row=0, row_span=9, col_span=4)
+        self.table = TextTableWidget(labels=['t'], height_max_global=25)
+        self.table.height_max = 25
+        main_grid.add_widget(self.table, 0, 3)
+
+
+class ScatterPlotSceneCanvas(BaseEngineSceneCanvas):
+
+    # noinspection PyTypeChecker
+    def __init__(self,
+                 conf: CanvasConfig,
+                 app: Optional[Application],
+                 plotting_config: PlottingConfig):
+
+        super().__init__(conf, app)
+
+        self.unfreeze()
+        self.n_scatter_plots = plotting_config.n_scatter_plots
+        self.scatter_plot_length = plotting_config.scatter_plot_length
+
+        grid: scene.widgets.Grid = self.central_widget.add_grid()
+        self.central_widget.margin = 10
+
+        self.plot = ScatterPlotWidget(plotting_confing=plotting_config, height_min=200)
+
+        grid.add_widget(self.plot, row=0, row_span=9, col_span=4)
+
+        self.table = TextTableWidget(labels=['t'], height_max_global=25)
+        self.table.height_max = 25
+        grid.add_widget(self.table, 0, 3)
+
+
+class LocationGroupInfoCanvas(BaseEngineSceneCanvas):
+
+    def __init__(self, conf: CanvasConfig, app: Optional[Application], plotting_config: PlottingConfig):
 
         super().__init__(conf, app)
         self.unfreeze()
         main_grid: scene.widgets.Grid = self.central_widget.add_grid()
-        self.main_view = main_grid.add_view(row=0, col=0)
-        self.main_view.camera = 'turntable'
-        axis = scene.visuals.XYZAxis(parent=self.main_view.scene)
+        self.view = main_grid.add_view(row=0, col=0)
+        self.view.camera = 'turntable'
+        axis = scene.visuals.XYZAxis(parent=self.view.scene)
         axis.transform = STTransform()
         axis.transform.move((-0.1, -0.1, -0.1))
 
-        self.grid = self.main_view.add_grid()
+        self.grid = self.view.add_grid()
 
         self.table = TextTableWidget(labels=['t'], height_max_global=25)
         self.table.height_max = 25
 
-        self.grid.add_widget(self.table, 0, 5)
+        self.grid.add_widget(self.table, 0, 6)
+
+        self.group_firings_plot = GroupFiringsPlotWidget(plotting_confing=plotting_config, width_max=600)
+
+        self.grid.add_widget(self.group_firings_plot, 5, 5, col_span=2, row_span=6)
 
         self.freeze()

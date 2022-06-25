@@ -20,7 +20,9 @@ class EngineConfig:
     network = NetworkConfig(N=N, N_pos_shape=(4, 4, 1))
     plotting = PlottingConfig(n_voltage_plots=100, voltage_plot_length=100,
                               n_scatter_plots=1000, scatter_plot_length=1000,
-                              windowed_neuron_plots=True,
+                              windowed_neuron_plots=False,
+                              group_info_view_mode='split',
+                              # group_info_view_mode='windowed',
                               network_config=network)
 
 
@@ -28,17 +30,18 @@ class Engine:
 
     def __init__(self, config=None):
 
+        # noinspection PyUnresolvedReferences
         from pycuda import autoinit
 
         self.config = EngineConfig() if config is None else config
 
         numba.cuda.select_device(self.config.device)
 
-        # keep order for vbo numbers (1/4)
+        # keep order for vbo id (1/4)
         self.network = SpikingNeuronNetwork(self.config)
-        # keep order for vbo numbers (2/4)
+        # keep order for vbo id (2/4)
         self.app = App(self.network)
-        # keep order for vbo numbers (3/4)
+        # keep order for vbo id (3/4)
         self.network.initialize_GPU_arrays(self.config.device, self.app)
         # keep order (4/4)
         self.app._bind_ui()

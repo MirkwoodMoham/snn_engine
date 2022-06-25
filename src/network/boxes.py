@@ -127,11 +127,6 @@ class SelectorBox(RenderedCudaObjectNode):
         self.selected_masks[:, 0] = (g_pos[:, 0] >= v[0, 0]) & (g_pos_end[:, 0] <= v[1, 0])
         self.selected_masks[:, 1] = (g_pos[:, 1] >= v[0, 1]) & (g_pos_end[:, 1] <= v[2, 1])
         self.selected_masks[:, 2] = (g_pos[:, 2] >= v[0, 2]) & (g_pos_end[:, 2] <= v[3, 2])
-        # self.selected_masks[:, 3] = self.network_config.G
-        # self.selected_masks[:, 3] = np.where(~self.selected_masks[:, :3].all(axis=1),
-        #                                      self.selected_masks[:, 3], self.group_numbers)
-        #
-        # self.states_gpu.selected = torch.from_numpy(self.selected_masks[:, [3]]).to(self._cuda_device)
         self.G_flags.selected = torch.from_numpy(self.selected_masks[:, :3].all(axis=1)).to(self._cuda_device)
 
     def on_select_callback(self, v: bool):

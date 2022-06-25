@@ -21,6 +21,7 @@ from .engine_scene_canvas import (
     VoltagePlotSceneCanvas)
 
 from .gui import UI
+from network import PlottingConfig
 
 
 class BaseWindow(QMainWindow):
@@ -31,7 +32,7 @@ class BaseWindow(QMainWindow):
 
         self.setWindowTitle(name)
         self.setObjectName(name)
-        self.resize(1200, 800)
+        self.resize(1600, 900)
         self.setCentralWidget(QWidget(self))
 
     def frame_canvas(self, canvas: SceneCanvas):
@@ -48,7 +49,7 @@ class EngineWindow(BaseWindow):
     def __init__(self,
                  name: str,
                  app: Optional[Application],
-                 plotting_config,
+                 plotting_config: PlottingConfig,
                  keys=None
                  ):
         super().__init__(name)
@@ -57,23 +58,30 @@ class EngineWindow(BaseWindow):
             if hasattr(self, attr):
                 raise AttributeError(f'\'{attr}\' ')
 
+        self.ui = UI(self)
         self.scene_3d = EngineSceneCanvas(
             conf=CanvasConfig(keys=keys), app=app, plotting_config=plotting_config)
+        if plotting_config.group_info_view_mode.split is True:
+            self.group_info_scene = LocationGroupInfoCanvas(
+                conf=CanvasConfig(keys=keys), app=app, plotting_config=plotting_config)
+            self.scene_3d.network_view.camera.link(
+                self.group_info_scene.view.camera)
 
-        self.ui = UI(self)
-
-        splitter = QSplitter(QtCore.Qt.Orientation.Horizontal)
-        splitter.addWidget(self.ui.ui_left.frame)
-        splitter.addWidget(self.frame_canvas(self.scene_3d))
-
+        self.splitter = QSplitter(QtCore.Qt.Orientation.Horizontal)
+        self.splitter.addWidget(self.ui.ui_left.frame)
+        self.splitter.addWidget(self.frame_canvas(self.scene_3d))
+        self.splitter.setStretchFactor(0, 6)
+        self.splitter.setStretchFactor(1, 3)
         hbox = QHBoxLayout(self.centralWidget())
-        hbox.addWidget(splitter)
-
-        splitter.setStretchFactor(0, 6)
-        splitter.setStretchFactor(1, 3)
+        hbox.addWidget(self.splitter)
 
     def set_keys(self, keys):
         self.scene_3d.set_keys(keys)
+
+    def add_group_info_scene_to_splitter(self, plotting_config):
+        if plotting_config.group_info_view_mode.split is True:
+            self.splitter.addWidget(self.frame_canvas(self.group_info_scene))
+            self.splitter.setStretchFactor(2, 2)
 
 
 class NeuronPlotWindow(BaseWindow):
@@ -81,12 +89,12 @@ class NeuronPlotWindow(BaseWindow):
     def __init__(self,
                  name: str,
                  app: Optional[Application],
-                 plotting_config,
+                 plotting_config: PlottingConfig,
                  keys=None,
                  parent=None,
                  ):
         super().__init__(name=name, parent=parent)
-
+        self.resize(1200, 800)
         self.voltage_plot_sc = VoltagePlotSceneCanvas(
             conf=CanvasConfig(keys=keys), app=app, plotting_config=plotting_config)
 
@@ -97,13 +105,13 @@ class NeuronPlotWindow(BaseWindow):
 
         self.splitter = QSplitter(QtCore.Qt.Orientation.Horizontal)
         self.splitter.addWidget(self.frame_left)
+        self.splitter.addWidget(self.frame_canvas(self.voltage_plot_sc))
+        self.splitter.addWidget(self.frame_canvas(self.scatter_plot_sc))
 
         # keep order
 
         hbox = QHBoxLayout(self.centralWidget())
         hbox.addWidget(self.splitter)
-        self.splitter.addWidget(self.frame_canvas(self.voltage_plot_sc))
-        self.splitter.addWidget(self.frame_canvas(self.scatter_plot_sc))
 
 
 class LocationGroupInfoWindow(BaseWindow):
@@ -111,13 +119,17 @@ class LocationGroupInfoWindow(BaseWindow):
     def __init__(self,
                  name: str,
                  app: Optional[Application],
+                 plotting_config: PlottingConfig,
                  keys=None,
-                 parent=None
+                 parent: EngineWindow = None
                  ):
 
         super().__init__(name=name, parent=parent)
 
-        self.scene_3d = LocationGroupInfoCanvas(conf=CanvasConfig(keys=keys), app=app)
+        self.scene_3d = LocationGroupInfoCanvas(
+            conf=CanvasConfig(keys=keys), app=app, plotting_config=plotting_config)
+
+        self.scene_3d.view.camera.link(parent.scene_3d.network_view.camera)
 
         self.frame_left = QFrame(self.centralWidget())
 

@@ -25,20 +25,32 @@ class App:
         else:
             self.neuron_plot_window = None
 
-        self.location_group_info_window = LocationGroupInfoWindow(
-            "Location Groups", app=self.vs, parent=self.main_window)
-        self.location_group_info_window.show()
+        if self.network.plotting_config.group_info_view_mode.windowed is True:
+            self.location_group_info_window = self._init_windowed_group_info(network)
+        else:
+            self.location_group_info_window = None
 
         self.time_elapsed_until_last_off = 0
         self.update_switch = False
         self.started = False
         self.timer_on = Timer('auto', connect=self.update, start=False)
 
+    def set_main_context_as_current(self):
+        self.main_window.scene_3d.set_current()
+
+    def set_group_info_context_as_current(self):
+        if self.network.plotting_config.group_info_view_mode.windowed is True:
+            self.location_group_info_window.scene_3d.set_current()
+        elif self.network.plotting_config.group_info_view_mode.split is True:
+            self.main_window.group_info_scene.set_current()
+        else:
+            pass
+
     def _init_main_window(self) -> EngineWindow:
-        plotting_config = self.network.plotting_config
-        main_window = EngineWindow(name="SNN Engine", app=self.vs, plotting_config=plotting_config)
+        main_window = EngineWindow(name="SNN Engine", app=self.vs, plotting_config=self.network.plotting_config)
         main_window.scene_3d.network = self.network
 
+        main_window.scene_3d.set_current()
         for o in self.network.rendered_3d_objs:
             main_window.scene_3d.network_view.add(o)
 
@@ -47,13 +59,20 @@ class App:
         if main_window.scene_3d.scatter_plot:
             main_window.scene_3d.scatter_plot.add(self.network.firing_scatter_plot)
 
-        if main_window.scene_3d.group_firings_plot is not None:
+        if self.network.plotting_config.group_info_view_mode.scene is True:
             main_window.scene_3d.group_firings_plot.add(self.network.group_firing_counts_plot)
 
         if main_window.scene_3d.group_firings_plot_single0 is not None:
             main_window.scene_3d.group_firings_plot_single0.add(self.network.group_firing_counts_plot_single0)
         if main_window.scene_3d.group_firings_plot_single1 is not None:
             main_window.scene_3d.group_firings_plot_single1.add(self.network.group_firing_counts_plot_single1)
+
+        if self.network.plotting_config.group_info_view_mode.split is True:
+            # keep order for vbo id
+            main_window.add_group_info_scene_to_splitter(self.network.plotting_config)
+            # keep order for vbo id
+            main_window.group_info_scene.group_firings_plot.add(self.network.group_firing_counts_plot)
+            main_window.group_info_scene.view.add(self.network.group_info_mesh)
 
         main_window.set_keys({
             'left': self.network.selector_box.translate.mv_left,
@@ -79,6 +98,19 @@ class App:
         neuron_plot_window.scatter_plot_sc.plot.view.add(network.firing_scatter_plot)
         neuron_plot_window.show()
         return neuron_plot_window
+
+    def _init_windowed_group_info(self, network: SpikingNeuronNetwork):
+        location_group_info_window = LocationGroupInfoWindow(
+            "Location Groups", app=self.vs, parent=self.main_window,
+            plotting_config=network.plotting_config)
+        location_group_info_window.scene_3d.set_current()
+        location_group_info_window.scene_3d.view.add(network.group_info_mesh)
+
+        if location_group_info_window.scene_3d.group_firings_plot is not None:
+            location_group_info_window.scene_3d.group_firings_plot.add(self.network.group_firing_counts_plot)
+
+        location_group_info_window.show()
+        return location_group_info_window
 
     def _bind_ui(self):
         network_config = self.network.network_config
