@@ -10,7 +10,7 @@ from vispy.visuals.transforms import STTransform
 
 from network.network_config import NetworkConfig
 # from network.spiking_neural_network import SpikingNeuronNetwork
-from network.network_states import LocationGroupProperties, LocationGroupFlags
+from network.network_states import PropertyTensor, LocationGroupProperties, LocationGroupFlags
 from rendering import (
     Translate,
     BoxSystemLineVisual,
@@ -198,29 +198,61 @@ class GroupInfo(GroupBoxes):
 
         text_pos[:, 0] -= grid.unit_shape[0] * .5
         text_pos[:, 1] -= grid.unit_shape[1] * .5
-        text_pos[:, 2] += grid.unit_shape[2] * .1
+        text_pos[:, 2] += grid.unit_shape[2] * .35
 
-        self.texts = {'None': None,
-                      'group_ids': [str(i) for i in range(network_config.G)]}
+        self.group_id_texts = {'None': None,
+                               'group_ids': [str(i) for i in range(network_config.G)]}
+
+        self.group_id_text_visual = TextVisual(text=self.group_id_texts['group_ids'],
+                                               pos=text_pos, color='white', font_size=48)
+
+        self.G_flags_texts = {}
 
         for k in asdict(LocationGroupFlags.Rows()).keys():
-            self.texts[k] = None
+            self.G_flags_texts[k]: Optional[list[str]] = None
+
+        text_pos[:, 2] -= grid.unit_shape[2] * .12
+        # noinspection PyTypeChecker
+        self.G_flags_text_visual = TextVisual(text=None,
+                                              pos=text_pos, color='white', font_size=48)
+
+        self.G_props_texts = {}
 
         for k in asdict(LocationGroupProperties.Rows()).keys():
-            self.texts[k] = None
+            self.G_props_texts[k]: Optional[list[str]] = None
 
-        self.text_visual = TextVisual(text=self.texts['group_ids'],
-                                      pos=text_pos, color='white', font_size=48)
+        text_pos[:, 2] -= grid.unit_shape[2] * .12
+        # noinspection PyTypeChecker
+        self.G_props_text_visual = TextVisual(text=None,
+                                              pos=text_pos, color='white', font_size=48)
 
         super().__init__(network_config=network_config, grid=grid,
                          connect=connect, color=color,
-                         meshes=[self._mesh, self.text_visual])
+                         meshes=[self._mesh,
+                                 self.group_id_text_visual,
+                                 self.G_flags_text_visual,
+                                 self.G_props_text_visual])
 
         self.unfreeze()
         self.colors_gpu: Optional[RegisteredVBO] = None
         self.vertices_gpu: Optional[RegisteredVBO] = None
         self.face_group_ids: Optional[torch.Tensor] = None
+        self.G_flags_cache: Optional[dict] = {}
+        self.G_props_cache: Optional[dict] = {}
+        self.group_ids: Optional[torch.Tensor] = None
         self.freeze()
+
+    @staticmethod
+    def _init_txt_visual(property_tensor: PropertyTensor, cache: dict, text_collection: dict, visual: TextVisual):
+        b_visual_set: bool = False
+        for k in asdict(property_tensor._rows).keys():
+            tensor_row: torch.Tensor = getattr(property_tensor, k)
+            cache[k] = tensor_row.clone()
+            # noinspection PyTypeChecker
+            text_collection[k] = [str(v) for v in list(tensor_row.cpu().numpy())]
+            if b_visual_set is False:
+                visual.text = text_collection[k]
+                b_visual_set = True
 
     def init_cuda_arrays(self):
         self.colors_gpu = self._mesh.face_color_array(self._cuda_device)
@@ -230,6 +262,7 @@ class GroupInfo(GroupBoxes):
         face_coords = self.grid.grid_coordinates(self.vertices_gpu.tensor.cpu().numpy()[::6])
 
         for i in range(3):
+            # noinspection PyUnresolvedReferences
             if bool((face_coords[:, i] == self.grid.segmentation[i]).any()) is True:
                 face_coords[:, i] -= 1
 
@@ -240,21 +273,33 @@ class GroupInfo(GroupBoxes):
         assert len(np.unique(self.face_group_ids) == len(face_coords))
         assert np.max(self.face_group_ids) == (len(face_coords) - 1)
 
-        for k in asdict(self.G_flags._rows).keys():
-            values = list(getattr(self.G_flags, k).cpu().numpy())
-            self.texts[k] = [str(v) for v in values]
-        for k in asdict(self.G_props._rows).keys():
-            values = list(getattr(self.G_props, k).cpu().numpy())
-            self.texts[k] = [str(v) for v in values]
-        # text_coord = self.grid.pos_end[group_ids]
-        # text_coord[:, 0] -= self.grid.unit_shape[0] * .5
-        # text_coord[:, 1] -= self.grid.unit_shape[1] * .5
-        # text_coord[:, 2] += self.grid.unit_shape[2] * .1
-
+        self._init_txt_visual(self.G_flags, self.G_flags_cache, self.G_flags_texts, self.G_flags_text_visual)
+        self._init_txt_visual(self.G_props, self.G_props_cache, self.G_props_texts, self.G_props_text_visual)
+        self.group_ids = torch.arange(self.grid.config.G)
         return
 
-    def set_text(self, key):
-        self.text_visual.text = self.texts[key]
+    def set_group_id_text(self, key):
+        self.group_id_text_visual.text = self.group_id_texts[key]
+
+    def _set_text(self, key, property_tensor: PropertyTensor, cache: dict, text_collection: dict, visual: TextVisual):
+        cached = cache[key]
+        # noinspection PyTypeChecker
+        current = getattr(property_tensor, key)
+        # noinspection PyTypeChecker
+        diff: torch.Tensor = cached != current
+        if diff.any():
+            current = current.cpu().numpy()
+            txt: list[str] = text_collection[key]
+            for i in self.group_ids[diff.cpu()]:
+                txt[i] = str(current[i])
+
+        visual.text = text_collection[key]
+
+    def set_g_flags_text(self, key):
+        self._set_text(key, self.G_flags, self.G_flags_cache, self.G_flags_texts, self.G_flags_text_visual)
+
+    def set_g_props_text(self, key):
+        self._set_text(key, self.G_props, self.G_props_cache, self.G_props_texts, self.G_props_text_visual)
 
 
 # noinspection PyAbstractClass

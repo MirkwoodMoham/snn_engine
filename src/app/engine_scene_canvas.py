@@ -47,16 +47,16 @@ class CanvasConfig:
 class TextTableWidget(Widget):
 
     def __init__(self, labels: list, heights_min=None, heights_max=None,
-                 height_min_global=None, height_max_global=None,
-                 width_min_global=100):
+                 height_min_global=None, height_max_global=None):
 
         super().__init__()
 
         self.unfreeze()
         self.item_count = 0
         self.grid = self.add_grid(border_color='w')
-        self.grid.width_min = 150
-        self.grid.width_max = 150
+        width = 130
+        self.width_min = width
+        self.width_max = width
 
         if height_min_global is None:
             generate_height_min_global = True
@@ -90,16 +90,17 @@ class TextTableWidget(Widget):
                                 if generate_height_min_global is True else height_min_global)
         self.grid.height_max = height_max_global
 
-        if width_min_global is not None:
-            self.grid.width_min = width_min_global
+        # if width_min_global is not None:
+        #     self.grid.width_min = width_min_global
 
         self.freeze()
 
     # noinspection PyTypeChecker
     def add_label(self, label_name, initial_value='0', height_min=100, height_max=100):
-        label = scene.Label(label_name.replace('_', '\n'), color='white')
+        font_size = 9
+        label = scene.Label(label_name.replace('_', '\n'), color='white', font_size=font_size)
         label.border_color = 'w'
-        label_value = scene.Label(initial_value, color='white')
+        label_value = scene.Label(initial_value, color='white', font_size=font_size)
         label_value.border_color = 'w'
         label.height_min = height_min
         label.height_max = height_max

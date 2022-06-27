@@ -119,6 +119,7 @@ class SpikingNeuronNetwork:
                                               n_N_states=model.__len__(),
                                               plotting_config=self.plotting_config,
                                               n_neuron_types=len(NeuronTypes))
+        self.registered_buffers = []
         self.initialize_rendered_objs()
         self.validate()
 
@@ -309,3 +310,7 @@ class SpikingNeuronNetwork:
 
         print('\nactive_sensory_groups:', self.GPU.active_sensory_groups)
         print('active_output_groups:', self.GPU.active_output_groups, '\n')
+
+    def unregister_registered_buffers(self):
+        for rb in self.registered_buffers:
+            rb.reg.unregister()

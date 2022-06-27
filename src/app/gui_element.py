@@ -96,7 +96,9 @@ class ButtonMenuAction(GUIElement):
     def button(self):
         if self._button is None:
             self._button = QPushButton(self.name, self.window)
-            self._button.setMinimumHeight(28)
+            self._button.setFixedHeight(28)
+            if self.name is None:
+                self._button.setFixedWidth(28)
             self._init(self._button)
             if self.connects is not None:
                 for callable_ in self.connects:
