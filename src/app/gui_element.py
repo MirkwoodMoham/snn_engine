@@ -414,8 +414,8 @@ class RenderedObjectPropertyFrame(QFrame):
         self.sliders = self.Sliders()
 
         self.setFixedWidth(450)
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(15, 0, 0, 0)
+        self.setLayout(QHBoxLayout(self))
+        self.layout().setContentsMargins(15, 0, 0, 0)
         sliders_widget = QWidget()
         sliders_widget.setMaximumHeight(135)
         sliders_layout = QVBoxLayout(sliders_widget)
@@ -423,7 +423,7 @@ class RenderedObjectPropertyFrame(QFrame):
         if label is None:
             label = prop_id
             label = label[0].upper() + label[1:]
-        layout.addWidget(QLabel(label))
+        self.layout().addWidget(QLabel(label))
 
         sliders = []
         for i in ('x', 'y', 'z'):
@@ -446,7 +446,7 @@ class RenderedObjectPropertyFrame(QFrame):
 
         self.setFixedHeight(25 + 35 * len(sliders))
 
-        layout.addWidget(sliders_widget)
+        self.layout().addWidget(sliders_widget)
 
 
 class RenderedObjectSliders(CollapsibleWidget):

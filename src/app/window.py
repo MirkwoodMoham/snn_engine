@@ -8,7 +8,8 @@ from PyQt6.QtWidgets import (
     QSplitter,
     QVBoxLayout,
     QWidget,
-    QMainWindow
+    QMainWindow,
+    QStatusBar
 )
 
 from vispy.app import Application
@@ -20,7 +21,7 @@ from .engine_scene_canvas import (
     ScatterPlotSceneCanvas,
     VoltagePlotSceneCanvas)
 
-from .gui import UI
+from .ui_panels import MainUILeft, MenuBar, ButtonMenuActions, GroupInfoPanel
 from network import PlottingConfig
 
 
@@ -58,7 +59,14 @@ class EngineWindow(BaseWindow):
             if hasattr(self, attr):
                 raise AttributeError(f'\'{attr}\' ')
 
-        self.ui = UI(self)
+        self.ui_elements = ButtonMenuActions(self)
+        self.menubar = MenuBar(self)
+        # self.grid_layout.addWidget(self.frame_3d, 0, 1, 1, 30)
+
+        self.ui_panel_left = MainUILeft(self)
+
+        self.setMenuBar(self.menubar)
+        self.setStatusBar(QStatusBar(self))
         self.scene_3d = EngineSceneCanvas(
             conf=CanvasConfig(keys=keys), app=app, plotting_config=plotting_config)
         if plotting_config.group_info_view_mode.split is True:
@@ -66,12 +74,19 @@ class EngineWindow(BaseWindow):
                 conf=CanvasConfig(keys=keys), app=app, plotting_config=plotting_config)
             self.scene_3d.network_view.camera.link(
                 self.group_info_scene.view.camera)
+            self.ui_right = GroupInfoPanel(self)
 
         self.splitter = QSplitter(QtCore.Qt.Orientation.Horizontal)
-        self.splitter.addWidget(self.ui.ui_left.frame)
+        self.splitter.addWidget(self.ui_panel_left)
         self.splitter.addWidget(self.frame_canvas(self.scene_3d))
         self.splitter.setStretchFactor(0, 6)
         self.splitter.setStretchFactor(1, 3)
+
+        if plotting_config.group_info_view_mode.scene is True:
+            self.ui_right = GroupInfoPanel(self)
+            self.splitter.addWidget(self.ui_right)
+            self.splitter.setStretchFactor(2, 30)
+
         hbox = QHBoxLayout(self.centralWidget())
         hbox.addWidget(self.splitter)
 
@@ -82,6 +97,8 @@ class EngineWindow(BaseWindow):
         if plotting_config.group_info_view_mode.split is True:
             self.splitter.addWidget(self.frame_canvas(self.group_info_scene))
             self.splitter.setStretchFactor(2, 2)
+            self.splitter.addWidget(self.ui_right)
+            self.splitter.setStretchFactor(3, 7)
 
 
 class NeuronPlotWindow(BaseWindow):
@@ -131,11 +148,12 @@ class LocationGroupInfoWindow(BaseWindow):
 
         self.scene_3d.view.camera.link(parent.scene_3d.network_view.camera)
 
-        self.frame_left = QFrame(self.centralWidget())
+        self.ui_panel_left = GroupInfoPanel(self)
 
         splitter = QSplitter(QtCore.Qt.Orientation.Horizontal)
-        splitter.addWidget(self.frame_left)
+        splitter.addWidget(self.ui_panel_left)
         splitter.addWidget(self.frame_canvas(self.scene_3d))
+        splitter.setStretchFactor(1, 3)
 
         hbox = QHBoxLayout(self.centralWidget())
         hbox.addWidget(splitter)

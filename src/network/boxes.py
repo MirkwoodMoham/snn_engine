@@ -1,10 +1,11 @@
+from dataclasses import asdict
 import numpy as np
 from numpy.lib import recfunctions as rfn
 import torch
 from typing import Optional
 
 from vispy.geometry import create_box
-from vispy.visuals import MeshVisual
+from vispy.visuals import MeshVisual, TextVisual
 from vispy.visuals.transforms import STTransform
 
 from network.network_config import NetworkConfig
@@ -178,9 +179,9 @@ class GroupBoxes(RenderedCudaObjectNode):
 
     # noinspection PyMethodOverriding
     def init_cuda_attributes(self, device, G_flags: LocationGroupFlags, G_props: LocationGroupProperties):
-        super().init_cuda_attributes(device)
         self.G_flags: LocationGroupFlags = G_flags
         self.G_props: LocationGroupProperties = G_props
+        super().init_cuda_attributes(device)
 
 
 # noinspection PyAbstractClass
@@ -193,47 +194,67 @@ class GroupInfo(GroupBoxes):
             network_config, grid, '+z', grid.grid_coord,
             face_colors=np.array([0., 0., 1., 1.]))
 
+        text_pos = grid.pos_end
+
+        text_pos[:, 0] -= grid.unit_shape[0] * .5
+        text_pos[:, 1] -= grid.unit_shape[1] * .5
+        text_pos[:, 2] += grid.unit_shape[2] * .1
+
+        self.texts = {'None': None,
+                      'group_ids': [str(i) for i in range(network_config.G)]}
+
+        for k in asdict(LocationGroupFlags.Rows()).keys():
+            self.texts[k] = None
+
+        for k in asdict(LocationGroupProperties.Rows()).keys():
+            self.texts[k] = None
+
+        self.text_visual = TextVisual(text=self.texts['group_ids'],
+                                      pos=text_pos, color='white', font_size=48)
+
         super().__init__(network_config=network_config, grid=grid,
                          connect=connect, color=color,
-                         meshes=[self._mesh])
+                         meshes=[self._mesh, self.text_visual])
 
         self.unfreeze()
         self.colors_gpu: Optional[RegisteredVBO] = None
         self.vertices_gpu: Optional[RegisteredVBO] = None
+        self.face_group_ids: Optional[torch.Tensor] = None
         self.freeze()
 
     def init_cuda_arrays(self):
         self.colors_gpu = self._mesh.face_color_array(self._cuda_device)
         self.colors_gpu.tensor[:, 3] = .7
         self.vertices_gpu = self._mesh.vbo_array(self._cuda_device)
-        import pandas as pd
-        a = pd.DataFrame(self.vertices_gpu.tensor.cpu().numpy())
 
-        self.vertices_gpu.tensor[: 6] *= 2
+        face_coords = self.grid.grid_coordinates(self.vertices_gpu.tensor.cpu().numpy()[::6])
 
-        if '+' in self._mesh.orientation:
-            factor = -1
-            p0 = self.grid.pos_end[: -1]
-        else:
-            factor = 1
-            p0 = self.grid.pos[: -1]
+        for i in range(3):
+            if bool((face_coords[:, i] == self.grid.segmentation[i]).any()) is True:
+                face_coords[:, i] -= 1
 
-        if 'x' in self._mesh.orientation:
-            p1 = p0 + factor * self.grid.unit_shape[0]
-            p2 = p0 + factor * self.grid.unit_shape[2]
-            p3 = p1 + factor * self.grid.unit_shape[2]
-        elif 'y' in self._mesh.orientation:
-            p1 = p0 + factor * self.grid.unit_shape[1]
-            p2 = p0 + factor * self.grid.unit_shape[2]
-            p3 = p1 + factor * self.grid.unit_shape[2]
-        elif 'z' in self._mesh.orientation:
-            p1 = p0 + factor * self.grid.unit_shape[0]
-            p2 = p0 + factor * self.grid.unit_shape[1]
-            p3 = p1 + factor * self.grid.unit_shape[1]
+        self.face_group_ids = (face_coords[:, 0]
+                               + self.grid.segmentation[0] * face_coords[:, 1]
+                               + self.grid.segmentation[0] * self.grid.segmentation[1] * face_coords[:, 2])
 
-        p = np.vstack((p0, p1, p2))
+        assert len(np.unique(self.face_group_ids) == len(face_coords))
+        assert np.max(self.face_group_ids) == (len(face_coords) - 1)
+
+        for k in asdict(self.G_flags._rows).keys():
+            values = list(getattr(self.G_flags, k).cpu().numpy())
+            self.texts[k] = [str(v) for v in values]
+        for k in asdict(self.G_props._rows).keys():
+            values = list(getattr(self.G_props, k).cpu().numpy())
+            self.texts[k] = [str(v) for v in values]
+        # text_coord = self.grid.pos_end[group_ids]
+        # text_coord[:, 0] -= self.grid.unit_shape[0] * .5
+        # text_coord[:, 1] -= self.grid.unit_shape[1] * .5
+        # text_coord[:, 2] += self.grid.unit_shape[2] * .1
 
         return
+
+    def set_text(self, key):
+        self.text_visual.text = self.texts[key]
 
 
 # noinspection PyAbstractClass

@@ -43,7 +43,7 @@ class NetworkGrid:
         self.pos_end[:, 1] = self.pos_end[:, 1] + self.unit_shape[1]
         self.pos_end[:, 2] = self.pos_end[:, 2] + self.unit_shape[2]
 
-        self.grid_coord = grid_coordinates(self.pos, self.config.N_pos_shape, self.segmentation)
+        self.grid_coord = self.grid_coordinates(self.pos)
 
         self.groups = np.arange(self.config.G).reshape(tuple(reversed(self.segmentation))).T
 
@@ -77,6 +77,10 @@ class NetworkGrid:
 
         config.sensory_groups = self.sensory_groups
         config.output_groups = self.output_groups
+
+    def grid_coordinates(self, pos, as_struct: bool = False):
+        return grid_coordinates(pos, outer_shape=self.config.N_pos_shape, grid_segmentation=self.segmentation,
+                                as_struct=as_struct)
 
     @staticmethod
     def is_cube(shape):

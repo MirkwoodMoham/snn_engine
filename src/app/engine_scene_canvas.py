@@ -47,7 +47,8 @@ class CanvasConfig:
 class TextTableWidget(Widget):
 
     def __init__(self, labels: list, heights_min=None, heights_max=None,
-                 height_min_global=None, height_max_global=None):
+                 height_min_global=None, height_max_global=None,
+                 width_min_global=100):
 
         super().__init__()
 
@@ -88,6 +89,9 @@ class TextTableWidget(Widget):
         self.grid.height_min = (min(height_min_global, height_max_global)
                                 if generate_height_min_global is True else height_min_global)
         self.grid.height_max = height_max_global
+
+        if width_min_global is not None:
+            self.grid.width_min = width_min_global
 
         self.freeze()
 

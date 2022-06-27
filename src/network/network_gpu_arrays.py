@@ -69,7 +69,8 @@ class NetworkGPUArrays(GPUArrayCollection):
             # print(self.voltage.to_dataframe)
             if buffers.group_firing_counts_plot_single0 is not None:
                 self.group_firing_counts_plot_single0 = RegisteredVBO(buffers.group_firing_counts_plot_single0,
-                                                                      (plotting_config.scatter_plot_length * 2, 2), self.device)
+                                                                      (plotting_config.scatter_plot_length * 2, 2),
+                                                                      self.device)
 
             if buffers.group_firing_counts_plot_single1 is not None:
                 self.group_firing_counts_plot_single1 = RegisteredVBO(buffers.group_firing_counts_plot_single1,
@@ -249,7 +250,6 @@ class NetworkGPUArrays(GPUArrayCollection):
             G_syn_count_inh=self.G_syn_count_inh.data_ptr(),
             G_syn_count_exc=self.G_syn_count_exc.data_ptr()
         )
-
 
         return sim
 
@@ -984,10 +984,11 @@ class NetworkGPUArrays(GPUArrayCollection):
             # print(self.G_firing_count_hist.flatten()[67 + (self.Simulation.t-1) * self._config.G])
             t_mod = (self.Simulation.t - 1) % self._plotting_config.scatter_plot_length
 
-            self.plotting_arrays.group_firing_counts_plot_single0.tensor[t_mod, 1] = \
+            self.plotting_arrays.group_firing_counts_plot_single1.tensor[t_mod, 1] = \
                 self.G_firing_count_hist.flatten()[123 + t_mod * self._config.G] / 100
 
-            self.plotting_arrays.group_firing_counts_plot_single1.tensor[self._plotting_config.scatter_plot_length + t_mod, 1] = \
+            self.plotting_arrays.group_firing_counts_plot_single1.tensor[
+                self._plotting_config.scatter_plot_length + t_mod, 1] = \
                 self.G_firing_count_hist.flatten()[125 + t_mod * self._config.G] / 100
 
             if t_mod + 1 == self._plotting_config.scatter_plot_length:
