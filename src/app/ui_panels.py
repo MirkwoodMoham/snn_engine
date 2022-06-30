@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from app import ButtonMenuAction
+from app import ButtonMenuAction, RenderedObjectSliders
 from app.collapsible_widget.collapsible_widget import CollapsibleWidget
 from app.gui_element import SpinBoxSlider
 
@@ -53,6 +53,11 @@ class ButtonMenuActions:
                                                           name='Show OuterGrid',
                                                           status_tip='Show/Hide OuterGrid',
                                                           menu_short_cut='Ctrl+G')
+
+    ACTUALIZE_G_FLAGS_TEXT: ButtonMenuAction = ButtonMenuAction(menu_name='&G_flags',
+                                                                menu_short_cut='F7',
+                                                                icon_name='arrow-circle.png',
+                                                                status_tip='Actualize displayed G_flags values')
 
     ACTUALIZE_G_PROPS_TEXT: ButtonMenuAction = ButtonMenuAction(menu_name='&G_props',
                                                                 menu_short_cut='F8',
@@ -213,6 +218,14 @@ class MainUILeft(UIPanel):
 
         self.addWidget(self.buttons.exit)
 
+    def add_3d_object_sliders(self, obj):
+
+        collapsible = RenderedObjectSliders(obj, self)
+        self.objects_collapsible.add(collapsible)
+        collapsible.toggle_collapsed()
+        self.objects_collapsible.toggle_collapsed()
+        self.objects_collapsible.toggle_collapsed()
+
 
 class GroupInfoComboBox(QComboBox):
 
@@ -228,6 +241,7 @@ class GroupInfoComboBox(QComboBox):
     def add_items(self, item_list):
         for item in item_list:
             self.addItem(item)
+        self.setCurrentIndex(1)
 
 
 class GroupInfoComboBoxFrame(QFrame):
@@ -237,18 +251,29 @@ class GroupInfoComboBoxFrame(QFrame):
         self.setLayout(QHBoxLayout())
         self.layout().setContentsMargins(0, 0, 0, 0)
         self.combo_box = GroupInfoComboBox()
-
-        self.layout().addWidget(QLabel(name))
+        self.label = QLabel(name)
+        self.label.setMaximumWidth(80)
+        self.layout().addWidget(self.label)
         self.layout().addWidget(self.combo_box)
         if actualize_button is not None:
             self.actualize_button = actualize_button
             self.layout().addWidget(self.actualize_button)
+        else:
+            self.actualize_button = None
 
+        # self.setBaseSize(32, 100)
         self.setFixedHeight(32)
+        # self.setMaximumWidth(220)
         # self.setFra
 
     def __call__(self):
         return self.combo_box
+
+    def connect(self, func):
+        # noinspection PyUnresolvedReferences
+        self.combo_box.currentTextChanged.connect(func)
+        if self.actualize_button is not None:
+            self.actualize_button.clicked.connect(func)
 
 
 class GroupInfoPanel(UIPanel):
@@ -267,7 +292,9 @@ class GroupInfoPanel(UIPanel):
 
         self.group_ids_combobox = GroupInfoComboBoxFrame('Group IDs')
         self.add_combo_box(self.group_ids_combobox)
-        self.g_flags_combobox = GroupInfoComboBoxFrame('G_flags')
+
+        self.g_flags_combobox = GroupInfoComboBoxFrame(
+            'G_flags', ButtonMenuActions.ACTUALIZE_G_FLAGS_TEXT.button())
         self.add_combo_box(self.g_flags_combobox)
 
         self.g_props_combobox = GroupInfoComboBoxFrame(

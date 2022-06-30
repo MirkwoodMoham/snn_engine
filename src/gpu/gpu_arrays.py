@@ -99,7 +99,8 @@ class RegisteredGPUArray:
                  reg: RegisteredBuffer = None,
                  mapping: RegisteredMapping = None,
                  ptr: int = None,
-                 config: GPUArrayConfig = None):
+                 config: GPUArrayConfig = None,
+                 id_: Optional[int] = None):
 
         numba.cuda.select_device(config.device.index)
 
@@ -111,6 +112,9 @@ class RegisteredGPUArray:
         self.gpu_data: ExternalMemory = gpu_data
         self.device_array = self._numba_device_array()
         self._tensor = None
+
+        self._id = id_
+        # print('new RegisteredGPUArray:', self.id)
 
     def __call__(self, *args, **kwargs):
         return self.tensor
@@ -146,7 +150,7 @@ class RegisteredGPUArray:
         gpu_data = ExternalMemory(ptr, size)
         mapping.unmap()
 
-        return dict(gpu_data=gpu_data, reg=reg, mapping=mapping, ptr=ptr)
+        return dict(gpu_data=gpu_data, reg=reg, mapping=mapping, ptr=ptr, id_=buffer)
 
     @classmethod
     def from_buffer(cls, buffer, config: GPUArrayConfig = None, cpu_array: np.array = None):
@@ -177,6 +181,11 @@ class RegisteredGPUArray:
     @property
     def to_dataframe(self) -> pd.DataFrame:
         return pd.DataFrame(self.tensor.cpu().numpy())
+
+    def unregister(self):
+        # noinspection PyArgumentList
+        self.reg.unregister()
+        # print('unregistered:', self.id)
 
 
 class RegisteredVBO(RegisteredGPUArray):

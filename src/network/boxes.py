@@ -143,6 +143,9 @@ class SelectorBox(RenderedCudaObjectNode):
         self.transform_connected = True
         self._visual.normals.visible = False
 
+        for normal in self._visual.normals:
+            self.registered_buffers.append(normal.gpu_array)
+
 
 # noinspection PyAbstractClass
 class GroupBoxes(RenderedCudaObjectNode):
@@ -206,7 +209,7 @@ class GroupInfo(GroupBoxes):
         self.group_id_text_visual = TextVisual(text=self.group_id_texts['group_ids'],
                                                pos=text_pos, color='white', font_size=48)
 
-        self.G_flags_texts = {}
+        self.G_flags_texts = {'None': None}
 
         for k in asdict(LocationGroupFlags.Rows()).keys():
             self.G_flags_texts[k]: Optional[list[str]] = None
@@ -216,7 +219,7 @@ class GroupInfo(GroupBoxes):
         self.G_flags_text_visual = TextVisual(text=None,
                                               pos=text_pos, color='white', font_size=48)
 
-        self.G_props_texts = {}
+        self.G_props_texts = {'None': None}
 
         for k in asdict(LocationGroupProperties.Rows()).keys():
             self.G_props_texts[k]: Optional[list[str]] = None
@@ -255,9 +258,12 @@ class GroupInfo(GroupBoxes):
                 b_visual_set = True
 
     def init_cuda_arrays(self):
-        self.colors_gpu = self._mesh.face_color_array(self._cuda_device)
+        self.colors_gpu: RegisteredVBO = self._mesh.face_color_array(self._cuda_device)
         self.colors_gpu.tensor[:, 3] = .7
-        self.vertices_gpu = self._mesh.vbo_array(self._cuda_device)
+        self.vertices_gpu: RegisteredVBO = self._mesh.vbo_array(self._cuda_device)
+
+        self.registered_buffers.append(self.colors_gpu)
+        self.registered_buffers.append(self.vertices_gpu)
 
         face_coords = self.grid.grid_coordinates(self.vertices_gpu.tensor.cpu().numpy()[::6])
 
@@ -282,16 +288,17 @@ class GroupInfo(GroupBoxes):
         self.group_id_text_visual.text = self.group_id_texts[key]
 
     def _set_text(self, key, property_tensor: PropertyTensor, cache: dict, text_collection: dict, visual: TextVisual):
-        cached = cache[key]
-        # noinspection PyTypeChecker
-        current = getattr(property_tensor, key)
-        # noinspection PyTypeChecker
-        diff: torch.Tensor = cached != current
-        if diff.any():
-            current = current.cpu().numpy()
-            txt: list[str] = text_collection[key]
-            for i in self.group_ids[diff.cpu()]:
-                txt[i] = str(current[i])
+        if key != 'None':
+            cached = cache[key]
+            # noinspection PyTypeChecker
+            current = getattr(property_tensor, key)
+            # noinspection PyTypeChecker
+            diff: torch.Tensor = cached != current
+            if diff.any():
+                current = current.cpu().numpy()
+                txt: list[str] = text_collection[key]
+                for i in self.group_ids[diff.cpu()]:
+                    txt[i] = str(current[i])
 
         visual.text = text_collection[key]
 
@@ -324,9 +331,11 @@ class SelectedGroups(GroupBoxes):
 
     def init_cuda_arrays(self):
         self._input_color_array = self._sensory_input_planes.face_color_array(self._cuda_device)
+        self.registered_buffers.append(self._input_color_array)
         self._input_color_array.tensor[:, 3] = .5
         self._output_color_array = self._output_planes.face_color_array(self._cuda_device)
         self._output_color_array.tensor[:, 3] = .5
+        self.registered_buffers.append(self._output_color_array)
 
     # noinspection PyMethodOverriding
     def init_cuda_attributes(self, device, G_flags: LocationGroupFlags, G_props: LocationGroupProperties):
@@ -429,7 +438,6 @@ class IOGroups(RenderedCudaObjectNode):
         k = (i + 2) % 3
         k_segments = np.unique(self.grid.grid_coord[self.compatible_groups][:, k])
         self.n_k_segments = len(k_segments)
-
         self.normals = InteractiveBoxNormals(self, self.shape)
 
         self.scale = Scale(self, _min_value=0, _max_value=int(3 * 1 / max(self.shape)))
@@ -605,6 +613,9 @@ class IOGroups(RenderedCudaObjectNode):
         super().init_cuda_attributes(device)
         self.transform_connected = True
         self.normals.visible = False
+
+        for normal in self.normals:
+            self.registered_buffers.append(normal.gpu_array)
 
 
 # noinspection PyAbstractClass

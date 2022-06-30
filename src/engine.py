@@ -4,7 +4,7 @@ import sys
 
 from network import SpikingNeuronNetwork, NetworkConfig, PlottingConfig
 from app import (
-    App,
+    BaseApp,
 )
 
 
@@ -26,7 +26,7 @@ class EngineConfig:
                               network_config=network)
 
 
-class Engine:
+class Engine(BaseApp):
 
     def __init__(self, config=None):
 
@@ -38,24 +38,18 @@ class Engine:
         numba.cuda.select_device(self.config.device)
 
         # keep order for vbo id (1/4)
-        self.network = SpikingNeuronNetwork(self.config)
+        network = SpikingNeuronNetwork(self.config)
         # keep order for vbo id (2/4)
-        self.app = App(self.network)
+        super().__init__(network)
         # keep order for vbo id (3/4)
-        self.network.initialize_GPU_arrays(self.config.device, self.app)
+        self.network.initialize_GPU_arrays(self.config.device, self)
         # keep order (4/4)
-        self.app._bind_ui()
-
-    def run(self):
-        self.app.vs.run()
+        self._bind_ui()
 
 
 if __name__ == '__main__':
 
     gloo.gl.use_gl('gl+')
-
     eng = Engine()
-
-    # gloo.set_state(cull_face=True, depth_test=True, blend=True)
     if sys.flags.interactive != 1:
         eng.run()

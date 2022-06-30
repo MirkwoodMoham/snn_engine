@@ -22,6 +22,7 @@ from .engine_scene_canvas import (
     VoltagePlotSceneCanvas)
 
 from .ui_panels import MainUILeft, MenuBar, ButtonMenuActions, GroupInfoPanel
+from .gui_element import RenderedObjectSliders
 from network import PlottingConfig
 
 
@@ -49,11 +50,13 @@ class EngineWindow(BaseWindow):
 
     def __init__(self,
                  name: str,
-                 app: Optional[Application],
+                 app, # : Optional[Application],
                  plotting_config: PlottingConfig,
                  keys=None
                  ):
         super().__init__(name)
+
+        self.app = app
 
         for attr in ['ui', 'scene_3d']:
             if hasattr(self, attr):
@@ -61,7 +64,6 @@ class EngineWindow(BaseWindow):
 
         self.ui_elements = ButtonMenuActions(self)
         self.menubar = MenuBar(self)
-        # self.grid_layout.addWidget(self.frame_3d, 0, 1, 1, 30)
 
         self.ui_panel_left = MainUILeft(self)
 
@@ -98,7 +100,7 @@ class EngineWindow(BaseWindow):
             self.splitter.addWidget(self.frame_canvas(self.group_info_scene))
             self.splitter.setStretchFactor(2, 2)
             self.splitter.addWidget(self.ui_right)
-            self.splitter.setStretchFactor(3, 7)
+            self.splitter.setStretchFactor(3, 6)
 
 
 class NeuronPlotWindow(BaseWindow):

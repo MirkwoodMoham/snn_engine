@@ -35,6 +35,7 @@ class NetworkGPUArrays(GPUArrayCollection):
             super().__init__(device=device, bprint_allocated_memory=bprint_allocated_memory)
 
             self.buffers = buffers
+            self.registered_buffers = []
             self.shapes = shapes
 
             self.voltage = None
@@ -71,11 +72,13 @@ class NetworkGPUArrays(GPUArrayCollection):
                 self.group_firing_counts_plot_single0 = RegisteredVBO(buffers.group_firing_counts_plot_single0,
                                                                       (plotting_config.scatter_plot_length * 2, 2),
                                                                       self.device)
+                self.registered_buffers.append(self.group_firing_counts_plot_single0)
 
             if buffers.group_firing_counts_plot_single1 is not None:
                 self.group_firing_counts_plot_single1 = RegisteredVBO(buffers.group_firing_counts_plot_single1,
                                                                       (plotting_config.scatter_plot_length * 2, 2),
                                                                       self.device)
+                self.registered_buffers.append(self.group_firing_counts_plot_single1)
 
         def init_voltage_plot_arrays(self):
             self.voltage = RegisteredVBO(self.buffers.voltage, self.shapes.voltage_plot, self.device)
@@ -86,6 +89,9 @@ class NetworkGPUArrays(GPUArrayCollection):
             self.voltage_group_line_colors = RegisteredVBO(self.buffers.voltage_group_line_colors,
                                                            self.shapes.plot_group_line_colors,
                                                            self.device)
+            self.registered_buffers.append(self.voltage)
+            self.registered_buffers.append(self.voltage_group_line_pos)
+            self.registered_buffers.append(self.voltage_group_line_colors)
 
         def init_firings_plot_arrays(self):
             self.firings = RegisteredVBO(self.buffers.firings, self.shapes.firings_scatter_plot, self.device)
@@ -96,6 +102,9 @@ class NetworkGPUArrays(GPUArrayCollection):
             self.firings_group_line_colors = RegisteredVBO(self.buffers.firings_group_line_colors,
                                                            self.shapes.plot_group_line_colors,
                                                            self.device)
+            self.registered_buffers.append(self.firings)
+            self.registered_buffers.append(self.firings_group_line_pos)
+            self.registered_buffers.append(self.firings_group_line_colors)
 
     def __init__(self,
                  config: NetworkConfig,
@@ -119,15 +128,16 @@ class NetworkGPUArrays(GPUArrayCollection):
         self._type_group_dct = type_group_dct
         self._type_group_conn_dct = type_group_conn_dct
 
-        # self.selector_box = RegisteredVBO(vbo, shape, self.device)
+        self.registered_buffers = []
 
         self.plotting_arrays = self.PlottingGPUArrays(plotting_config,
                                                       device=device, shapes=shapes, buffers=buffers,
                                                       bprint_allocated_memory=self.bprint_allocated_memory,
                                                       app=app)
-
+        self.registered_buffers += self.plotting_arrays.registered_buffers
         self.curand_states = self._curand_states()
         self.N_pos: RegisteredVBO = self._N_pos(shape=shapes.N_pos, vbo=buffers.N_pos)
+
 
         (self.N_G,
          self.G_neuron_counts,
@@ -138,6 +148,7 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.group_indices = self._set_group_indices()
 
         self.G_pos: RegisteredVBO = RegisteredVBO(buffers.selected_group_boxes_vbo, shapes.G_pos, self.device)
+        self.registered_buffers.append(self.G_pos)
         self.G_distance, self.G_delay_distance = self._G_delay_distance(self.G_pos)
         self._G_neuron_counts_2of2(self.G_delay_distance, self.G_neuron_counts)
         self.G_group_delay_counts = self._G_group_delay_counts(shapes.G_delay_counts, self.G_delay_distance)
@@ -168,6 +179,7 @@ class NetworkGPUArrays(GPUArrayCollection):
 
         self.G_flags = LocationGroupFlags(self._config.G, device=self.device, grid=grid,
                                           select_ibo=buffers.selected_group_boxes_ibo)
+        self.registered_buffers.append(self.G_flags.selected_array)
         self.G_props = LocationGroupProperties(self._config.G, device=self.device, config=self._config, grid=grid)
 
         self.Fired = self.fzeros(self._config.N)
@@ -205,8 +217,6 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.Simulation.calculate_avg_group_weight()
 
         self.output_tensor = self.fzeros(6)
-
-        return
 
     def _init_sim(self, T, plotting_config):
 
@@ -358,6 +368,7 @@ class NetworkGPUArrays(GPUArrayCollection):
             if g.ntype == NeuronTypes.INHIBITORY:
                 orange = torch.Tensor([1, .5, .2])
                 N_pos.tensor[g.start_idx:g.end_idx + 1, 7:10] = orange  # Inhibitory Neurons -> Orange
+        self.registered_buffers.append(N_pos)
         return N_pos
 
     # def _G_pos(self, shape, vbo) -> RegisteredVBO:
@@ -959,6 +970,10 @@ class NetworkGPUArrays(GPUArrayCollection):
     @property
     def active_output_groups(self):
         return self.select_groups(self.G_flags.b_output_group.type(torch.bool))
+
+    def unregister_registered_buffers(self):
+        for rb in self.registered_buffers:
+            rb.reg.unregister()
 
     def update(self):
 

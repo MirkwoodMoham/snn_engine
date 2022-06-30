@@ -1,5 +1,5 @@
 from .rendered_object import RenderedObjectNode
-from gpu import RegisteredVBO
+from gpu import RegisteredGPUArray
 
 
 class CudaObject:
@@ -9,11 +9,13 @@ class CudaObject:
             self.unfreeze()
             self._cuda_device = None
             self._gpu_array = None
+            self.registered_buffers: list[RegisteredGPUArray] = []
             # noinspection PyUnresolvedReferences
             self.freeze()
         except AttributeError:
             self._cuda_device = None
             self._gpu_array = None
+            self.registered_buffers: list[RegisteredGPUArray] = []
 
     def _init_cuda_attributes(self, device, attr_list):
         for a in attr_list:
@@ -33,6 +35,10 @@ class CudaObject:
 
     def init_cuda_arrays(self):
         pass
+
+    def unregister_registered_buffers(self):
+        for rb in self.registered_buffers:
+            rb.unregister()
 
 
 # noinspection PyAbstractClass

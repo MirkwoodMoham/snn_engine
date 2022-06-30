@@ -295,8 +295,11 @@ class SpikingNeuronNetwork:
             buffers=buffers,
             app=app)
 
+        self.registered_buffers += self.GPU.registered_buffers
+
         self.selector_box.init_cuda_attributes(self.GPU.device, self.GPU.G_flags, self.GPU.G_props)
         self.selected_group_boxes.init_cuda_attributes(self.GPU.device, self.GPU.G_flags, self.GPU.G_props)
+
         self.output_cells.init_cuda_attributes(self.GPU.device, self.GPU.G_flags, self.GPU.G_props)
         self.input_cells.init_cuda_attributes(self.GPU.device, self.GPU.G_flags, self.GPU.G_props)
 
@@ -313,4 +316,11 @@ class SpikingNeuronNetwork:
 
     def unregister_registered_buffers(self):
         for rb in self.registered_buffers:
-            rb.reg.unregister()
+            rb.unregister()
+        self.selector_box.unregister_registered_buffers()
+        self.selected_group_boxes.unregister_registered_buffers()
+
+        self.output_cells.unregister_registered_buffers()
+        self.input_cells.unregister_registered_buffers()
+
+        self.group_info_mesh.unregister_registered_buffers()
