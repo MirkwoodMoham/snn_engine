@@ -1,7 +1,6 @@
 from typing import Optional
 
 from PyQt6 import QtCore
-
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -14,15 +13,15 @@ from PyQt6.QtWidgets import (
 
 from vispy.app import Application
 from vispy.scene import SceneCanvas
+
 from .engine_scene_canvas import (
-    EngineSceneCanvas,
+    MainSceneCanvas,
     CanvasConfig,
     LocationGroupInfoCanvas,
     ScatterPlotSceneCanvas,
     VoltagePlotSceneCanvas)
 
 from .ui_panels import MainUILeft, MenuBar, ButtonMenuActions, GroupInfoPanel
-from .gui_element import RenderedObjectSliders
 from network import PlottingConfig
 
 
@@ -46,7 +45,7 @@ class BaseWindow(QMainWindow):
         return frame
 
 
-class EngineWindow(BaseWindow):
+class MainWindow(BaseWindow):
 
     def __init__(self,
                  name: str,
@@ -69,7 +68,7 @@ class EngineWindow(BaseWindow):
 
         self.setMenuBar(self.menubar)
         self.setStatusBar(QStatusBar(self))
-        self.scene_3d = EngineSceneCanvas(
+        self.scene_3d = MainSceneCanvas(
             conf=CanvasConfig(keys=keys), app=app, plotting_config=plotting_config)
         if plotting_config.group_info_view_mode.split is True:
             self.group_info_scene = LocationGroupInfoCanvas(
@@ -87,7 +86,8 @@ class EngineWindow(BaseWindow):
         if plotting_config.group_info_view_mode.scene is True:
             self.ui_right = GroupInfoPanel(self)
             self.splitter.addWidget(self.ui_right)
-            self.splitter.setStretchFactor(2, 30)
+            # self.splitter.setStretchFactor(1, 6)
+            self.splitter.setStretchFactor(2, 10)
 
         hbox = QHBoxLayout(self.centralWidget())
         hbox.addWidget(self.splitter)
@@ -140,7 +140,7 @@ class LocationGroupInfoWindow(BaseWindow):
                  app: Optional[Application],
                  plotting_config: PlottingConfig,
                  keys=None,
-                 parent: EngineWindow = None
+                 parent: MainWindow = None
                  ):
 
         super().__init__(name=name, parent=parent)

@@ -17,9 +17,9 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from app import ButtonMenuAction, RenderedObjectSliders
-from app.collapsible_widget.collapsible_widget import CollapsibleWidget
-from app.gui_element import SpinBoxSlider
+from .gui_element import ButtonMenuAction, RenderedObjectSliders
+from .collapsible_widget.collapsible_widget import CollapsibleWidget
+from .gui_element import SpinBoxSlider
 
 
 @dataclass
@@ -52,17 +52,35 @@ class ButtonMenuActions:
     TOGGLE_OUTERGRID: ButtonMenuAction = ButtonMenuAction(menu_name='&OuterGrid',
                                                           name='Show OuterGrid',
                                                           status_tip='Show/Hide OuterGrid',
-                                                          menu_short_cut='Ctrl+G')
+                                                          menu_short_cut='Ctrl+G',
+                                                          checkable=True)
 
-    ACTUALIZE_G_FLAGS_TEXT: ButtonMenuAction = ButtonMenuAction(menu_name='&G_flags',
+    ACTUALIZE_G_FLAGS_TEXT: ButtonMenuAction = ButtonMenuAction(menu_name='&Refresh displayed G_flags',
                                                                 menu_short_cut='F7',
                                                                 icon_name='arrow-circle.png',
-                                                                status_tip='Actualize displayed G_flags values')
+                                                                status_tip='Refresh displayed G_flags values')
 
-    ACTUALIZE_G_PROPS_TEXT: ButtonMenuAction = ButtonMenuAction(menu_name='&G_props',
+    ACTUALIZE_G_PROPS_TEXT: ButtonMenuAction = ButtonMenuAction(menu_name='&Refresh displayed G_props',
                                                                 menu_short_cut='F8',
                                                                 icon_name='arrow-circle.png',
-                                                                status_tip='Actualize displayed G_props values')
+                                                                status_tip='Refresh displayed G_props values')
+
+    ACTUALIZE_G2G_FLAGS_TEXT: ButtonMenuAction = ButtonMenuAction(
+        menu_name='&Refresh displayed G2G_flags ',
+        icon_name='arrow-circle.png',
+        status_tip='Refresh displayed G2G_flags values')
+
+    TOGGLE_GROUP_IDS_TEXT = ButtonMenuAction(menu_name='&Group IDs',
+                                             checkable=True,
+                                             status_tip='Show/Hide Group IDs')
+
+    TOGGLE_G_FLAGS_TEXT = ButtonMenuAction(menu_name='&G_flags Text',
+                                           checkable=True,
+                                           status_tip='Show/Hide G_flags values')
+
+    TOGGLE_G_PROPS_TEXT = ButtonMenuAction(menu_name='&G_Props Text',
+                                           checkable=True,
+                                           status_tip='Show/Hide G_props values')
 
     def __post_init__(self):
         window_ = self.window
@@ -88,6 +106,13 @@ class MenuBar(QMenuBar):
             self.toggle_outergrid: QAction = ButtonMenuActions.TOGGLE_OUTERGRID.action()
             self.exit: QAction = ButtonMenuActions.EXIT_APP.action()
 
+            self.toggle_groups_ids: QAction = ButtonMenuActions.TOGGLE_GROUP_IDS_TEXT.action()
+            self.toggle_g_flags: QAction = ButtonMenuActions.TOGGLE_G_FLAGS_TEXT.action()
+            self.toggle_g_props: QAction = ButtonMenuActions.TOGGLE_G_PROPS_TEXT.action()
+
+            self.actualize_g_flags: QAction = ButtonMenuActions.ACTUALIZE_G_FLAGS_TEXT.action()
+            self.actualize_g_props: QAction = ButtonMenuActions.ACTUALIZE_G_PROPS_TEXT.action()
+
     def __init__(self, window):
 
         super().__init__(window)
@@ -103,6 +128,13 @@ class MenuBar(QMenuBar):
 
         self.view_menu = self.addMenu('&View')
         self.view_menu.addAction(self.actions.toggle_outergrid)
+
+        self.view_menu.addAction(self.actions.toggle_groups_ids)
+
+        self.view_menu.addAction(self.actions.toggle_g_flags)
+        self.view_menu.addAction(self.actions.toggle_g_props)
+        self.view_menu.addAction(self.actions.actualize_g_flags)
+        self.view_menu.addAction(self.actions.actualize_g_props)
 
 
 class UIPanel(QScrollArea):
@@ -148,6 +180,7 @@ class MainUILeft(UIPanel):
                                                             prop_id='thalamic_inh_input_current',
                                                             maximum_width=300,
                                                             _min_value=0, _max_value=250)
+
             self.thalamic_exc_input_current = SpinBoxSlider(name='Excitatory Current [I]',
                                                             window=window,
                                                             status_tip='Thalamic Excitatory Input Current [I]',
@@ -161,6 +194,7 @@ class MainUILeft(UIPanel):
                                                         prop_id='sensory_input_current0',
                                                         maximum_width=300,
                                                         _min_value=0, _max_value=200)
+
             self.sensory_input_current1 = SpinBoxSlider(name='Input Current 1 [I]',
                                                         window=window,
                                                         status_tip='Sensory Input Current 1 [I]',
@@ -276,17 +310,50 @@ class GroupInfoComboBoxFrame(QFrame):
             self.actualize_button.clicked.connect(func)
 
 
+class G2GInfoComboBoxFrame(QFrame):
+
+    def __init__(self, name, actualize_button=None, parent=None):
+        super().__init__(parent)
+        self.setLayout(QHBoxLayout())
+        self.layout().setContentsMargins(0, 0, 0, 0)
+        self.src_group_combo_box = GroupInfoComboBox()
+        self.src_group_combo_box.setMaximumWidth(50)
+        self.value_combo_box = GroupInfoComboBox()
+        self.label = QLabel(name)
+        self.label.setMaximumWidth(80)
+        self.layout().addWidget(self.label)
+        self.layout().addWidget(self.src_group_combo_box)
+        self.layout().addWidget(self.value_combo_box)
+        if actualize_button is not None:
+            self.actualize_button = actualize_button
+            self.layout().addWidget(self.actualize_button)
+        else:
+            self.actualize_button = None
+
+        # self.setBaseSize(32, 100)
+        self.setFixedHeight(32)
+        # self.setMaximumWidth(220)
+        # self.setFra
+
+    def __call__(self):
+        return self.value_combo_box
+
+    def connect(self, func):
+        # noinspection PyUnresolvedReferences
+        self.src_group_combo_box.currentTextChanged.connect(func)
+        # noinspection PyUnresolvedReferences
+        self.value_combo_box.currentTextChanged.connect(func)
+        if self.actualize_button is not None:
+            self.actualize_button.clicked.connect(func)
+
+
 class GroupInfoPanel(UIPanel):
 
     def __init__(self, window):
 
         super().__init__(window)
 
-        self.combo_boxes_collapsible = CollapsibleWidget(title='Group Info Display 0')
-        # self.text_display_collapsible1 = CollapsibleWidget(title='Text Display 1')
-        # self.text_display_collapsible0.add(combobox1)
-        self.addWidget(self.combo_boxes_collapsible)
-        # self.addWidget(self.text_display_collapsible1)
+        self.combo_boxes_collapsible0 = CollapsibleWidget(title='Group Info Display 0')
 
         self.combo_boxes = []
 
@@ -301,8 +368,15 @@ class GroupInfoPanel(UIPanel):
             'G_props', ButtonMenuActions.ACTUALIZE_G_PROPS_TEXT.button())
         self.add_combo_box(self.g_props_combobox)
 
+        self.combo_boxes_collapsible1 = CollapsibleWidget(title='Group Info Display 1')
+        self.combo_boxes_collapsible1.add(G2GInfoComboBoxFrame(
+            'G2G_flags', ButtonMenuActions.ACTUALIZE_G2G_FLAGS_TEXT.button()))
+
+        self.addWidget(self.combo_boxes_collapsible0)
+        self.addWidget(self.combo_boxes_collapsible1)
+
     def add_combo_box(self, combo_box):
 
-        self.combo_boxes_collapsible.add(combo_box)
+        self.combo_boxes_collapsible0.add(combo_box)
         # self.addWidget(combo_box)
         self.combo_boxes.append(combo_box)

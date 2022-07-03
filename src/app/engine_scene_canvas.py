@@ -19,6 +19,7 @@ from .plot_widgets import (
 from network import SpikingNeuronNetwork
 from rendering import RenderedObject
 from network import PlottingConfig
+# from app import BaseApp
 
 
 @dataclass
@@ -46,14 +47,14 @@ class CanvasConfig:
 
 class TextTableWidget(Widget):
 
-    def __init__(self, labels: list, heights_min=None, heights_max=None,
+    def __init__(self, labels: list[str], heights_min=None, heights_max=None,
                  height_min_global=None, height_max_global=None):
 
         super().__init__()
 
         self.unfreeze()
         self.item_count = 0
-        self.grid = self.add_grid(border_color='w')
+        self.grid = self.add_grid()
         width = 130
         self.width_min = width
         self.width_max = width
@@ -62,7 +63,7 @@ class TextTableWidget(Widget):
             generate_height_min_global = True
             height_min_global = 0
             if height_max_global is None:
-                height_min_default = 100
+                height_min_default = 25
             else:
                 height_min_default = int(height_max_global / len(labels))
         else:
@@ -72,14 +73,17 @@ class TextTableWidget(Widget):
         if height_max_global is None:
             generate_height_max_global = True
             height_max_global = 0
-            height_max_default = 100
+            height_max_default = 25
         else:
             generate_height_max_global = False
             height_max_default = int(height_max_global / len(labels)) + 1
 
         for i, label in enumerate(labels):
             height_min = heights_min[i] if heights_min is not None else height_min_default
+            f = label.count('_')
+            height_min += f * height_min_default
             height_max = heights_max[i] if heights_max is not None else height_max_default
+            height_max += f * height_max_default
             if generate_height_min_global is True:
                 height_min_global += height_min
             if generate_height_max_global is True:
@@ -90,13 +94,14 @@ class TextTableWidget(Widget):
                                 if generate_height_min_global is True else height_min_global)
         self.grid.height_max = height_max_global
 
+        # self.height_max = height_max_global
         # if width_min_global is not None:
         #     self.grid.width_min = width_min_global
 
         self.freeze()
 
     # noinspection PyTypeChecker
-    def add_label(self, label_name, initial_value='0', height_min=100, height_max=100):
+    def add_label(self, label_name, initial_value='0', height_min=28, height_max=28):
         font_size = 9
         label = scene.Label(label_name.replace('_', '\n'), color='white', font_size=font_size)
         label.border_color = 'w'
@@ -104,6 +109,7 @@ class TextTableWidget(Widget):
         label_value.border_color = 'w'
         label.height_min = height_min
         label.height_max = height_max
+        label_value.height_max = height_max
         self.grid.add_widget(label, row=self.item_count, col=0)
         self.grid.add_widget(label_value, row=self.item_count, col=1)
         self.item_count += 1
@@ -121,12 +127,12 @@ class BaseEngineSceneCanvas(scene.SceneCanvas):
         super().__init__(**asdict(conf), app=app)
 
 
-class EngineSceneCanvas(BaseEngineSceneCanvas):
+class MainSceneCanvas(BaseEngineSceneCanvas):
 
     # noinspection PyTypeChecker
     def __init__(self,
                  conf: CanvasConfig,
-                 app: Optional[Application],
+                 app,
                  plotting_config: PlottingConfig):
 
         super().__init__(conf, app)
@@ -155,12 +161,12 @@ class EngineSceneCanvas(BaseEngineSceneCanvas):
         # self.time_txt2 = None
         # self.update_duration_value_txt = None
 
-        row_span_0 = 1
+        row_span_0 = 2
         col_span0 = 2
         plot_col0 = 0
         plot_col1 = 4
         plot_col2 = plot_col1 + col_span0
-        plot_row1 = 1
+        plot_row1 = row_span_0
         row_span10 = 2
         row_span_11 = 1
         height_min0 = 350
@@ -199,7 +205,7 @@ class EngineSceneCanvas(BaseEngineSceneCanvas):
 
         self.grid.add_widget(self.group_firings_plot_single0, plot_row1, plot_col2,
                              col_span=col_span0, row_span=row_span_11)
-        self.grid.add_widget(self.group_firings_plot_single1, plot_row1 + plot_row1, plot_col2,
+        self.grid.add_widget(self.group_firings_plot_single1, plot_row1 + row_span_11, plot_col2,
                              col_span=2, row_span=row_span_11)
 
         # self.group_firings_plot = None

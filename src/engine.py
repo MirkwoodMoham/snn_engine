@@ -2,10 +2,12 @@ import numba.cuda
 from vispy import gloo
 import sys
 
-from network import SpikingNeuronNetwork, NetworkConfig, PlottingConfig
-from app import (
-    BaseApp,
+from network import (
+    NetworkConfig,
+    PlottingConfig,
+    SpikingNeuronNetwork
 )
+from app import BaseApp
 
 
 class EngineConfig:
@@ -22,7 +24,6 @@ class EngineConfig:
                               n_scatter_plots=1000, scatter_plot_length=1000,
                               windowed_neuron_plots=False,
                               group_info_view_mode='split',
-                              # group_info_view_mode='windowed',
                               network_config=network)
 
 

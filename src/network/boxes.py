@@ -203,10 +203,12 @@ class GroupInfo(GroupBoxes):
         text_pos[:, 1] -= grid.unit_shape[1] * .5
         text_pos[:, 2] += grid.unit_shape[2] * .35
 
-        self.group_id_texts = {'None': None,
-                               'group_ids': [str(i) for i in range(network_config.G)]}
+        self.group_id_key = 'group_ids'
 
-        self.group_id_text_visual = TextVisual(text=self.group_id_texts['group_ids'],
+        self.group_id_texts = {'None': None,
+                               self.group_id_key: [str(i) for i in range(network_config.G)]}
+
+        self.group_id_text_visual = TextVisual(text=self.group_id_texts[self.group_id_key],
                                                pos=text_pos, color='white', font_size=48)
 
         self.G_flags_texts = {'None': None}
