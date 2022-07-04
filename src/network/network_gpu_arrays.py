@@ -979,4 +979,3 @@ class NetworkGPUArrays(GPUArrayCollection):
                 self.G_firing_count_hist[:] = 0
 
             return
-

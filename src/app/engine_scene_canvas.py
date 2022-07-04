@@ -12,14 +12,15 @@ from vispy.util import keys
 from vispy.scene.widgets import Widget
 
 from .plot_widgets import (
+    GroupInfoColorBar,
     GroupFiringsPlotWidget,
     PlotWidget,
     VoltagePlotWidget,
     ScatterPlotWidget)
+
 from network import SpikingNeuronNetwork
 from rendering import RenderedObject
 from network import PlottingConfig
-# from app import BaseApp
 
 
 @dataclass
@@ -158,9 +159,6 @@ class MainSceneCanvas(BaseEngineSceneCanvas):
         axis.transform = STTransform()
         axis.transform.move((-0.1, -0.1, -0.1))
 
-        # self.time_txt2 = None
-        # self.update_duration_value_txt = None
-
         row_span_0 = 2
         col_span0 = 2
         plot_col0 = 0
@@ -224,10 +222,6 @@ class MainSceneCanvas(BaseEngineSceneCanvas):
         self.grid_transform = self.scene.node_transform(self.grid)
 
         self.freeze()
-
-    def info_grid_right(self, row, col, row_span, height_min):
-        # noinspection PyTypeChecker
-        pass
 
     @property
     def _window_id(self):
@@ -402,5 +396,9 @@ class LocationGroupInfoCanvas(BaseEngineSceneCanvas):
         self.group_firings_plot = GroupFiringsPlotWidget(plotting_confing=plotting_config, width_max=600)
 
         self.grid.add_widget(self.group_firings_plot, 5, 5, col_span=2, row_span=6)
+
+        self.color_bar = GroupInfoColorBar()
+
+        self.grid.add_widget(self.color_bar, 5, 0, 6, 1)
 
         self.freeze()

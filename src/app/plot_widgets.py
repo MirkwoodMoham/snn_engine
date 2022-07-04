@@ -1,5 +1,6 @@
+import numpy as np
 from vispy import scene
-from vispy.scene import Widget, PanZoomCamera
+from vispy.scene import ColorBarWidget, PanZoomCamera, Widget
 
 from network import PlottingConfig
 
@@ -113,3 +114,20 @@ class GroupFiringsPlotWidget(PlotWidget):
                          plot_length=plotting_confing.scatter_plot_length,
                          width_min=width_min, width_max=width_max,
                          height_min=height_min, height_max=height_max)
+
+
+class GroupInfoColorBar(ColorBarWidget):
+
+    def __init__(self):
+        super().__init__(label="ColorBarWidget", clim=(0, 99), border_color='white',
+                         cmap="cool", orientation="right", border_width=1, label_color='white')
+
+    @property
+    def cmap(self):
+        return self._colorbar._colorbar.cmap
+
+    @cmap.setter
+    def cmap(self, v):
+        self._colorbar._colorbar.cmap = v
+        print(v.map(np.array([0.5])))
+        self._colorbar._colorbar._update()

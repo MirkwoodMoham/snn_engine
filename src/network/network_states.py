@@ -254,18 +254,25 @@ class Sliders:
             setattr(self, k, None)
 
 
+class Row:
+
+    def __init__(self, index, value_interval):
+        self.index = index
+        self.interval = value_interval
+
+
 class LocationGroupFlags(PropertyTensor):
 
     @dataclass(frozen=True)
     class Rows:
 
-        sensory_input_type: int = 0
-        b_thalamic_input: int = 1
-        b_sensory_group: int = 2
-        b_sensory_input: int = 3
-        b_output_group: int = 4
-        output_type: int = 5
-        b_monitor_group_firing_count: int = 6
+        sensory_input_type: Row = Row(0, [-1, 1])
+        b_thalamic_input: Row = Row(1, [0, 1])
+        b_sensory_group: Row = Row(2, [0, 1])
+        b_sensory_input: Row = Row(3, [0, 1])
+        b_output_group: Row = Row(4, [0, 1])
+        output_type: Row = Row(5, [-1, 1])
+        b_monitor_group_firing_count: Row = Row(6, [0, 1])
 
         def __len__(self):
             return 7
@@ -320,59 +327,59 @@ class LocationGroupFlags(PropertyTensor):
 
     @property
     def sensory_input_type(self):
-        return self._tensor[self._rows.sensory_input_type, :]
+        return self._tensor[self._rows.sensory_input_type.index, :]
 
     @sensory_input_type.setter
     def sensory_input_type(self, v):
-        self._tensor[self._rows.sensory_input_type, :] = v
+        self._tensor[self._rows.sensory_input_type.index, :] = v
 
     @property
     def b_thalamic_input(self):
-        return self._tensor[self._rows.b_thalamic_input, :]
+        return self._tensor[self._rows.b_thalamic_input.index, :]
 
     @b_thalamic_input.setter
     def b_thalamic_input(self, v):
-        self._tensor[self._rows.b_thalamic_input, :] = v
+        self._tensor[self._rows.b_thalamic_input.index, :] = v
 
     @property
     def b_sensory_group(self):
-        return self._tensor[self._rows.b_sensory_group, :]
+        return self._tensor[self._rows.b_sensory_group.index, :]
 
     @b_sensory_group.setter
     def b_sensory_group(self, v):
-        self._tensor[self._rows.b_sensory_group, :] = v
+        self._tensor[self._rows.b_sensory_group.index, :] = v
 
     @property
     def b_output_group(self):
-        return self._tensor[self._rows.b_output_group, :]
+        return self._tensor[self._rows.b_output_group.index, :]
 
     @b_output_group.setter
     def b_output_group(self, v):
-        self._tensor[self._rows.b_output_group, :] = v
+        self._tensor[self._rows.b_output_group.index, :] = v
 
     @property
     def output_type(self):
-        return self._tensor[self._rows.output_type, :]
+        return self._tensor[self._rows.output_type.index, :]
 
     @output_type.setter
     def output_type(self, v):
-        self._tensor[self._rows.output_type, :] = v
+        self._tensor[self._rows.output_type.index, :] = v
 
     @property
     def b_sensory_input(self):
-        return self._tensor[self._rows.b_sensory_input, :]
+        return self._tensor[self._rows.b_sensory_input.index, :]
 
     @b_sensory_input.setter
     def b_sensory_input(self, v):
-        self._tensor[self._rows.b_sensory_input, :] = v
+        self._tensor[self._rows.b_sensory_input.index, :] = v
 
     @property
     def b_monitor_group_firing_count(self):
-        return self._tensor[self._rows.b_monitor_group_firing_count, :]
+        return self._tensor[self._rows.b_monitor_group_firing_count.index, :]
 
     @b_monitor_group_firing_count.setter
     def b_monitor_group_firing_count(self, v):
-        self._tensor[self._rows.b_monitor_group_firing_count, :] = v
+        self._tensor[self._rows.b_monitor_group_firing_count.index, :] = v
 
 
 class LocationGroupProperties(PropertyTensor):

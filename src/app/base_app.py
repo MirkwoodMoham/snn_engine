@@ -267,6 +267,10 @@ class BaseApp(Application):
 
             self.network.group_info_mesh.group_id_text_visual.pos += 1
 
+            from vispy.color import Colormap
+
+            self.main_window.group_info_scene.color_bar.cmap = Colormap([(0., 1., 1., 1.), (1., 0., 1., 1.)])
+            self.main_window.group_info_scene.update()
         else:
             # self.buttons.toggle_outergrid.setText('Show OuterGrid')
             self.main_ui_panel.buttons.toggle_outergrid.setChecked(False)
@@ -275,6 +279,9 @@ class BaseApp(Application):
                 self.main_window.scene_3d.group_firings_plot.visible = False
             if self.neuron_plot_window is not None:
                 self.neuron_plot_window.show()
+            from vispy.color import Colormap
+            self.main_window.group_info_scene.color_bar.cmap = Colormap([(1., 1., 1., 1.), (0., 1., 0., 1.)])
+            self.main_window.group_info_scene.update()
 
     def trigger_update_switch(self):
         self.update_switch = not self.update_switch

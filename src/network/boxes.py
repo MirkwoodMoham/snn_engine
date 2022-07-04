@@ -4,6 +4,7 @@ from numpy.lib import recfunctions as rfn
 import torch
 from typing import Optional
 
+from vispy.color import Colormap, get_colormap
 from vispy.geometry import create_box
 from vispy.visuals import MeshVisual, TextVisual
 from vispy.visuals.transforms import STTransform
@@ -152,7 +153,7 @@ class SelectorBox(RenderedCudaObjectNode):
 
 
 # noinspection PyAbstractClass
-class GroupBoxes(RenderedCudaObjectNode):
+class GroupBoxesBase(RenderedCudaObjectNode):
 
     def __init__(self, network_config: NetworkConfig, grid: NetworkGrid,
                  connect, color=(0.1, 1., 1., 1.), other_visuals=None):
@@ -196,7 +197,7 @@ class GroupBoxes(RenderedCudaObjectNode):
 
 
 # noinspection PyAbstractClass
-class GroupInfo(GroupBoxes):
+class GroupInfo(GroupBoxesBase):
 
     def __init__(self, network_config: NetworkConfig, grid: NetworkGrid,
                  connect, color=(0.1, 1., 1., 1.)):
@@ -255,6 +256,9 @@ class GroupInfo(GroupBoxes):
                                         self.G2G_info_text_visual])
 
         self.unfreeze()
+        self.color_maps = {
+            'default': get_colormap('cool')
+        }
         self.colors_gpu: Optional[RegisteredVBO] = None
         self.vertices_gpu: Optional[RegisteredVBO] = None
         self.face_group_ids: Optional[torch.Tensor] = None
@@ -275,6 +279,20 @@ class GroupInfo(GroupBoxes):
             if b_visual_set is False:
                 visual.text = text_collection[k]
                 b_visual_set = True
+
+    def _actualize_colors(self, values, key):
+        c: Colormap = self.color_maps['default']
+        if hasattr(self.G_flags._rows, key):
+            interval = getattr(self.G_flags._rows, key).interval
+            if interval != [0, 1]:
+                values = ((values - ((interval[0] + interval[1]) / 2))
+                          / (interval[1] - interval[0]) + .5)
+
+        colors = c.map(values[self.face_group_ids])
+        colors[:, 3] = .7
+        colors = np.repeat(colors, 6, axis=0)
+        self.colors_gpu._tensor[:] = torch.from_numpy(colors).to(self._cuda_device)
+        return
 
     def init_cuda_arrays(self):
         self.colors_gpu: RegisteredVBO = self._mesh.face_color_array(self._cuda_device)
@@ -320,9 +338,10 @@ class GroupInfo(GroupBoxes):
         if key != 'None':
             cached = cache[key]
             # noinspection PyTypeChecker
-            current = getattr(property_tensor, key)
+            current: torch.Tensor = getattr(property_tensor, key)
             # noinspection PyTypeChecker
             diff: torch.Tensor = cached != current
+            self._actualize_colors(current.cpu().numpy(), key)
             if diff.any():
                 current = current.cpu().numpy()
                 txt: list[str] = text_collection[key]
@@ -356,7 +375,7 @@ class GroupInfo(GroupBoxes):
 
 
 # noinspection PyAbstractClass
-class SelectedGroups(GroupBoxes):
+class SelectedGroups(GroupBoxesBase):
 
     def __init__(self, network_config: NetworkConfig, grid: NetworkGrid,
                  connect, color=(0.1, 1., 1., 1.)):
