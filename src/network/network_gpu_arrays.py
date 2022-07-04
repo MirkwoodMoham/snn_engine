@@ -4,7 +4,7 @@ import torch
 
 from network.network_array_shapes import NetworkArrayShapes
 from network.network_config import BufferCollection, NetworkConfig, PlottingConfig
-from network.network_states import IzhikevichModel, LocationGroupProperties, LocationGroupFlags
+from network.network_states import IzhikevichModel, LocationGroupProperties, LocationGroupFlags, G2GInfoArrays
 from network.network_structures import NeuronTypeGroup, NeuronTypeGroupConnection, NeuronTypes
 from .network_grid import NetworkGrid
 from .neurons import Neurons
@@ -20,91 +20,94 @@ from gpu import (
 # from app import App
 
 
+class PlottingGPUArrays(GPUArrayCollection):
+
+    def __init__(self, plotting_config: PlottingConfig,
+                 device, shapes: NetworkArrayShapes,
+                 buffers: BufferCollection,
+                 bprint_allocated_memory,
+                 app
+                 ):
+
+        super().__init__(device=device, bprint_allocated_memory=bprint_allocated_memory)
+
+        self.buffers = buffers
+        self.registered_buffers = []
+        self.shapes = shapes
+
+        self.voltage = None
+        self.voltage_group_line_pos = None
+        self.voltage_group_line_colors = None
+
+        self.firings = None
+        self.firings_group_line_pos = None
+        self.firings_group_line_colors = None
+
+        if app.neuron_plot_window is not None:
+            app.neuron_plot_window.scatter_plot_sc.set_current()
+        if self.buffers.voltage is not None:
+            self.init_voltage_plot_arrays()
+
+        if app.neuron_plot_window is not None:
+            app.neuron_plot_window.scatter_plot_sc.set_current()
+        if self.buffers.firings is not None:
+            self.init_firings_plot_arrays()
+
+        app.main_window.scene_3d.set_current()
+
+        self.voltage_map = self.izeros(shapes.voltage_plot_map)
+        self.voltage_map[:] = torch.arange(shapes.voltage_plot_map)
+
+        self.firings_map = self.izeros(shapes.firings_scatter_plot_map)
+        self.firings_map[:] = torch.arange(shapes.firings_scatter_plot_map)
+
+        self.voltage_plot_slots = torch.arange(shapes.voltage_plot_map + 1, device=self.device)
+        self.firings_plot_slots = torch.arange(shapes.firings_scatter_plot_map + 1, device=self.device)
+
+        # print(self.voltage.to_dataframe)
+        if buffers.group_firing_counts_plot_single0 is not None:
+            self.group_firing_counts_plot_single0 = RegisteredVBO(buffers.group_firing_counts_plot_single0,
+                                                                  (plotting_config.scatter_plot_length * 2, 2),
+                                                                  self.device)
+            self.registered_buffers.append(self.group_firing_counts_plot_single0)
+
+        if buffers.group_firing_counts_plot_single1 is not None:
+            self.group_firing_counts_plot_single1 = RegisteredVBO(buffers.group_firing_counts_plot_single1,
+                                                                  (plotting_config.scatter_plot_length * 2, 2),
+                                                                  self.device)
+            self.registered_buffers.append(self.group_firing_counts_plot_single1)
+
+    # noinspection DuplicatedCode
+    def init_voltage_plot_arrays(self):
+        self.voltage = RegisteredVBO(self.buffers.voltage, self.shapes.voltage_plot, self.device)
+
+        self.voltage_group_line_pos = RegisteredVBO(self.buffers.voltage_group_line_pos,
+                                                    self.shapes.plot_group_line_pos,
+                                                    self.device)
+        self.voltage_group_line_colors = RegisteredVBO(self.buffers.voltage_group_line_colors,
+                                                       self.shapes.plot_group_line_colors,
+                                                       self.device)
+        self.registered_buffers.append(self.voltage)
+        self.registered_buffers.append(self.voltage_group_line_pos)
+        self.registered_buffers.append(self.voltage_group_line_colors)
+
+    # noinspection DuplicatedCode
+    def init_firings_plot_arrays(self):
+        self.firings = RegisteredVBO(self.buffers.firings, self.shapes.firings_scatter_plot, self.device)
+
+        self.firings_group_line_pos = RegisteredVBO(self.buffers.firings_group_line_pos,
+                                                    self.shapes.plot_group_line_pos, self.device)
+
+        self.firings_group_line_colors = RegisteredVBO(self.buffers.firings_group_line_colors,
+                                                       self.shapes.plot_group_line_colors,
+                                                       self.device)
+        self.registered_buffers.append(self.firings)
+        self.registered_buffers.append(self.firings_group_line_pos)
+        self.registered_buffers.append(self.firings_group_line_colors)
+
+
 # noinspection PyPep8Naming
 class NetworkGPUArrays(GPUArrayCollection):
-
-    class PlottingGPUArrays(GPUArrayCollection):
-
-        def __init__(self, plotting_config: PlottingConfig,
-                     device, shapes: NetworkArrayShapes,
-                     buffers: BufferCollection,
-                     bprint_allocated_memory,
-                     app
-                     ):
-
-            super().__init__(device=device, bprint_allocated_memory=bprint_allocated_memory)
-
-            self.buffers = buffers
-            self.registered_buffers = []
-            self.shapes = shapes
-
-            self.voltage = None
-            self.voltage_group_line_pos = None
-            self.voltage_group_line_colors = None
-
-            self.firings = None
-            self.firings_group_line_pos = None
-            self.firings_group_line_colors = None
-
-            if app.neuron_plot_window is not None:
-                app.neuron_plot_window.scatter_plot_sc.set_current()
-            if self.buffers.voltage is not None:
-                self.init_voltage_plot_arrays()
-
-            if app.neuron_plot_window is not None:
-                app.neuron_plot_window.scatter_plot_sc.set_current()
-            if self.buffers.firings is not None:
-                self.init_firings_plot_arrays()
-
-            app.main_window.scene_3d.set_current()
-
-            self.voltage_map = self.izeros(shapes.voltage_plot_map)
-            self.voltage_map[:] = torch.arange(shapes.voltage_plot_map)
-
-            self.firings_map = self.izeros(shapes.firings_scatter_plot_map)
-            self.firings_map[:] = torch.arange(shapes.firings_scatter_plot_map)
-
-            self.voltage_plot_slots = torch.arange(shapes.voltage_plot_map + 1, device=self.device)
-            self.firings_plot_slots = torch.arange(shapes.firings_scatter_plot_map + 1, device=self.device)
-
-            # print(self.voltage.to_dataframe)
-            if buffers.group_firing_counts_plot_single0 is not None:
-                self.group_firing_counts_plot_single0 = RegisteredVBO(buffers.group_firing_counts_plot_single0,
-                                                                      (plotting_config.scatter_plot_length * 2, 2),
-                                                                      self.device)
-                self.registered_buffers.append(self.group_firing_counts_plot_single0)
-
-            if buffers.group_firing_counts_plot_single1 is not None:
-                self.group_firing_counts_plot_single1 = RegisteredVBO(buffers.group_firing_counts_plot_single1,
-                                                                      (plotting_config.scatter_plot_length * 2, 2),
-                                                                      self.device)
-                self.registered_buffers.append(self.group_firing_counts_plot_single1)
-
-        def init_voltage_plot_arrays(self):
-            self.voltage = RegisteredVBO(self.buffers.voltage, self.shapes.voltage_plot, self.device)
-
-            self.voltage_group_line_pos = RegisteredVBO(self.buffers.voltage_group_line_pos,
-                                                        self.shapes.plot_group_line_pos,
-                                                        self.device)
-            self.voltage_group_line_colors = RegisteredVBO(self.buffers.voltage_group_line_colors,
-                                                           self.shapes.plot_group_line_colors,
-                                                           self.device)
-            self.registered_buffers.append(self.voltage)
-            self.registered_buffers.append(self.voltage_group_line_pos)
-            self.registered_buffers.append(self.voltage_group_line_colors)
-
-        def init_firings_plot_arrays(self):
-            self.firings = RegisteredVBO(self.buffers.firings, self.shapes.firings_scatter_plot, self.device)
-
-            self.firings_group_line_pos = RegisteredVBO(self.buffers.firings_group_line_pos,
-                                                        self.shapes.plot_group_line_pos, self.device)
-
-            self.firings_group_line_colors = RegisteredVBO(self.buffers.firings_group_line_colors,
-                                                           self.shapes.plot_group_line_colors,
-                                                           self.device)
-            self.registered_buffers.append(self.firings)
-            self.registered_buffers.append(self.firings_group_line_pos)
-            self.registered_buffers.append(self.firings_group_line_colors)
 
     def __init__(self,
                  config: NetworkConfig,
@@ -130,14 +133,14 @@ class NetworkGPUArrays(GPUArrayCollection):
 
         self.registered_buffers = []
 
-        self.plotting_arrays = self.PlottingGPUArrays(plotting_config,
-                                                      device=device, shapes=shapes, buffers=buffers,
-                                                      bprint_allocated_memory=self.bprint_allocated_memory,
-                                                      app=app)
+        self.plotting_arrays = PlottingGPUArrays(plotting_config,
+                                                 device=device, shapes=shapes, buffers=buffers,
+                                                 bprint_allocated_memory=self.bprint_allocated_memory,
+                                                 app=app)
+
         self.registered_buffers += self.plotting_arrays.registered_buffers
         self.curand_states = self._curand_states()
         self.N_pos: RegisteredVBO = self._N_pos(shape=shapes.N_pos, vbo=buffers.N_pos)
-
 
         (self.N_G,
          self.G_neuron_counts,
@@ -145,15 +148,25 @@ class NetworkGPUArrays(GPUArrayCollection):
 
         self.neuron_ids = torch.arange(config.N).to(device=self.device)
         self.group_ids = torch.arange(config.G).to(device=self.device)
+
         self.group_indices = self._set_group_indices()
 
         self.G_pos: RegisteredVBO = RegisteredVBO(buffers.selected_group_boxes_vbo, shapes.G_pos, self.device)
         self.registered_buffers.append(self.G_pos)
-        self.G_distance, self.G_delay_distance = self._G_delay_distance(self.G_pos)
-        self._G_neuron_counts_2of2(self.G_delay_distance, self.G_neuron_counts)
-        self.G_group_delay_counts = self._G_group_delay_counts(shapes.G_delay_counts, self.G_delay_distance)
 
-        self.G_rep = torch.sort(self.G_delay_distance, dim=1, stable=True).indices.int()
+        self.G_flags = LocationGroupFlags(self._config.G, device=self.device, grid=grid,
+                                          select_ibo=buffers.selected_group_boxes_ibo)
+        self.registered_buffers.append(self.G_flags.selected_array)
+
+        self.g2g_info_arrays = G2GInfoArrays(self._config, self.group_ids,
+                                             self.G_flags, self.G_pos,
+                                             device=device, bprint_allocated_memory=self.bprint_allocated_memory)
+
+        self._G_neuron_counts_2of2(self.g2g_info_arrays.G_delay_distance, self.G_neuron_counts)
+        self.G_group_delay_counts = self._G_group_delay_counts(shapes.G_delay_counts,
+                                                               self.g2g_info_arrays.G_delay_distance)
+
+        self.G_rep = torch.sort(self.g2g_info_arrays.G_delay_distance, dim=1, stable=True).indices.int()
 
         (self.G_conn_probs,
          self.G_exp_ccsyn_per_src_type_and_delay,
@@ -177,9 +190,6 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.N_states = model(self._config.N, device=self.device,
                               types_tensor=self.N_G[:, self._config.N_G_neuron_type_col])
 
-        self.G_flags = LocationGroupFlags(self._config.G, device=self.device, grid=grid,
-                                          select_ibo=buffers.selected_group_boxes_ibo)
-        self.registered_buffers.append(self.G_flags.selected_array)
         self.G_props = LocationGroupProperties(self._config.G, device=self.device, config=self._config, grid=grid)
 
         self.Fired = self.fzeros(self._config.N)
@@ -189,14 +199,6 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.Firing_counts = self.izeros((1, T * 2))
 
         self.G_firing_count_hist = self.izeros((self._plotting_config.scatter_plot_length, self._config.G))
-
-        self.G_stdp_config0 = self.izeros((self._config.G, self._config.G))
-        self.G_stdp_config1 = self.izeros((self._config.G, self._config.G))
-
-        self.G_avg_weight_inh = self.fzeros(self.G_delay_distance.shape)
-        self.G_avg_weight_exc = self.fzeros(self.G_delay_distance.shape)
-        self.G_syn_count_inh = self.izeros(self.G_delay_distance.shape)
-        self.G_syn_count_exc = self.izeros(self.G_delay_distance.shape)
 
         self.Simulation = self._init_sim(T, plotting_config)
 
@@ -253,12 +255,12 @@ class NetworkGPUArrays(GPUArrayCollection):
             firing_idcs=self.Firing_idcs.data_ptr(),
             firing_counts=self.Firing_counts.data_ptr(),
             G_firing_count_hist=self.G_firing_count_hist.data_ptr(),
-            G_stdp_config0=self.G_stdp_config0.data_ptr(),
-            G_stdp_config1=self.G_stdp_config1.data_ptr(),
-            G_avg_weight_inh=self.G_avg_weight_inh.data_ptr(),
-            G_avg_weight_exc=self.G_avg_weight_exc.data_ptr(),
-            G_syn_count_inh=self.G_syn_count_inh.data_ptr(),
-            G_syn_count_exc=self.G_syn_count_exc.data_ptr()
+            G_stdp_config0=self.g2g_info_arrays.G_stdp_config0.data_ptr(),
+            G_stdp_config1=self.g2g_info_arrays.G_stdp_config1.data_ptr(),
+            G_avg_weight_inh=self.g2g_info_arrays.G_avg_weight_inh.data_ptr(),
+            G_avg_weight_exc=self.g2g_info_arrays.G_avg_weight_exc.data_ptr(),
+            G_syn_count_inh=self.g2g_info_arrays.G_syn_count_inh.data_ptr(),
+            G_syn_count_exc=self.g2g_info_arrays.G_syn_count_exc.data_ptr()
         )
 
         return sim
@@ -344,10 +346,6 @@ class NetworkGPUArrays(GPUArrayCollection):
             G_delay_distance=G_delay_distance.data_ptr(),
             G_neuron_counts=G_neuron_counts.data_ptr())
         self.validate_G_neuron_counts()
-
-    def _G_delay_distance(self, G_pos: RegisteredVBO):
-        G_pos_distance = torch.cdist(G_pos.tensor, G_pos.tensor)
-        return G_pos_distance, ((self._config.D - 1) * G_pos_distance / G_pos_distance.max()).round().int()
 
     def _curand_states(self):
         cu = snn_construction_gpu.CuRandStates(self._config.N).ptr()
@@ -838,9 +836,9 @@ class NetworkGPUArrays(GPUArrayCollection):
         if n_groups > self._config.swap_tensor_shape_multiplicators[1]:
             raise ValueError
 
-        swap_delay = self.G_delay_distance[groups.ravel()[0], groups.ravel()[n_groups]].item()
+        swap_delay = self.g2g_info_arrays.G_delay_distance[groups.ravel()[0], groups.ravel()[n_groups]].item()
         # noinspection PyUnresolvedReferences
-        if not bool((self.G_delay_distance[
+        if not bool((self.g2g_info_arrays.G_delay_distance[
                          groups.ravel()[:groups.size().numel() - n_groups],
                          groups.ravel()[n_groups:groups.size().numel()]] == swap_delay).all()):
             raise ValueError
@@ -911,7 +909,7 @@ class NetworkGPUArrays(GPUArrayCollection):
             swap_rates.data_ptr(), swap_rates.data_ptr(),
             group_neuron_counts_typed[0].data_ptr(), group_neuron_counts_typed[1].data_ptr(),
             group_neuron_counts_total.data_ptr(),
-            self.G_delay_distance.data_ptr(),
+            self.g2g_info_arrays.G_delay_distance.data_ptr(),
             self.N_relative_G_indices.data_ptr(), self.G_neuron_typed_ccount.data_ptr(), neuron_group_counts.data_ptr(),
             print_idx)
         # noinspection PyUnusedLocal
@@ -934,35 +932,6 @@ class NetworkGPUArrays(GPUArrayCollection):
 
         return a, b
 
-    def _stdp_distance_based_config(self, target_group, target_config: torch.Tensor):
-
-        distance_to_target_group = self.G_distance[:, target_group]
-
-        xx = distance_to_target_group.reshape(self._config.G, 1).repeat(1, self._config.G)
-
-        # noinspection PyUnresolvedReferences
-        mask = (xx > distance_to_target_group).T
-
-        target_config[mask] = 1
-        target_config[~mask] = -1
-        # noinspection PyUnresolvedReferences
-        target_config[(xx == distance_to_target_group).T] = 0
-
-    def set_active_output_groups(self, output_groups=None):
-        if output_groups is None:
-            output_groups = self.active_output_groups
-        assert len(output_groups) == 2
-        output_group_types = self.G_flags.output_type[output_groups].type(torch.int64)
-
-        group0 = output_groups[output_group_types == 0].item()
-        group1 = output_groups[output_group_types == 1].item()
-
-        self._stdp_distance_based_config(group0, self.G_stdp_config0)
-        # noinspection PyUnusedLocal
-        b = self.to_dataframe(self.G_stdp_config0)
-
-        self._stdp_distance_based_config(group1, self.G_stdp_config1)
-
     @property
     def active_sensory_groups(self):
         return self.select_groups(self.G_flags.b_sensory_input.type(torch.bool))
@@ -973,14 +942,14 @@ class NetworkGPUArrays(GPUArrayCollection):
 
     def unregister_registered_buffers(self):
         for rb in self.registered_buffers:
-            rb.reg.unregister()
+            rb.reg.unregister(None)
 
     def update(self):
 
         if self.Simulation.t % 1000 == 0:
             self.Simulation.calculate_avg_group_weight()
-            a = self.to_dataframe(self.G_avg_weight_inh)
-            b = self.to_dataframe(self.G_avg_weight_exc)
+            a = self.to_dataframe(self.g2g_info_arrays.G_avg_weight_inh)
+            b = self.to_dataframe(self.g2g_info_arrays.G_avg_weight_exc)
             r = 6
             # self.look_up([(80, 72), (88, 80), (96, 88), (104, 96), (112, 104)],
             # self.G_stdp_config0.type(torch.float32))
@@ -988,9 +957,9 @@ class NetworkGPUArrays(GPUArrayCollection):
             # self.look_up([(80, 72), (88, 80), (96, 88), (104, 96), (112, 104)], self.G_avg_weight_exc)
             # print()
             self.look_up([(75, 67), (83, 75), (91, 83), (99, 91), (107, 99), (115, 107), (123, 115)],
-                         self.G_avg_weight_inh)
+                         self.g2g_info_arrays.G_avg_weight_inh)
             self.look_up([(75, 67), (83, 75), (91, 83), (99, 91), (107, 99), (115, 107), (123, 115)],
-                         self.G_avg_weight_exc)
+                         self.g2g_info_arrays.G_avg_weight_exc)
             print()
 
         for i in range(self._config.sim_updates_per_frame):

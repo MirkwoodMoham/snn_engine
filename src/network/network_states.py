@@ -6,8 +6,10 @@ from typing import Optional, Union
 
 from .network_structures import NeuronTypes
 from gpu import (
+    GPUArrayConfig,
     RegisteredGPUArray,
-    GPUArrayConfig
+    RegisteredVBO,
+    GPUArrayCollection
 )
 from network.network_config import NetworkConfig
 from .network_grid import NetworkGrid
@@ -61,11 +63,11 @@ class PropertyTensor:
             raise AttributeError
 
     def data_ptr(self):
-        return self.tensor.data_ptr()
+        return self._tensor.data_ptr()
 
     @property
     def to_dataframe(self) -> pd.DataFrame:
-        return pd.DataFrame(self.tensor.cpu().numpy())
+        return pd.DataFrame(self._tensor.cpu().numpy())
 
 
 @dataclass(frozen=True)
@@ -438,3 +440,81 @@ class LocationGroupProperties(PropertyTensor):
     @sensory_input_current1.setter
     def sensory_input_current1(self, v):
         self._tensor[self._rows.sensory_input_current1, :] = v
+
+
+class G2GInfoArrays(GPUArrayCollection):
+
+    float_arrays_list = [
+        'G_distance',
+        'G_avg_weight_inh',
+        'G_avg_weight_exc',
+    ]
+
+    int_arrays_list = [
+        'G_delay_distance',
+        'G_stdp_config0',
+        'G_stdp_config1',
+        'G_syn_count_inh',
+        'G_syn_count_exc',
+    ]
+
+    def __init__(self, network_config: NetworkConfig, group_ids, G_flags: LocationGroupFlags,
+                 G_pos,
+                 device, bprint_allocated_memory):
+        super().__init__(device=device, bprint_allocated_memory=bprint_allocated_memory)
+
+        self._config: NetworkConfig = network_config
+
+        self.group_ids: torch.Tensor = group_ids
+        self.G_flags: LocationGroupFlags = G_flags
+
+        self.G_distance, self.G_delay_distance = self._G_delay_distance(network_config, G_pos)
+
+        self.G_stdp_config0 = self.izeros(self.shape)
+        self.G_stdp_config1 = self.izeros(self.shape)
+
+        self.G_avg_weight_inh = self.fzeros(self.shape)
+        self.G_avg_weight_exc = self.fzeros(self.shape)
+        self.G_syn_count_inh = self.izeros(self.shape)
+        self.G_syn_count_exc = self.izeros(self.shape)
+
+    @property
+    def shape(self):
+        return self.G_distance.shape
+
+    # noinspection PyPep8Naming
+    @staticmethod
+    def _G_delay_distance(network_config: NetworkConfig, G_pos: RegisteredVBO):
+        G_pos_distance = torch.cdist(G_pos.tensor, G_pos.tensor)
+        return G_pos_distance, ((network_config.D - 1) * G_pos_distance / G_pos_distance.max()).round().int()
+
+    def _stdp_distance_based_config(self, target_group, target_config: torch.Tensor):
+        distance_to_target_group = self.G_distance[:, target_group]
+
+        xx = distance_to_target_group.reshape(self._config.G, 1).repeat(1, self._config.G)
+
+        # noinspection PyUnresolvedReferences
+        mask = (xx > distance_to_target_group).T
+
+        target_config[mask] = 1
+        target_config[~mask] = -1
+        # noinspection PyUnresolvedReferences
+        target_config[(xx == distance_to_target_group).T] = 0
+
+    def set_active_output_groups(self, output_groups=None, ):
+        if output_groups is None:
+            output_groups = self.active_output_groups()
+        assert len(output_groups) == 2
+        output_group_types = self.G_flags.output_type[output_groups].type(torch.int64)
+
+        group0 = output_groups[output_group_types == 0].item()
+        group1 = output_groups[output_group_types == 1].item()
+
+        self._stdp_distance_based_config(group0, self.G_stdp_config0)
+        # noinspection PyUnusedLocal
+        b = self.to_dataframe(self.G_stdp_config0)
+
+        self._stdp_distance_based_config(group1, self.G_stdp_config1)
+
+    def active_output_groups(self):
+        return self.group_ids[self.G_flags.b_output_group.type(torch.bool)]

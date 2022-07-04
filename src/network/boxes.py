@@ -9,8 +9,12 @@ from vispy.visuals import MeshVisual, TextVisual
 from vispy.visuals.transforms import STTransform
 
 from network.network_config import NetworkConfig
-# from network.spiking_neural_network import SpikingNeuronNetwork
-from network.network_states import PropertyTensor, LocationGroupProperties, LocationGroupFlags
+from network.network_states import (
+    G2GInfoArrays,
+    PropertyTensor,
+    LocationGroupProperties,
+    LocationGroupFlags
+)
 from rendering import (
     Translate,
     BoxSystemLineVisual,
@@ -151,15 +155,15 @@ class SelectorBox(RenderedCudaObjectNode):
 class GroupBoxes(RenderedCudaObjectNode):
 
     def __init__(self, network_config: NetworkConfig, grid: NetworkGrid,
-                 connect, color=(0.1, 1., 1., 1.), meshes=None):
-        if meshes is None:
-            meshes = []
+                 connect, color=(0.1, 1., 1., 1.), other_visuals=None):
+        if other_visuals is None:
+            other_visuals = []
         self._visual = BoxSystemLineVisual(grid_unit_shape=grid.unit_shape,
                                            max_z=network_config.max_z,
                                            connect=connect,
                                            pos=grid.pos, color=color)
         self.grid = grid
-        super().__init__([self.visual] + meshes)
+        super().__init__([self.visual] + other_visuals)
 
         # noinspection PyTypeChecker
         self.set_gl_state(polygon_offset_fill=True,
@@ -168,8 +172,9 @@ class GroupBoxes(RenderedCudaObjectNode):
         self.transform = STTransform(translate=(0, 0, 0), scale=(1, 1, 1))
 
         self.unfreeze()
-        self.G_flags: Optional[LocationGroupProperties] = None
+        self.G_flags: Optional[LocationGroupFlags] = None
         self.G_props: Optional[LocationGroupProperties] = None
+        self.g2g_info_arrays : Optional[G2GInfoArrays] = None
         self.freeze()
 
     @property
@@ -181,9 +186,12 @@ class GroupBoxes(RenderedCudaObjectNode):
         return self.visual._line_visual._connect_ibo.id
 
     # noinspection PyMethodOverriding
-    def init_cuda_attributes(self, device, G_flags: LocationGroupFlags, G_props: LocationGroupProperties):
+    def init_cuda_attributes(
+            self, device, G_flags: LocationGroupFlags, G_props: LocationGroupProperties,
+            g2g_info_arrays: Optional[G2GInfoArrays] = None):
         self.G_flags: LocationGroupFlags = G_flags
         self.G_props: LocationGroupProperties = G_props
+        self.g2g_info_arrays: G2GInfoArrays = g2g_info_arrays
         super().init_cuda_attributes(device)
 
 
@@ -204,9 +212,7 @@ class GroupInfo(GroupBoxes):
         text_pos[:, 2] += grid.unit_shape[2] * .35
 
         self.group_id_key = 'group_ids'
-
-        self.group_id_texts = {'None': None,
-                               self.group_id_key: [str(i) for i in range(network_config.G)]}
+        self.group_id_texts = {'None': None, self.group_id_key: [str(i) for i in range(network_config.G)]}
 
         self.group_id_text_visual = TextVisual(text=self.group_id_texts[self.group_id_key],
                                                pos=text_pos, color='white', font_size=48)
@@ -218,8 +224,7 @@ class GroupInfo(GroupBoxes):
 
         text_pos[:, 2] -= grid.unit_shape[2] * .12
         # noinspection PyTypeChecker
-        self.G_flags_text_visual = TextVisual(text=None,
-                                              pos=text_pos, color='white', font_size=48)
+        self.G_flags_text_visual = TextVisual(text=None, pos=text_pos, color='white', font_size=48)
 
         self.G_props_texts = {'None': None}
 
@@ -228,15 +233,26 @@ class GroupInfo(GroupBoxes):
 
         text_pos[:, 2] -= grid.unit_shape[2] * .12
         # noinspection PyTypeChecker
-        self.G_props_text_visual = TextVisual(text=None,
-                                              pos=text_pos, color='white', font_size=48)
+        self.G_props_text_visual = TextVisual(text=None, pos=text_pos, color='white', font_size=48)
+
+        text_pos[:, 2] -= grid.unit_shape[2] * .12
+
+        self.G2G_info_texts = {'None': None}
+        for k in G2GInfoArrays.int_arrays_list:
+            self.G2G_info_texts[k] = {}
+        for k in G2GInfoArrays.float_arrays_list:
+            self.G2G_info_texts[k] = {}
+
+        # noinspection PyTypeChecker
+        self.G2G_info_text_visual = TextVisual(text=None, pos=text_pos, color='white', font_size=48)
 
         super().__init__(network_config=network_config, grid=grid,
                          connect=connect, color=color,
-                         meshes=[self._mesh,
-                                 self.group_id_text_visual,
-                                 self.G_flags_text_visual,
-                                 self.G_props_text_visual])
+                         other_visuals=[self._mesh,
+                                        self.group_id_text_visual,
+                                        self.G_flags_text_visual,
+                                        self.G_props_text_visual,
+                                        self.G2G_info_text_visual])
 
         self.unfreeze()
         self.colors_gpu: Optional[RegisteredVBO] = None
@@ -244,6 +260,7 @@ class GroupInfo(GroupBoxes):
         self.face_group_ids: Optional[torch.Tensor] = None
         self.G_flags_cache: Optional[dict] = {}
         self.G_props_cache: Optional[dict] = {}
+        self.G2G_info_cache: Optional[dict] = {}
         self.group_ids: Optional[torch.Tensor] = None
         self.freeze()
 
@@ -283,7 +300,17 @@ class GroupInfo(GroupBoxes):
 
         self._init_txt_visual(self.G_flags, self.G_flags_cache, self.G_flags_texts, self.G_flags_text_visual)
         self._init_txt_visual(self.G_props, self.G_props_cache, self.G_props_texts, self.G_props_text_visual)
+
+        for k in self.G2G_info_texts.keys():
+            if k != 'None':
+                # noinspection PyTypeChecker
+                t: np.array = getattr(self.g2g_info_arrays, k).T.cpu().numpy()
+                self.G2G_info_cache[k] = t
+                for g in range(self.grid.config.G):
+                    self.G2G_info_texts[k][g] = [str(v) for v in list(t[g])]
+        self.G2G_info_text_visual.text = self.G2G_info_texts[G2GInfoArrays.int_arrays_list[0]][0]
         self.group_ids = torch.arange(self.grid.config.G)
+
         return
 
     def set_group_id_text(self, key):
@@ -301,6 +328,7 @@ class GroupInfo(GroupBoxes):
                 txt: list[str] = text_collection[key]
                 for i in self.group_ids[diff.cpu()]:
                     txt[i] = str(current[i])
+                cache[key] = current
 
         visual.text = text_collection[key]
 
@@ -309,6 +337,22 @@ class GroupInfo(GroupBoxes):
 
     def set_g_props_text(self, key):
         self._set_text(key, self.G_props, self.G_props_cache, self.G_props_texts, self.G_props_text_visual)
+
+    def set_g2g_info_txt(self, group, key):
+        if key != 'None':
+            cached = self.G2G_info_cache[key][group]
+            current = getattr(self.g2g_info_arrays, key).T[group].cpu().numpy()
+            # noinspection PyTypeChecker
+            diff: np.ndarray = cached != current
+            if diff.any():
+                self.G2G_info_cache[key][group] = current
+                txt: list[str] = self.G2G_info_texts[key][group]
+                for i in self.group_ids[diff]:
+                    txt[i] = str(current[i])
+
+            self.G2G_info_text_visual.text = self.G2G_info_texts[key][group]
+        else:
+            self.G2G_info_text_visual.text = None
 
 
 # noinspection PyAbstractClass
@@ -324,7 +368,7 @@ class SelectedGroups(GroupBoxes):
 
         super().__init__(network_config=network_config, grid=grid,
                          connect=connect, color=color,
-                         meshes=[self._sensory_input_planes, self._output_planes])
+                         other_visuals=[self._sensory_input_planes, self._output_planes])
 
         self.unfreeze()
         self._input_color_array: Optional[RegisteredVBO] = None
@@ -341,7 +385,7 @@ class SelectedGroups(GroupBoxes):
 
     # noinspection PyMethodOverriding
     def init_cuda_attributes(self, device, G_flags: LocationGroupFlags, G_props: LocationGroupProperties):
-        super().init_cuda_attributes(device, G_flags=G_flags, G_props=G_props)
+        super().init_cuda_attributes(device, G_flags=G_flags, G_props=G_props, g2g_info_arrays=None)
         self.G_props.input_face_colors = self._input_color_array.tensor
         self.G_props.output_face_colors = self._output_color_array.tensor
 
@@ -685,7 +729,7 @@ class OutputGroups(IOGroups):
         if ((self.network.GPU.active_output_groups is None) or
                 (len(active_output_groups) != len(prev_act_output_grs)) or
                 (not bool((active_output_groups == prev_act_output_grs).all()))):
-            self.network.GPU.set_active_output_groups(active_output_groups)
+            self.network.GPU.g2g_info_arrays.set_active_output_groups(active_output_groups)
 
         self.actualize_colors()
 

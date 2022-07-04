@@ -304,7 +304,8 @@ class SpikingNeuronNetwork:
         self.input_cells.init_cuda_attributes(self.GPU.device, self.GPU.G_flags, self.GPU.G_props)
 
         app.set_group_info_context_as_current()
-        self.group_info_mesh.init_cuda_attributes(self.GPU.device, self.GPU.G_flags, self.GPU.G_props)
+        self.group_info_mesh.init_cuda_attributes(
+            self.GPU.device, self.GPU.G_flags, self.GPU.G_props, self.GPU.g2g_info_arrays)
         app.set_main_context_as_current()
 
         self.input_cells.src_weight = self.network_config.InitValues.Weights.SensorySource

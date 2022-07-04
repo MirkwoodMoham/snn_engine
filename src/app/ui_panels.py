@@ -1,10 +1,10 @@
 from dataclasses import dataclass, asdict
-from typing import Optional
+from typing import Optional, Tuple
 
-from PyQt6 import QtCore
+from PyQt6.QtCore import Qt, QRect
+from PyQt6.QtGui import QValidator
 from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import (
-    QApplication,
     QComboBox,
     QFrame,
     QLabel,
@@ -60,27 +60,36 @@ class ButtonMenuActions:
                                                                 icon_name='arrow-circle.png',
                                                                 status_tip='Refresh displayed G_flags values')
 
-    ACTUALIZE_G_PROPS_TEXT: ButtonMenuAction = ButtonMenuAction(menu_name='&Refresh displayed G_props',
-                                                                menu_short_cut='F8',
+    ACTUALIZE_G_PROPS_TEXT: ButtonMenuAction = ButtonMenuAction(menu_name='&Refresh displayed G2G_info',
+                                                                menu_short_cut='F6',
                                                                 icon_name='arrow-circle.png',
-                                                                status_tip='Refresh displayed G_props values')
+                                                                status_tip='Refresh displayed G2G_info values')
 
-    ACTUALIZE_G2G_FLAGS_TEXT: ButtonMenuAction = ButtonMenuAction(
+    ACTUALIZE_G2G_INFO_TEXT: ButtonMenuAction = ButtonMenuAction(
+        menu_short_cut='F5',
         menu_name='&Refresh displayed G2G_flags ',
         icon_name='arrow-circle.png',
         status_tip='Refresh displayed G2G_flags values')
 
-    TOGGLE_GROUP_IDS_TEXT = ButtonMenuAction(menu_name='&Group IDs',
-                                             checkable=True,
-                                             status_tip='Show/Hide Group IDs')
+    TOGGLE_GROUP_IDS_TEXT: ButtonMenuAction = ButtonMenuAction(menu_name='&Group IDs',
+                                                               menu_short_cut='Ctrl+F8',
+                                                               checkable=True,
+                                                               status_tip='Show/Hide Group IDs')
 
-    TOGGLE_G_FLAGS_TEXT = ButtonMenuAction(menu_name='&G_flags Text',
-                                           checkable=True,
-                                           status_tip='Show/Hide G_flags values')
+    TOGGLE_G_FLAGS_TEXT: ButtonMenuAction = ButtonMenuAction(menu_name='&G_flags Text',
+                                                             checkable=True,
+                                                             menu_short_cut='Ctrl+F7',
+                                                             status_tip='Show/Hide G_flags values')
 
-    TOGGLE_G_PROPS_TEXT = ButtonMenuAction(menu_name='&G_Props Text',
-                                           checkable=True,
-                                           status_tip='Show/Hide G_props values')
+    TOGGLE_G_PROPS_TEXT: ButtonMenuAction = ButtonMenuAction(menu_name='&G_Props Text',
+                                                             checkable=True,
+                                                             menu_short_cut='Ctrl+F6',
+                                                             status_tip='Show/Hide G_props values')
+
+    TOGGLE_G2G_INFO_TEXT: ButtonMenuAction = ButtonMenuAction(menu_name='&G2G_info Text',
+                                                              checkable=True,
+                                                              menu_short_cut='Ctrl+F5',
+                                                              status_tip='Show/Hide G2G_info values')
 
     def __post_init__(self):
         window_ = self.window
@@ -109,16 +118,18 @@ class MenuBar(QMenuBar):
             self.toggle_groups_ids: QAction = ButtonMenuActions.TOGGLE_GROUP_IDS_TEXT.action()
             self.toggle_g_flags: QAction = ButtonMenuActions.TOGGLE_G_FLAGS_TEXT.action()
             self.toggle_g_props: QAction = ButtonMenuActions.TOGGLE_G_PROPS_TEXT.action()
+            self.toggle_g2g_info: QAction = ButtonMenuActions.TOGGLE_G2G_INFO_TEXT.action()
 
             self.actualize_g_flags: QAction = ButtonMenuActions.ACTUALIZE_G_FLAGS_TEXT.action()
             self.actualize_g_props: QAction = ButtonMenuActions.ACTUALIZE_G_PROPS_TEXT.action()
+            self.actualize_g2g_info: QAction = ButtonMenuActions.ACTUALIZE_G2G_INFO_TEXT.action()
 
     def __init__(self, window):
 
         super().__init__(window)
         self.actions = self.MenuActions()
 
-        self.setGeometry(QtCore.QRect(0, 0, 440, 130))
+        self.setGeometry(QRect(0, 0, 440, 130))
         self.setObjectName("menubar")
 
         self.file_menu = self.addMenu('&File')
@@ -132,9 +143,11 @@ class MenuBar(QMenuBar):
         self.view_menu.addAction(self.actions.toggle_groups_ids)
 
         self.view_menu.addAction(self.actions.toggle_g_flags)
-        self.view_menu.addAction(self.actions.toggle_g_props)
         self.view_menu.addAction(self.actions.actualize_g_flags)
+        self.view_menu.addAction(self.actions.toggle_g_props)
         self.view_menu.addAction(self.actions.actualize_g_props)
+        self.view_menu.addAction(self.actions.toggle_g2g_info)
+        self.view_menu.addAction(self.actions.actualize_g2g_info)
 
 
 class UIPanel(QScrollArea):
@@ -148,7 +161,7 @@ class UIPanel(QScrollArea):
         self.setWidget(QWidget(self))
         self.widget().setLayout(QVBoxLayout())
 
-        self.widget().layout().setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
+        self.widget().layout().setAlignment(Qt.AlignmentFlag.AlignTop)
         self.widget().layout().setSpacing(2)
 
     # noinspection PyPep8Naming
@@ -203,7 +216,7 @@ class MainUILeft(UIPanel):
                                                         _min_value=0, _max_value=200)
 
             self.sensory_weight = SpinBoxSlider(name='Sensory',
-                                                boxlayout_orientation=QtCore.Qt.Orientation.Horizontal,
+                                                boxlayout_orientation=Qt.Orientation.Horizontal,
                                                 window=window,
                                                 func_=lambda x: float(x) / 100000 if x is not None else x,
                                                 func_inv_=lambda x: int(x * 100000) if x is not None else x,
@@ -272,10 +285,11 @@ class GroupInfoComboBox(QComboBox):
 
         self.setFixedHeight(28)
 
-    def add_items(self, item_list):
+    def add_items(self, item_list, set_current=1):
         for item in item_list:
             self.addItem(item)
-        self.setCurrentIndex(1)
+        if set_current is not None:
+            self.setCurrentIndex(set_current)
 
 
 class GroupInfoComboBoxFrame(QFrame):
@@ -310,6 +324,20 @@ class GroupInfoComboBoxFrame(QFrame):
             self.actualize_button.clicked.connect(func)
 
 
+class GroupValidator(QValidator):
+
+    def __init__(self, parent, group_ids):
+        self.group_ids = group_ids
+        super().__init__(parent)
+
+    def validate(self, a0: str, a1: int) -> Tuple['QValidator.State', str, int]:
+        if a0 in self.group_ids:
+            state = QValidator.State.Acceptable
+        else:
+            state = QValidator.State.Invalid
+        return (state, a0, a1)
+
+
 class G2GInfoComboBoxFrame(QFrame):
 
     def __init__(self, name, actualize_button=None, parent=None):
@@ -318,6 +346,8 @@ class G2GInfoComboBoxFrame(QFrame):
         self.layout().setContentsMargins(0, 0, 0, 0)
         self.src_group_combo_box = GroupInfoComboBox()
         self.src_group_combo_box.setMaximumWidth(50)
+        self.src_group_combo_box.setMaxVisibleItems(10)
+        self.src_group_combo_box.setEditable(True)
         self.value_combo_box = GroupInfoComboBox()
         self.label = QLabel(name)
         self.label.setMaximumWidth(80)
@@ -330,10 +360,7 @@ class G2GInfoComboBoxFrame(QFrame):
         else:
             self.actualize_button = None
 
-        # self.setBaseSize(32, 100)
         self.setFixedHeight(32)
-        # self.setMaximumWidth(220)
-        # self.setFra
 
     def __call__(self):
         return self.value_combo_box
@@ -345,6 +372,14 @@ class G2GInfoComboBoxFrame(QFrame):
         self.value_combo_box.currentTextChanged.connect(func)
         if self.actualize_button is not None:
             self.actualize_button.clicked.connect(func)
+
+    def set_src_group_validator(self, groups_ids):
+        v = GroupValidator(self, groups_ids)
+        self.src_group_combo_box.setValidator(v)
+
+    def init_src_group_combo_box(self, group_ids):
+        self.src_group_combo_box.add_items(group_ids, 0)
+        self.set_src_group_validator(group_ids)
 
 
 class GroupInfoPanel(UIPanel):
@@ -369,8 +404,9 @@ class GroupInfoPanel(UIPanel):
         self.add_combo_box(self.g_props_combobox)
 
         self.combo_boxes_collapsible1 = CollapsibleWidget(title='Group Info Display 1')
-        self.combo_boxes_collapsible1.add(G2GInfoComboBoxFrame(
-            'G2G_flags', ButtonMenuActions.ACTUALIZE_G2G_FLAGS_TEXT.button()))
+        self.g2g_info_combo_box = G2GInfoComboBoxFrame(
+            'G2G_info', ButtonMenuActions.ACTUALIZE_G2G_INFO_TEXT.button())
+        self.combo_boxes_collapsible1.add(self.g2g_info_combo_box)
 
         self.addWidget(self.combo_boxes_collapsible0)
         self.addWidget(self.combo_boxes_collapsible1)

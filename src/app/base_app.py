@@ -44,6 +44,7 @@ class BaseApp(Application):
 
         self.last_g_flags_text = None
         self.last_g_props_text = None
+        self.last_g2g_info_text = None
 
         # noinspection PyUnresolvedReferences
         native_app.aboutToQuit.connect(self.network.unregister_registered_buffers)
@@ -139,26 +140,35 @@ class BaseApp(Application):
         self.group_info_panel.group_ids_combobox().add_items(self.network.group_info_mesh.group_id_texts.keys())
         self.group_info_panel.g_flags_combobox().add_items(self.network.group_info_mesh.G_flags_texts.keys())
         self.group_info_panel.g_props_combobox().add_items(self.network.group_info_mesh.G_props_texts.keys())
+        g_txt = self.network.group_info_mesh.group_id_texts[self.network.group_info_mesh.group_id_key]
+        self.group_info_panel.g2g_info_combo_box.init_src_group_combo_box(g_txt)
+        self.group_info_panel.g2g_info_combo_box().add_items(self.network.group_info_mesh.G2G_info_texts.keys())
 
         self.group_info_panel.group_ids_combobox.connect(self.group_id_combo_box_text_changed)
         self.group_info_panel.g_flags_combobox.connect(self.g_flags_combo_box_text_changed)
         self.group_info_panel.g_props_combobox.connect(self.g_props_combo_box_text_changed)
+        self.group_info_panel.g2g_info_combo_box.connect(self.g2g_info_combo_box_text_changed)
 
         self.actions.actualize_g_flags.triggered.connect(self.g_flags_combo_box_text_changed)
         self.actions.actualize_g_props.triggered.connect(self.g_props_combo_box_text_changed)
+        self.actions.actualize_g2g_info.triggered.connect(self.g2g_info_combo_box_text_changed)
 
         self.actions.toggle_groups_ids.triggered.connect(self.toggle_group_id_text)
         self.actions.toggle_g_flags.triggered.connect(self.toggle_g_flags_text)
         self.actions.toggle_g_props.triggered.connect(self.toggle_g_props_text)
+        self.actions.toggle_g2g_info.triggered.connect(self.toggle_g2g_info_text)
 
         self.actions.toggle_groups_ids.setChecked(True)
         self.actions.toggle_g_flags.setChecked(True)
         self.actions.toggle_g_props.setChecked(True)
+        self.actions.toggle_g2g_info.setChecked(True)
 
         self.last_g_flags_text = self.group_info_panel.g_flags_combobox().currentText()
         self.last_g_props_text = self.group_info_panel.g_props_combobox().currentText()
+        self.last_g2g_info_text = self.group_info_panel.g2g_info_combo_box().currentText()
 
         self.group_info_panel.combo_boxes_collapsible0.toggle_collapsed()
+        self.group_info_panel.combo_boxes_collapsible1.toggle_collapsed()
 
     def _connect_g_props_sliders(self, network_config):
         self.main_ui_panel.sliders.thalamic_inh_input_current.connect_property(
@@ -206,6 +216,9 @@ class BaseApp(Application):
     def toggle_g_props_text(self):
         self._toggle_group_info_text(self.group_info_panel.g_props_combobox(), self.last_g_props_text)
 
+    def toggle_g2g_info_text(self):
+        self._toggle_group_info_text(self.group_info_panel.g2g_info_combo_box(), self.last_g2g_info_text)
+
     def g_flags_combo_box_text_changed(self, s=None):
         if not s:
             s = self.group_info_panel.g_flags_combobox().currentText()
@@ -228,6 +241,17 @@ class BaseApp(Application):
             self.actions.toggle_g_props.setChecked(False)
         print(s)
         self.network.group_info_mesh.set_g_props_text(s)
+
+    def g2g_info_combo_box_text_changed(self, s):
+        g = self.group_info_panel.g2g_info_combo_box.src_group_combo_box.currentText()
+        t = self.group_info_panel.g2g_info_combo_box().currentText()
+        if t != 'None':
+            self.actions.toggle_g_props.setChecked(True)
+            self.last_g2g_info_text = t
+        # else:
+            self.actions.toggle_g_props.setChecked(False)
+        print(g, t)
+        self.network.group_info_mesh.set_g2g_info_txt(int(g), t)
 
     def toggle_outergrid(self):
         self.network.outer_grid.visible = not self.network.outer_grid.visible
