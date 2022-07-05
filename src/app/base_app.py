@@ -33,9 +33,16 @@ class BaseApp(Application):
         if self._group_info_view_mode.windowed is True:
             self.location_group_info_window = self._init_windowed_group_info(network)
             self.group_info_panel = self.location_group_info_window.ui_panel_left
+            self.group_info_scene = self.location_group_info_window.scene_3d
         else:
             self.location_group_info_window = None
             self.group_info_panel = self.main_window.ui_right
+            if self._group_info_view_mode.split is True:
+                self.group_info_scene = self.main_window.group_info_scene
+            elif self._group_info_view_mode.scene is True:
+                self.group_info_scene = self.main_window.scene_3d
+            else:
+                raise NotImplementedError
 
         self.time_elapsed_until_last_off = 0
         self.update_switch = False
@@ -134,7 +141,7 @@ class BaseApp(Application):
             self.network.input_cells,
             self.network.input_cells.src_weight)
 
-        self.connect_group_info_combo_box()
+        # self.connect_group_info_combo_box()
 
     def connect_group_info_combo_box(self):
         self.group_info_panel.group_ids_combobox().add_items(self.network.group_info_mesh.group_id_texts.keys())
@@ -219,6 +226,10 @@ class BaseApp(Application):
     def toggle_g2g_info_text(self):
         self._toggle_group_info_text(self.group_info_panel.g2g_info_combo_box(), self.last_g2g_info_text)
 
+    def _set_g2g_color_bar_clim(self, clim):
+        if clim[0] is not None:
+            self.group_info_scene.color_bar.clim = clim
+
     def g_flags_combo_box_text_changed(self, s=None):
         if not s:
             s = self.group_info_panel.g_flags_combobox().currentText()
@@ -229,7 +240,8 @@ class BaseApp(Application):
 
             self.actions.toggle_g_flags.setChecked(False)
         print(s)
-        self.network.group_info_mesh.set_g_flags_text(s)
+        clim = self.network.group_info_mesh.set_g_flags_text(s)
+        self._set_g2g_color_bar_clim(clim)
 
     def g_props_combo_box_text_changed(self, s):
         if not s:
@@ -240,7 +252,8 @@ class BaseApp(Application):
         else:
             self.actions.toggle_g_props.setChecked(False)
         print(s)
-        self.network.group_info_mesh.set_g_props_text(s)
+        clim = self.network.group_info_mesh.set_g_props_text(s)
+        self._set_g2g_color_bar_clim(clim)
 
     def g2g_info_combo_box_text_changed(self, s):
         g = self.group_info_panel.g2g_info_combo_box.src_group_combo_box.currentText()
@@ -251,7 +264,8 @@ class BaseApp(Application):
         # else:
             self.actions.toggle_g_props.setChecked(False)
         print(g, t)
-        self.network.group_info_mesh.set_g2g_info_txt(int(g), t)
+        clim = self.network.group_info_mesh.set_g2g_info_txt(int(g), t)
+        self._set_g2g_color_bar_clim(clim)
 
     def toggle_outergrid(self):
         self.network.outer_grid.visible = not self.network.outer_grid.visible
@@ -265,12 +279,6 @@ class BaseApp(Application):
             if self.neuron_plot_window is not None:
                 self.neuron_plot_window.hide()
 
-            self.network.group_info_mesh.group_id_text_visual.pos += 1
-
-            from vispy.color import Colormap
-
-            self.main_window.group_info_scene.color_bar.cmap = Colormap([(0., 1., 1., 1.), (1., 0., 1., 1.)])
-            self.main_window.group_info_scene.update()
         else:
             # self.buttons.toggle_outergrid.setText('Show OuterGrid')
             self.main_ui_panel.buttons.toggle_outergrid.setChecked(False)
@@ -279,9 +287,6 @@ class BaseApp(Application):
                 self.main_window.scene_3d.group_firings_plot.visible = False
             if self.neuron_plot_window is not None:
                 self.neuron_plot_window.show()
-            from vispy.color import Colormap
-            self.main_window.group_info_scene.color_bar.cmap = Colormap([(1., 1., 1., 1.), (0., 1., 0., 1.)])
-            self.main_window.group_info_scene.update()
 
     def trigger_update_switch(self):
         self.update_switch = not self.update_switch

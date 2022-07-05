@@ -280,19 +280,37 @@ class GroupInfo(GroupBoxesBase):
                 visual.text = text_collection[k]
                 b_visual_set = True
 
-    def _actualize_colors(self, values, key):
+    @staticmethod
+    def _normalize(values, interval):
+        i0 = interval[0]
+        i1 = interval[1]
+        if i0 == i1:
+            if i0 < 0:
+                i1 = 0
+            else:
+                i0 = 0
+
+        if [i0, i1] != [0, 1]:
+            values = ((values - ((i0 + i1) / 2))
+                      / (i1 - i0) + .5)
+        return values, i0, i1
+
+    def _actualize_colors(self, values, key=None, interval=None):
         c: Colormap = self.color_maps['default']
-        if hasattr(self.G_flags._rows, key):
+
+        if (key is not None) and hasattr(self.G_flags._rows, key):
+            assert interval is None
             interval = getattr(self.G_flags._rows, key).interval
-            if interval != [0, 1]:
-                values = ((values - ((interval[0] + interval[1]) / 2))
-                          / (interval[1] - interval[0]) + .5)
+            # elif hasattr(self.G_props._rows, key):
+            #     interval =
+
+        values, i0, i1 = self._normalize(values, interval)
 
         colors = c.map(values[self.face_group_ids])
         colors[:, 3] = .7
         colors = np.repeat(colors, 6, axis=0)
         self.colors_gpu._tensor[:] = torch.from_numpy(colors).to(self._cuda_device)
-        return
+        return i0, i1
 
     def init_cuda_arrays(self):
         self.colors_gpu: RegisteredVBO = self._mesh.face_color_array(self._cuda_device)
@@ -339,23 +357,32 @@ class GroupInfo(GroupBoxesBase):
             cached = cache[key]
             # noinspection PyTypeChecker
             current: torch.Tensor = getattr(property_tensor, key)
+            current_cpu = current.cpu().numpy()
+            if property_tensor is self.G_props:
+                interval = [np.min(current_cpu), np.max(current_cpu)]
+            else:
+                interval = None
+
             # noinspection PyTypeChecker
             diff: torch.Tensor = cached != current
-            self._actualize_colors(current.cpu().numpy(), key)
+            i0, i1 = self._actualize_colors(current_cpu, key, interval=interval)
             if diff.any():
-                current = current.cpu().numpy()
                 txt: list[str] = text_collection[key]
                 for i in self.group_ids[diff.cpu()]:
-                    txt[i] = str(current[i])
+                    txt[i] = str(current_cpu[i])
                 cache[key] = current
 
+        else:
+            i0, i1 = None, None
+
         visual.text = text_collection[key]
+        return i0, i1
 
     def set_g_flags_text(self, key):
-        self._set_text(key, self.G_flags, self.G_flags_cache, self.G_flags_texts, self.G_flags_text_visual)
+        return self._set_text(key, self.G_flags, self.G_flags_cache, self.G_flags_texts, self.G_flags_text_visual)
 
     def set_g_props_text(self, key):
-        self._set_text(key, self.G_props, self.G_props_cache, self.G_props_texts, self.G_props_text_visual)
+        return self._set_text(key, self.G_props, self.G_props_cache, self.G_props_texts, self.G_props_text_visual)
 
     def set_g2g_info_txt(self, group, key):
         if key != 'None':
@@ -363,6 +390,8 @@ class GroupInfo(GroupBoxesBase):
             current = getattr(self.g2g_info_arrays, key).T[group].cpu().numpy()
             # noinspection PyTypeChecker
             diff: np.ndarray = cached != current
+            # print(current)
+            i0, i1 = self._actualize_colors(current, None, interval=[np.min(current), np.max(current)])
             if diff.any():
                 self.G2G_info_cache[key][group] = current
                 txt: list[str] = self.G2G_info_texts[key][group]
@@ -372,6 +401,8 @@ class GroupInfo(GroupBoxesBase):
             self.G2G_info_text_visual.text = self.G2G_info_texts[key][group]
         else:
             self.G2G_info_text_visual.text = None
+            i0, i1 = None, None
+        return i0, i1
 
 
 # noinspection PyAbstractClass

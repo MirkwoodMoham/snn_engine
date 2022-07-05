@@ -161,10 +161,11 @@ class MainSceneCanvas(BaseEngineSceneCanvas):
 
         row_span_0 = 2
         col_span0 = 2
+        plot_row0 = 0
         plot_col0 = 0
         plot_col1 = 4
         plot_col2 = plot_col1 + col_span0
-        plot_row1 = row_span_0
+        plot_row1 = plot_row0 + row_span_0
         row_span10 = 2
         row_span_11 = 1
         height_min0 = 350
@@ -180,7 +181,7 @@ class MainSceneCanvas(BaseEngineSceneCanvas):
             self.scatter_plot = ScatterPlotWidget(plotting_confing=plotting_config,
                                                   width_max=600, height_max=height_max1)
 
-            self.grid.add_widget(self.voltage_plot, 0, plot_col0, row_span=row_span_0, col_span=col_span0)
+            self.grid.add_widget(self.voltage_plot, plot_row0, plot_col0, row_span=row_span_0, col_span=col_span0)
             self.grid.add_widget(self.scatter_plot, plot_row1, plot_col0, row_span=row_span10, col_span=col_span0)
         else:
             self.voltage_plot = None
@@ -189,6 +190,8 @@ class MainSceneCanvas(BaseEngineSceneCanvas):
         if plotting_config.group_info_view_mode.scene is True:
             self.group_firings_plot = GroupFiringsPlotWidget(plotting_confing=plotting_config)
             self.grid.add_widget(self.group_firings_plot, plot_row1, plot_col1, col_span=col_span0, row_span=row_span10)
+            self.color_bar = GroupInfoColorBar()
+            self.grid.add_widget(self.color_bar, plot_row1, plot_col0 + col_span0, row_span10, 1)
         else:
             self.group_firings_plot = None
 
@@ -398,7 +401,6 @@ class LocationGroupInfoCanvas(BaseEngineSceneCanvas):
         self.grid.add_widget(self.group_firings_plot, 5, 5, col_span=2, row_span=6)
 
         self.color_bar = GroupInfoColorBar()
-
         self.grid.add_widget(self.color_bar, 5, 0, 6, 1)
 
         self.freeze()

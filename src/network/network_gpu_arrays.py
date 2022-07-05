@@ -124,7 +124,7 @@ class NetworkGPUArrays(GPUArrayCollection):
                  model=IzhikevichModel,
                  ):
 
-        super(NetworkGPUArrays, self).__init__(device=device, bprint_allocated_memory=config.N > 1000)
+        super().__init__(device=device, bprint_allocated_memory=config.N > 1000)
 
         self._config: NetworkConfig = config
         self._plotting_config: PlottingConfig = plotting_config
@@ -946,7 +946,10 @@ class NetworkGPUArrays(GPUArrayCollection):
 
     def update(self):
 
-        if self.Simulation.t % 1000 == 0:
+        if self.Simulation.t % 100 == 0:
+            print('t =', self.Simulation.t)
+        # if self.Simulation.t % 1000 == 0:
+        if False:
             self.Simulation.calculate_avg_group_weight()
             a = self.to_dataframe(self.g2g_info_arrays.G_avg_weight_inh)
             b = self.to_dataframe(self.g2g_info_arrays.G_avg_weight_exc)

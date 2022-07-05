@@ -10,6 +10,15 @@ from network import (
 from app import BaseApp
 
 
+# TODO: G2G colors
+# TODO: group_info_mesh face sizes
+# TODO: better stdp G2G config
+# TODO: monitor learning
+
+# TODO (optional) gpu side group_info_mesh face color actualization
+# TODO (optional) group selection via selector box
+# TODO (optional, difficult) group selection via click
+
 class EngineConfig:
 
     N: int = 25 * 10 ** 3
@@ -23,7 +32,7 @@ class EngineConfig:
     plotting = PlottingConfig(n_voltage_plots=100, voltage_plot_length=100,
                               n_scatter_plots=1000, scatter_plot_length=1000,
                               windowed_neuron_plots=False,
-                              group_info_view_mode='split',
+                              group_info_view_mode='scene',
                               network_config=network)
 
 
