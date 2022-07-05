@@ -119,7 +119,7 @@ class GroupFiringsPlotWidget(PlotWidget):
 class GroupInfoColorBar(ColorBarWidget):
 
     def __init__(self):
-        super().__init__(label="ColorBarWidget", clim=(0, 99), border_color='white',
+        super().__init__(clim=(0, 99), border_color='white',
                          cmap="cool", orientation="right", border_width=1, label_color='white')
 
     @property

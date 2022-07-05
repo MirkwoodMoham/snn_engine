@@ -26,8 +26,7 @@ class PlottingGPUArrays(GPUArrayCollection):
                  device, shapes: NetworkArrayShapes,
                  buffers: BufferCollection,
                  bprint_allocated_memory,
-                 app
-                 ):
+                 app):
 
         super().__init__(device=device, bprint_allocated_memory=bprint_allocated_memory)
 
@@ -154,6 +153,9 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.G_pos: RegisteredVBO = RegisteredVBO(buffers.selected_group_boxes_vbo, shapes.G_pos, self.device)
         self.registered_buffers.append(self.G_pos)
 
+        # TODO: overflow? (N=25000, t=2106)
+        a = self.izeros((1, 1))
+
         self.G_flags = LocationGroupFlags(self._config.G, device=self.device, grid=grid,
                                           select_ibo=buffers.selected_group_boxes_ibo)
         self.registered_buffers.append(self.G_flags.selected_array)
@@ -199,6 +201,9 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.Firing_counts = self.izeros((1, T * 2))
 
         self.G_firing_count_hist = self.izeros((self._plotting_config.scatter_plot_length, self._config.G))
+
+        self.G_stdp_config0 = self.izeros((self._config.G, self._config.G))
+        self.G_stdp_config1 = self.izeros((self._config.G, self._config.G))
 
         self.Simulation = self._init_sim(T, plotting_config)
 
@@ -346,6 +351,11 @@ class NetworkGPUArrays(GPUArrayCollection):
             G_delay_distance=G_delay_distance.data_ptr(),
             G_neuron_counts=G_neuron_counts.data_ptr())
         self.validate_G_neuron_counts()
+
+    def _G_delay_distance(self, G_pos: RegisteredVBO):
+        # return None, None
+        G_pos_distance = torch.cdist(G_pos.tensor, G_pos.tensor)
+        return G_pos_distance, ((self._config.D - 1) * G_pos_distance / G_pos_distance.max()).round().int()
 
     def _curand_states(self):
         cu = snn_construction_gpu.CuRandStates(self._config.N).ptr()
@@ -948,8 +958,8 @@ class NetworkGPUArrays(GPUArrayCollection):
 
         if self.Simulation.t % 100 == 0:
             print('t =', self.Simulation.t)
-        # if self.Simulation.t % 1000 == 0:
-        if False:
+        if self.Simulation.t % 1000 == 0:
+        # if False:
             self.Simulation.calculate_avg_group_weight()
             a = self.to_dataframe(self.g2g_info_arrays.G_avg_weight_inh)
             b = self.to_dataframe(self.g2g_info_arrays.G_avg_weight_exc)
@@ -966,6 +976,14 @@ class NetworkGPUArrays(GPUArrayCollection):
             print()
 
         for i in range(self._config.sim_updates_per_frame):
+            self.Simulation.update(False)
+            self.Simulation.update(False)
+            self.Simulation.update(False)
+            self.Simulation.update(False)
+            self.Simulation.update(False)
+            self.Simulation.update(False)
+            self.Simulation.update(False)
+            self.Simulation.update(False)
             self.Simulation.update(False)
 
             # print(self.G_firing_count_hist.flatten()[67 + (self.Simulation.t-1) * self._config.G])

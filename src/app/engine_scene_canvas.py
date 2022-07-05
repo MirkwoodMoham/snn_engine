@@ -332,7 +332,8 @@ class VoltagePlotSceneCanvas(BaseEngineSceneCanvas):
     def __init__(self,
                  conf: CanvasConfig,
                  app: Optional[Application],
-                 plotting_config: PlottingConfig):
+                 plotting_config: PlottingConfig,
+                 display_time: bool = False):
 
         super().__init__(conf, app)
 
@@ -345,9 +346,10 @@ class VoltagePlotSceneCanvas(BaseEngineSceneCanvas):
 
         self.plot = VoltagePlotWidget(plotting_confing=plotting_config, height_min=200)
         main_grid.add_widget(self.plot, row=0, row_span=9, col_span=4)
-        self.table = TextTableWidget(labels=['t'], height_max_global=25)
-        self.table.height_max = 25
-        main_grid.add_widget(self.table, 0, 3)
+        if display_time is True:
+            self.table = TextTableWidget(labels=['t'], height_max_global=25)
+            self.table.height_max = 25
+            main_grid.add_widget(self.table, 0, 3)
 
 
 class ScatterPlotSceneCanvas(BaseEngineSceneCanvas):
@@ -378,7 +380,8 @@ class ScatterPlotSceneCanvas(BaseEngineSceneCanvas):
 
 class LocationGroupInfoCanvas(BaseEngineSceneCanvas):
 
-    def __init__(self, conf: CanvasConfig, app: Optional[Application], plotting_config: PlottingConfig):
+    def __init__(self, conf: CanvasConfig, app: Optional[Application], plotting_config: PlottingConfig,
+                 display_time: bool = False):
 
         super().__init__(conf, app)
         self.unfreeze()
@@ -391,10 +394,10 @@ class LocationGroupInfoCanvas(BaseEngineSceneCanvas):
 
         self.grid = self.view.add_grid()
 
-        self.table = TextTableWidget(labels=['t'], height_max_global=25)
-        self.table.height_max = 25
-
-        self.grid.add_widget(self.table, 0, 6)
+        if display_time is True:
+            self.table = TextTableWidget(labels=['t'], height_max_global=25)
+            self.table.height_max = 25
+            self.grid.add_widget(self.table, 0, 6)
 
         self.group_firings_plot = GroupFiringsPlotWidget(plotting_confing=plotting_config, width_max=600)
 

@@ -26,7 +26,7 @@ class BaseApp(Application):
         # keep order for vbo numbers (2/3)
 
         if self._plotting_config.windowed_neuron_plots is True:
-            self.neuron_plot_window = self._init_neuron_plot_window(network)
+            self.neuron_plot_window: NeuronPlotWindow = self._init_neuron_plot_window(network)
         else:
             self.neuron_plot_window = None
 
@@ -141,7 +141,7 @@ class BaseApp(Application):
             self.network.input_cells,
             self.network.input_cells.src_weight)
 
-        # self.connect_group_info_combo_box()
+        self.connect_group_info_combo_box()
 
     def connect_group_info_combo_box(self):
         self.group_info_panel.group_ids_combobox().add_items(self.network.group_info_mesh.group_id_texts.keys())
@@ -152,6 +152,7 @@ class BaseApp(Application):
         self.group_info_panel.g2g_info_combo_box().add_items(self.network.group_info_mesh.G2G_info_texts.keys())
 
         self.group_info_panel.group_ids_combobox.connect(self.group_id_combo_box_text_changed)
+        self.group_id_combo_box_text_changed(self.network.group_info_mesh.group_id_key)
         self.group_info_panel.g_flags_combobox.connect(self.g_flags_combo_box_text_changed)
         self.group_info_panel.g_props_combobox.connect(self.g_props_combo_box_text_changed)
         self.group_info_panel.g2g_info_combo_box.connect(self.g2g_info_combo_box_text_changed)
@@ -203,7 +204,8 @@ class BaseApp(Application):
 
     def group_id_combo_box_text_changed(self, s):
         print(s)
-        self.network.group_info_mesh.set_group_id_text(s)
+        clim = self.network.group_info_mesh.set_group_id_text(s)
+        self._set_g2g_color_bar_clim(clim)
 
     @staticmethod
     def _toggle_group_info_text(combobox, last_value_attr):
@@ -317,10 +319,13 @@ class BaseApp(Application):
         if self.update_switch is True:
             self.network.GPU.update()
             t = str(self.network.GPU.Simulation.t)
-            if self.neuron_plot_window is not None:
-                self.neuron_plot_window.voltage_plot_sc.table.t.text = t
-                self.neuron_plot_window.scatter_plot_sc.table.t.text = t
+            if self.neuron_plot_window:
+                self.neuron_plot_window.voltage_plot_sc.update()
+                self.neuron_plot_window.scatter_plot_sc.update()
+                # self.neuron_plot_window.voltage_plot_sc.table.t.text = t
+                # self.neuron_plot_window.scatter_plot_sc.table.t.text = t
             if self._group_info_view_mode.split is True:
-                self.main_window.group_info_scene.table.t.text = t
+                self.main_window.group_info_scene.update()
+                # self.main_window.group_info_scene.table.t.text = t
             self.main_window.scene_3d.table.t.text = t
             self.main_window.scene_3d.table.update_duration.text = str(self.network.GPU.Simulation.update_duration)

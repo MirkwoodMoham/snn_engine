@@ -213,6 +213,7 @@ class GroupInfo(GroupBoxesBase):
         text_pos[:, 2] += grid.unit_shape[2] * .35
 
         self.group_id_key = 'group_ids'
+        self.group_ids_cpu = None
         self.group_id_texts = {'None': None, self.group_id_key: [str(i) for i in range(network_config.G)]}
 
         self.group_id_text_visual = TextVisual(text=self.group_id_texts[self.group_id_key],
@@ -265,7 +266,7 @@ class GroupInfo(GroupBoxesBase):
         self.G_flags_cache: Optional[dict] = {}
         self.G_props_cache: Optional[dict] = {}
         self.G2G_info_cache: Optional[dict] = {}
-        self.group_ids: Optional[torch.Tensor] = None
+        self.group_ids_gpu: Optional[torch.Tensor] = None
         self.freeze()
 
     @staticmethod
@@ -345,12 +346,14 @@ class GroupInfo(GroupBoxesBase):
                 for g in range(self.grid.config.G):
                     self.G2G_info_texts[k][g] = [str(v) for v in list(t[g])]
         self.G2G_info_text_visual.text = self.G2G_info_texts[G2GInfoArrays.int_arrays_list[0]][0]
-        self.group_ids = torch.arange(self.grid.config.G)
-
+        self.group_ids_gpu = torch.arange(self.grid.config.G)
+        self.group_ids_cpu = self.group_ids_gpu.cpu().numpy()
         return
 
     def set_group_id_text(self, key):
+        i0, i1 = self._actualize_colors(self.group_ids_cpu, None, interval=[0, self.grid.config.G - 1])
         self.group_id_text_visual.text = self.group_id_texts[key]
+        return i0, i1
 
     def _set_text(self, key, property_tensor: PropertyTensor, cache: dict, text_collection: dict, visual: TextVisual):
         if key != 'None':
@@ -368,7 +371,7 @@ class GroupInfo(GroupBoxesBase):
             i0, i1 = self._actualize_colors(current_cpu, key, interval=interval)
             if diff.any():
                 txt: list[str] = text_collection[key]
-                for i in self.group_ids[diff.cpu()]:
+                for i in self.group_ids_cpu[diff.cpu().numpy()]:
                     txt[i] = str(current_cpu[i])
                 cache[key] = current
 
@@ -395,7 +398,7 @@ class GroupInfo(GroupBoxesBase):
             if diff.any():
                 self.G2G_info_cache[key][group] = current
                 txt: list[str] = self.G2G_info_texts[key][group]
-                for i in self.group_ids[diff]:
+                for i in self.group_ids_gpu[diff]:
                     txt[i] = str(current[i])
 
             self.G2G_info_text_visual.text = self.G2G_info_texts[key][group]

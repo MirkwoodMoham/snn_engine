@@ -284,7 +284,7 @@ class LocationGroupFlags(PropertyTensor):
         super().__init__(shape)
         nbytes = 4
         self.selected_array = RegisteredGPUArray.from_buffer(
-            select_ibo, config=GPUArrayConfig(shape=(self._G, 1),
+            select_ibo, config=GPUArrayConfig(shape=(self._G+1, 1),
                                               strides=(2 * nbytes, nbytes),
                                               dtype=np.int32, device=device))
 
@@ -316,12 +316,11 @@ class LocationGroupFlags(PropertyTensor):
     @property
     def selected(self):
         # noinspection PyUnresolvedReferences
-        return (self.selected_array.tensor != self._G).flatten()
+        return (self.selected_array.tensor != self._G).flatten()[: self._G]
 
     @selected.setter
     def selected(self, mask):
-        self.selected_array.tensor[:] = torch.where(mask.reshape((self._G, 1)),
-                                                    self.group_ids, self._G)
+        self.selected_array.tensor[:self._G] = torch.where(mask.reshape((self._G, 1)), self.group_ids, self._G)
         if self.selection_flag is not None:
             setattr(self, self.selection_flag, mask)
 
@@ -492,7 +491,7 @@ class G2GInfoArrays(GPUArrayCollection):
     # noinspection PyPep8Naming
     @staticmethod
     def _G_delay_distance(network_config: NetworkConfig, G_pos: RegisteredVBO):
-        G_pos_distance = torch.cdist(G_pos.tensor, G_pos.tensor)
+        G_pos_distance = torch.cdist(G_pos.tensor[: -1], G_pos.tensor[:-1])
         return G_pos_distance, ((network_config.D - 1) * G_pos_distance / G_pos_distance.max()).round().int()
 
     def _stdp_distance_based_config(self, target_group, target_config: torch.Tensor):

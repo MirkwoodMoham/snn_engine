@@ -29,7 +29,7 @@ class NetworkArrayShapes:
 
         # GROUPS (location-based)
 
-        self.G_pos = (config.G, 3)  # position of each location group; dtype=np.int32
+        self.G_pos = (config.G + 1, 3)  # position of each location group; dtype=np.int32
         self.G_rep = (config.G, config.G)
         self.G_delay_counts = (config.G, config.D + 1)  # number of groups per delays; dtype=np.int32
         # G_neuron_counts-layout:
