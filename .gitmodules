@@ -1,3 +1,6 @@
 [submodule "inc/pybind11"]
 	path = inc/pybind11
 	url = https://github.com/pybind/pybind11.git
+[submodule "inc/sphinxcontrib-pseudocode"]
+	path = inc/sphinxcontrib-pseudocode
+	url = https://github.com/xxks-kkk/sphinxcontrib-pseudocode.git
