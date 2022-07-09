@@ -68,8 +68,11 @@ See [TODO:source].
         \STATE $\text{syn}_{\text{start}} = \text{PreSynIndices}_N(N_{src})$
         \STATE $\text{syn}_{\text{end}} = \text{PreSynIndices}_N(N_{src} + 1) - 1$
 
-        \FOR{$s$ = $\text{syn}_{\text{start}}$ to $\text{syn}_{\text{end}}$ }
-            \STATE $N_{pre} = \text{Groups}_N[N_{src}]$
+        \FOR{$s$ = $\text{syn}_{\text{start}}$ to $\text{syn}_{\text{end}}$}
+            \STATE $N_{pre} = \text{Synapses}_N[N_{src}]$
+
+
+
         \ENDFOR
 
     \ENDIF

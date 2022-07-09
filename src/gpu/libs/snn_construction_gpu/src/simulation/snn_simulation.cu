@@ -1524,7 +1524,7 @@ __global__ void fill_N_rep_snk_counts(
 }
 
 
-__global__ void fill_N_rep_pre_synaptic(
+__global__ void fill_N_rep_pre_synaptic_buffer(
 	const int N,
 	const int S,
 	int* N_rep,
@@ -1532,6 +1532,13 @@ __global__ void fill_N_rep_pre_synaptic(
 	int* N_rep_pre_synaptic_idx,
 	int* N_rep_pre_synaptic_counts
 ){
+	
+	// Fill Buffer with the indices of the sysnapses in N_rep.
+	// Dividing such a "N_rep-synapse-index" by S yields the pre-Synaptic Neuron. 
+	// The write indices (for the Buffer-array) are given by N_rep_pre_synaptic_counts.
+	// The values in Buffer will be copied to N_rep_pre_synaptic_idx in the 
+	// fill_N_rep_pre_synaptic_idx-kernel.
+
 	const int src_N = blockIdx.x * blockDim.x + threadIdx.x; 
 
 	if (src_N < N){
@@ -1539,17 +1546,18 @@ __global__ void fill_N_rep_pre_synaptic(
 		int snk_N;
 		int write_idx;
 	
-		int read_idx;
+		int synapse_idx;
 
 		for (int s = 0; s < S; s++){
+			
+			synapse_idx = src_N + s * N;
 
-			read_idx = src_N + s * N;
-
-			snk_N = N_rep[read_idx];
+			snk_N = N_rep[synapse_idx];
 			write_idx = N_rep_pre_synaptic_counts[snk_N];
 			
-			while (read_idx != -1){
-				read_idx = atomicExch(&Buffer[write_idx], read_idx);
+			while (synapse_idx != -1){
+				
+				synapse_idx = atomicExch(&Buffer[write_idx], synapse_idx);
 				N_rep_pre_synaptic_idx[write_idx] = snk_N;
 				write_idx++;
 			}
@@ -1698,7 +1706,7 @@ void SnnSimulation::actualize_N_rep_pre_synaptic(){
 
 	checkCudaErrors(cudaDeviceSynchronize());
 
-	fill_N_rep_pre_synaptic KERNEL_ARGS2(launch_pars.grid3, launch_pars.block3)(
+	fill_N_rep_pre_synaptic_buffer KERNEL_ARGS2(launch_pars.grid3, launch_pars.block3)(
 		N,
 		S,
 		N_rep,
