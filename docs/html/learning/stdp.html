@@ -170,12 +170,25 @@
 <p>Notation:</p>
 <div class="math notranslate nohighlight">
 \[\begin{split}\begin{eqnarray}
+    N &amp;:&amp; \text{number of Neurons}, \\
+    G &amp;:&amp; \text{number of Location based groups}, \\
+    S &amp;:&amp; \text{number of Synapses per neuron}, \\
     d &amp;:&amp; \text{delay}, \\
-    W &amp;:&amp; \text{Weights}, \\
-    N_{src} &amp;:&amp; \text{ ID of the pre-synaptic Neuron,} \\
-    N_{snk} &amp;:&amp; \text{ ID of the post-synaptic Neuron,} \\
-    G_{src} &amp;:&amp; \text{ Group-ID of the pre-synaptic Neuron,} \\
-    G_{snk} &amp;:&amp; \text{ Group-ID of the post-synaptic Neuron.}
+    \text{Rep}_{\text{}N} &amp;:&amp; \text{Synapses }; \text{ Network representation } (\text{shape: }N \times S), \\
+    \text{W} &amp;:&amp; \text{weights } (\text{shape: }N \times S), \\
+    \text{Rep}_{\text{}pre} &amp;:&amp; \text{indices of synapses } (\text{in }N_{\text{rep}})
+    \text{ directed at a neuron } (\text{shape: }N * S (\times 0)), \\
+    \text{Group}_N &amp;:&amp; \text{ function to get the group-ID of a neuron,}\\
+    \text{Type}_N &amp;:&amp; \text{ function to get the type of a neuron (inhibitory (1) or excitatory (2)),}\\
+    N_{pre\text{-}src} &amp;:&amp; \text{ ID of a pre-synaptic Neuron to a (source) neuron,} \\
+    N_{src} &amp;:&amp; \text{ ID of a pre-synaptic (source) neuron,} \\
+    N_{snk} &amp;:&amp; \text{ ID of a post-synaptic (sink) neuron,} \\
+    G_{src} &amp;:&amp; \text{ group-ID of a pre-synaptic neuron,} \\
+    G_{snk} &amp;:&amp; \text{ group-ID of a post-synaptic neuron,}\\
+    \text{LastFiringTime}_N &amp;:&amp; \text{ last known firing time of a Neuron,} \\
+    \text{STDPConfig}_G &amp;:&amp; \text{Current group to group STDP-Configuration (-1, 0 or 1) }
+        (\text{shape: }G \times G)
+    .\\
 \end{eqnarray}\end{split}\]</div>
 <p>R-STDP constants</p>
 <p>See [TODO:source].</p>
@@ -200,18 +213,29 @@
 
 \PROCEDURE{Downstream-STDP}{$N_{src}, d, t$}
 
-    \STATE $G_{src} = \text{Groups}_N[N_{src}]$
+    \STATE $G_{src} = \text{Group}_N[N_{src}]$
     \STATE $\text{syn}_{\text{start}} = \text{SynDelayIndices}_N(N_{src}, d)$
     \STATE $\text{syn}_{\text{end}} = \text{SynDelayIndices}_N(N_{src}, d + 1) - 1$
 
     \FOR{$s$ = $\text{syn}_{\text{start}}$ to $\text{syn}_{\text{end}}$ }
 
-        \STATE $N_{snk} = \text{Synapses}_N[N_{src}, s]$
-        \STATE $G_{snk} = \text{Groups}_N[N_{snk}]$
+        \STATE $N_{snk} = \text{Rep}_{\text{}N}[N_{src}, s]$
+        \STATE $G_{snk} = \text{Group}_N[N_{snk}]$
 
-        \IF{$(t - \text{LastFiringTime}[N_{snk}]) &lt; d$ \AND $\text{STDPConfig}_G[G_{src}, G_{snk}] &gt; 0$}
-            \STATE $w = \text{W}[N_{src}, N_{snk}]$
-            \STATE $\text{W}[N_{src}, N_{snk}]$ += ($\alpha * \Phi_r * a_{rm} + \beta * \Phi_p * a_{pp}$) * |w| * (1 - |w|)
+        \IF{$(t - \text{LastFiringTime}_N[N_{snk}]) &lt; d$ \AND $\text{STDPConfig}_G[G_{src}, G_{snk}] &gt; 0$}
+            \STATE $w = |\text{W}[N_{src}, N_{snk}]|$
+
+            \IF{$w &lt; 1$}
+
+                \IF{$\text{Type}_N(N_{snk}) == 2$}
+                    \STATE $\text{W}[N_{src}, N_{snk}]$
+                    += ($\alpha * \Phi_r * a_{rm} + \beta * \Phi_p * a_{pp}$) * w * (1 - w)
+                \ELSIF{$\text{Type}_N(N_{snk}) == 1$}
+                    \STATE $\text{W}[N_{pre\text{-}src}, N_{src}]$
+                    += ($\alpha * \Phi_r * a_{rp} + \beta * \Phi_p * a_{pm}$) * w * (1 - w)
+                \ENDIF
+
+            \ENDIF
         \ENDIF
 
     \ENDFOR
@@ -222,8 +246,27 @@
     \STATE $\text{syn}_{\text{start}} = \text{PreSynIndices}_N(N_{src})$
     \STATE $\text{syn}_{\text{end}} = \text{PreSynIndices}_N(N_{src} + 1) - 1$
 
-    \FOR{$s$ = $\text{syn}_{\text{start}}$ to $\text{syn}_{\text{end}}$ }
+    \FOR{$s$ = $\text{syn}_{\text{start}}$ to $\text{syn}_{\text{end}}$}
+        \STATE $i = \text{n}[s]$
+        \STATE $w = |\text{flatten}(\text{W})[i]| ( = |\text{W}[N_{pre\text{-}src}, N_{src}]|)$
+        \IF{$w &lt; 1$}
+            \STATE $N_{pre\text{-}src} = \text{int}(i/S)$
+            \STATE $G_{pre\text{-}src} = \text{Group}_N[N_{pre\text{-}src}]$
 
+            \IF{$(t - \text{LastFiringTime}_N[N_{pre\text{-}src}]) &lt; 2 * d$
+                \AND $\text{STDPConfig}_G[G_{pre\text{-}src}, G_{src}] &gt; 0$}
+
+                \IF{$\text{Type}_N(N_{src}) == 2$}
+                    \STATE $\text{W}[N_{pre\text{-}src}, N_{src}]$
+                    += ($\alpha * \Phi_r * a_{rp} + \beta * \Phi_p * a_{pm}$) * w * (1 - w)
+
+                \ELSIF{$\text{Type}_N(N_{src}) == 1$}
+                    \STATE $\text{W}[N_{pre\text{-}src}, N_{src}]$
+                    += ($\alpha * \Phi_r * a_{rm} + \beta * \Phi_p * a_{pp}$) * w * (1 - w)
+
+                \ENDIF
+            \ENDIF
+        \ENDIF
     \ENDFOR
 
 \ENDIF

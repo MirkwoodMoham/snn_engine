@@ -219,7 +219,7 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.Simulation.set_stdp_config(0)
 
         self.N_rep_buffer = self.N_rep_buffer.reshape(shapes.N_rep)
-        self.N_rep_buffer[:] = self.N_rep_groups_cpu.to(self.device)
+        # self.N_rep_buffer[:] = self.N_rep_groups_cpu.to(self.device)
 
         self.Simulation.calculate_avg_group_weight()
 
@@ -959,7 +959,7 @@ class NetworkGPUArrays(GPUArrayCollection):
         if self.Simulation.t % 100 == 0:
             print('t =', self.Simulation.t)
         if self.Simulation.t % 1000 == 0:
-        # if False:
+            # if False:
             self.Simulation.calculate_avg_group_weight()
             a = self.to_dataframe(self.g2g_info_arrays.G_avg_weight_inh)
             b = self.to_dataframe(self.g2g_info_arrays.G_avg_weight_exc)
@@ -975,28 +975,24 @@ class NetworkGPUArrays(GPUArrayCollection):
                          self.g2g_info_arrays.G_avg_weight_exc)
             print()
 
-        for i in range(self._config.sim_updates_per_frame):
-            self.Simulation.update(False)
-            self.Simulation.update(False)
-            self.Simulation.update(False)
-            self.Simulation.update(False)
-            self.Simulation.update(False)
-            self.Simulation.update(False)
-            self.Simulation.update(False)
-            self.Simulation.update(False)
+        n_updates = self._config.sim_updates_per_frame
+
+        t_mod = self.Simulation.t % self._plotting_config.scatter_plot_length
+
+        for i in range(n_updates):
             self.Simulation.update(False)
 
             # print(self.G_firing_count_hist.flatten()[67 + (self.Simulation.t-1) * self._config.G])
-            t_mod = (self.Simulation.t - 1) % self._plotting_config.scatter_plot_length
 
-            self.plotting_arrays.group_firing_counts_plot_single1.tensor[t_mod, 1] = \
-                self.G_firing_count_hist.flatten()[123 + t_mod * self._config.G] / 100
+        self.plotting_arrays.group_firing_counts_plot_single1.tensor[
+        t_mod: t_mod + n_updates, 1] = \
+            self.G_firing_count_hist[t_mod: t_mod + n_updates, 123] / 100
 
-            self.plotting_arrays.group_firing_counts_plot_single1.tensor[
-                self._plotting_config.scatter_plot_length + t_mod, 1] = \
-                self.G_firing_count_hist.flatten()[125 + t_mod * self._config.G] / 100
+        offset1 = self._plotting_config.scatter_plot_length
 
-            if t_mod + 1 == self._plotting_config.scatter_plot_length:
-                self.G_firing_count_hist[:] = 0
+        self.plotting_arrays.group_firing_counts_plot_single1.tensor[
+        offset1 + t_mod: offset1 + t_mod + n_updates, 1] = \
+            self.G_firing_count_hist[t_mod: t_mod + n_updates, 125] / 100
 
-            return
+        if t_mod + n_updates + 1 >= self._plotting_config.scatter_plot_length:
+            self.G_firing_count_hist[:] = 0

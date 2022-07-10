@@ -9,7 +9,9 @@ from network import (
 )
 from app import BaseApp
 
-
+# TODO: pre-synaptic delays
+# TODO: better sensory weights,
+# TODO: resonant cells,
 # TODO: group_info_mesh face sizes
 # TODO: better stdp G2G config
 # TODO: monitor learning
@@ -22,17 +24,19 @@ from app import BaseApp
 
 class EngineConfig:
 
-    N: int = 25 * 10 ** 3
+    N: int = 65 * 10 ** 3
     T: int = 2000  # Max simulation duration
 
     device: int = 0
 
     max_batch_size_mb: int = 3000
 
-    network = NetworkConfig(N=N, N_pos_shape=(4, 4, 1))
+    network = NetworkConfig(N=N,
+                            N_pos_shape=(4, 4, 1),
+                            sim_updates_per_frame=10)
     plotting = PlottingConfig(n_voltage_plots=100, voltage_plot_length=100,
                               n_scatter_plots=1000, scatter_plot_length=1000,
-                              windowed_neuron_plots=True,
+                              windowed_neuron_plots=False,
                               group_info_view_mode='split',
                               network_config=network)
 

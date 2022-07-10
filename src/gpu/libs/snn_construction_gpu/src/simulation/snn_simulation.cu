@@ -73,7 +73,7 @@ __global__ void update_N_state_(
 			last_fired[n] = __float2int_rn(t);
 			N_pos[n * 13 + 10] = 1.f;
 
-			if ((b_monitor_group_firing_counts) &&
+			if ((b_monitor_group_firing_counts) && (ntype == 1) &&
 			    (G_flags[src_G + row_b_monitor_group_firing_count * G] == 1)){
 				
 				atomicAdd(&G_firing_count_hist[src_G + t_mod_scatter_plot_length * G], 1);
@@ -443,11 +443,13 @@ __global__ void update_current_(
 			if (!is_sensory)
 			{
 				atomicAdd(&N_states[snk_N + 7 * N], w);
-		
+				
+				
 				if (r_stdp){
+
+					int stdp_config = G_stdp_config_current[src_G + snk_G * G];
 					if (((t - last_fired[snk_N]) < (delay)) 
-						&& (G_stdp_config_current[src_G + snk_G * G] > 0)){
-						
+						&& (stdp_config != 0)){
 
 						//if (G_stdp_config_current[src_G + snk_G * G] > 0){
 						// 	weight_delta = alpha * phi_r * a_r_p + beta * phi_p * a_p_m;
@@ -458,15 +460,23 @@ __global__ void update_current_(
 						// weight_delta *= w * (1. - w);
 						w = fabsf(w);
 
-						if (w < 1.){
-							N_weights[idx] += (alpha * phi_r * a_r_m + beta * phi_p * a_p_p) * w * (1. - w);
+						if ((w < .98) && (w > 0.02)){
+							
+							if (N_G[ 2 * snk_N] == 2){
 
-							if (false){
-								printf("\nn=%d (t: %d), g=%d, sink=%d [%d](last fired: %d), w=%f (+%f), delay=%d",
-									n, t, src_G, snk_N, snk_G, last_fired[snk_N], w, 
-									(alpha * phi_r * a_r_m + beta * phi_p * a_p_p) * w * (1. - w), 
-									delay);
+
+								N_weights[idx] += ((stdp_config > 0) * phi_r * a_r_m + (stdp_config < 0) * phi_p * a_p_p) * w * (1. - w);
+
+								if (false){
+									printf("\nn=%d (t: %d), g=%d, sink=%d [%d](last fired: %d), w=%f (+%f), delay=%d",
+										n, t, src_G, snk_N, snk_G, last_fired[snk_N], w, 
+										(alpha * phi_r * a_r_m + beta * phi_p * a_p_p) * w * (1. - w), 
+										delay);
+								}
+							} else {
+								N_weights[idx] += ((stdp_config > 0) * phi_r * a_r_p + (stdp_config < 0) * phi_p * a_p_m) * w * (1. - w);
 							}
+
 						}
 					} 
 				}
@@ -483,23 +493,32 @@ __global__ void update_current_(
 				idx = N_rep_pre_synaptic_idx[s2];
 
 				w2 = fabsf(N_weights[idx]);
-				if (w2 < 1.)
+				if ((w2 < .98) && (w2 > 0.02))
 				{				
-					pre_src_N = __float2int_rd(__int2float_rn(idx) / __int2float_rn(S));
+					pre_src_N = idx - N * __float2int_rd(__int2float_rn(idx) / __int2float_rn(N));
+
+					int stdp_config = G_stdp_config_current[N_G[pre_src_N * 2 + 1] + src_G * G];
 
 					if (((t - last_fired[pre_src_N]) < (2 * D)) 
-						&& (G_stdp_config_current[N_G[pre_src_N * 2 + 1] + src_G * G] > 0)){
+						&& (stdp_config != 0)){
 							
 						// idx = pre_src_N + N * N_rep_pre_synaptic_idx[s2];
 						
-						
-						N_weights[idx] += (alpha * phi_r * a_r_p + beta * phi_p * a_p_m) * w2 * (1. - w2);
-
-						if (false){
-							printf("\nn=%d (t: %d) g=%d, pre-synaptic=%d [%d] (last fired: %d), w=%f (+%f)",
-								n, t, src_G,pre_src_N, N_G[pre_src_N * 2 + 1],last_fired[pre_src_N], w2, 
-								(alpha * phi_r * a_r_p + beta * phi_p * a_p_m) * w2 * (1. - w2));
+						if (N_G[2 * n] == 2){
+							N_weights[idx] += ((stdp_config > 0) * phi_r * a_r_p + (stdp_config < 0) * phi_p * a_p_m) * w2 * (1. - w2);
+													// if (src_G==115){
+							if (false){
+								printf("\nn=%d (t: %d) g=%d, idx=%d, pre-synaptic=%d [%d] (last fired: %d), w=%f (+%f)",
+									n, t, src_G,idx, pre_src_N, N_G[pre_src_N * 2 + 1],last_fired[pre_src_N], w2, 
+									(alpha * phi_r * a_r_p + beta * phi_p * a_p_m) * w2 * (1. - w2));
+							}
+						} else {
+							N_weights[idx] += ((stdp_config > 0) * phi_r * a_r_m + (stdp_config < 0) * phi_p * a_p_p) * w2 * (1. - w2);
 						}
+
+
+
+						
 					}
 				}
 			}
@@ -1534,7 +1553,7 @@ __global__ void fill_N_rep_pre_synaptic_buffer(
 ){
 	
 	// Fill Buffer with the indices of the sysnapses in N_rep.
-	// Dividing such a "N_rep-synapse-index" by S yields the pre-Synaptic Neuron. 
+	//  "N_rep-synapse-index" - int("N_rep-synapse-index" / N) * N yields the pre-Synaptic Neuron. 
 	// The write indices (for the Buffer-array) are given by N_rep_pre_synaptic_counts.
 	// The values in Buffer will be copied to N_rep_pre_synaptic_idx in the 
 	// fill_N_rep_pre_synaptic_idx-kernel.

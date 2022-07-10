@@ -494,18 +494,21 @@ class G2GInfoArrays(GPUArrayCollection):
         G_pos_distance = torch.cdist(G_pos.tensor[: -1], G_pos.tensor[:-1])
         return G_pos_distance, ((network_config.D - 1) * G_pos_distance / G_pos_distance.max()).round().int()
 
-    def _stdp_distance_based_config(self, target_group, target_config: torch.Tensor):
+    def _stdp_distance_based_config(self, target_group, anti_target_group, target_config: torch.Tensor):
         distance_to_target_group = self.G_distance[:, target_group]
+        distance_to_anti_target_group = self.G_distance[:, anti_target_group]
 
-        xx = distance_to_target_group.reshape(self._config.G, 1).repeat(1, self._config.G)
+        xx0 = distance_to_target_group.reshape(self._config.G, 1).repeat(1, self._config.G)
+        xx1 = distance_to_anti_target_group.reshape(self._config.G, 1).repeat(1, self._config.G)
 
-        # noinspection PyUnresolvedReferences
-        mask = (xx > distance_to_target_group).T
+        mask0 = xx0 < distance_to_target_group
+        mask1 = xx0 <= xx1
+
+        mask = mask0 & mask1
 
         target_config[mask] = 1
         target_config[~mask] = -1
-        # noinspection PyUnresolvedReferences
-        target_config[(xx == distance_to_target_group).T] = 0
+        target_config[(xx0 == distance_to_target_group) & mask1] = 0
 
     def set_active_output_groups(self, output_groups=None, ):
         if output_groups is None:
@@ -516,11 +519,11 @@ class G2GInfoArrays(GPUArrayCollection):
         group0 = output_groups[output_group_types == 0].item()
         group1 = output_groups[output_group_types == 1].item()
 
-        self._stdp_distance_based_config(group0, self.G_stdp_config0)
+        self._stdp_distance_based_config(group0, anti_target_group=group1, target_config=self.G_stdp_config0)
         # noinspection PyUnusedLocal
         b = self.to_dataframe(self.G_stdp_config0)
 
-        self._stdp_distance_based_config(group1, self.G_stdp_config1)
+        self._stdp_distance_based_config(group1, anti_target_group=group0, target_config=self.G_stdp_config1)
 
     def active_output_groups(self):
         return self.group_ids[self.G_flags.b_output_group.type(torch.bool)]
