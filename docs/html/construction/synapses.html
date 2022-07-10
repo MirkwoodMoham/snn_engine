@@ -200,15 +200,15 @@
 <p>Starting values:</p>
 <div class="math notranslate nohighlight">
 \[\begin{split}\begin{eqnarray}
-    \alpha_{inh}  &amp;=&amp; 2, \\
-    \alpha_{exc} &amp;=&amp; 1, \\
+    \alpha_{inh}  &amp;=&amp; 4, \\
+    \alpha_{exc} &amp;=&amp; 2, \\
     \beta_{inh} &amp;=&amp; 1 + \frac{D}{3}, \\
     \beta_{exc} &amp;=&amp; 1, \\
     \gamma_{inh} &amp;=&amp; 0.01, \\
-    \gamma_{exc} &amp;=&amp; 0.125.
+    \gamma_{exc} &amp;=&amp; 0.05.
 \end{eqnarray}\end{split}\]</div>
 <div class="math notranslate nohighlight">
-\[\text{sig}(d, \alpha) = 1 - \frac{1}{1 + e^{- \alpha  d - 1}}\]</div>
+\[\text{sig}(d, \alpha) = 1 - \frac{1}{1 + e^{- \alpha  d + 1}}\]</div>
 <div class="math notranslate nohighlight">
 \[P(d, \alpha, \beta) = \min \bigg(1,  \frac{\beta}{D}  \Big(\text{sig}(d, \alpha) + \gamma \big(1-\frac{d^2}{D^2}\big)\Big)\bigg)\]</div>
 </section>

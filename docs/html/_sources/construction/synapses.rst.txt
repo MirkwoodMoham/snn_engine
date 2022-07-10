@@ -23,17 +23,17 @@ Starting values:
 ..  math::
 
     \begin{eqnarray}
-        \alpha_{inh}  &=& 2, \\
-        \alpha_{exc} &=& 1, \\
+        \alpha_{inh}  &=& 4, \\
+        \alpha_{exc} &=& 2, \\
         \beta_{inh} &=& 1 + \frac{D}{3}, \\
         \beta_{exc} &=& 1, \\
         \gamma_{inh} &=& 0.01, \\
-        \gamma_{exc} &=& 0.125.
+        \gamma_{exc} &=& 0.05.
     \end{eqnarray}
 
 .. math::
 
-    \text{sig}(d, \alpha) = 1 - \frac{1}{1 + e^{- \alpha  d - 1}}
+    \text{sig}(d, \alpha) = 1 - \frac{1}{1 + e^{- \alpha  d + 1}}
 
 .. math::
 
