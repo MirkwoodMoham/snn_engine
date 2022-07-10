@@ -10,7 +10,9 @@ Welcome to SNN Engine's documentation!
    :maxdepth: 2
    :caption: Contents:
 
-   learning/stdp
+   notation
+   construction/synapses
+   simulation/stdp
 
 
 

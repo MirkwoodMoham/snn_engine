@@ -6,40 +6,42 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
-    <title>Welcome to SNN Engine’s documentation! &#8212; SNN Engine 0.0.0 documentation</title>
+    <title>Synapses &#8212; SNN Engine 0.0.0 documentation</title>
 <script>
   document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
   document.documentElement.dataset.theme = localStorage.getItem("theme") || "light"
 </script>
 
   <!-- Loaded before other Sphinx assets -->
-  <link href="_static/styles/theme.css?digest=92025949c220c2e29695" rel="stylesheet">
-<link href="_static/styles/pydata-sphinx-theme.css?digest=92025949c220c2e29695" rel="stylesheet">
+  <link href="../_static/styles/theme.css?digest=92025949c220c2e29695" rel="stylesheet">
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=92025949c220c2e29695" rel="stylesheet">
 
 
   <link rel="stylesheet"
-    href="_static/vendor/fontawesome/5.13.0/css/all.min.css">
+    href="../_static/vendor/fontawesome/5.13.0/css/all.min.css">
   <link rel="preload" as="font" type="font/woff2" crossorigin
-    href="_static/vendor/fontawesome/5.13.0/webfonts/fa-solid-900.woff2">
+    href="../_static/vendor/fontawesome/5.13.0/webfonts/fa-solid-900.woff2">
   <link rel="preload" as="font" type="font/woff2" crossorigin
-    href="_static/vendor/fontawesome/5.13.0/webfonts/fa-brands-400.woff2">
+    href="../_static/vendor/fontawesome/5.13.0/webfonts/fa-brands-400.woff2">
 
-    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/pseudocode@latest/build/pseudocode.min.css" />
 
   <!-- Pre-loaded scripts that we'll load fully later -->
-  <link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=92025949c220c2e29695">
+  <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=92025949c220c2e29695">
 
-    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
-    <script src="_static/jquery.js"></script>
-    <script src="_static/underscore.js"></script>
-    <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
-    <script src="_static/doctools.js"></script>
+    <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+    <script src="../_static/jquery.js"></script>
+    <script src="../_static/underscore.js"></script>
+    <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+    <script src="../_static/doctools.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/pseudocode@latest/build/pseudocode.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.11.1/katex.min.js"></script>
-    <link rel="index" title="Index" href="genindex.html" />
-    <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Notation" href="notation.html" />
+    <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="R-STDP" href="../simulation/stdp.html" />
+    <link rel="prev" title="Notation" href="../notation.html" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="docsearch:language" content="en">
   </head>
@@ -60,7 +62,7 @@
   
 
 
-<a class="navbar-brand logo" href="#">
+<a class="navbar-brand logo" href="../index.html">
   
   
   
@@ -83,19 +85,19 @@
       <div class="navbar-center-item">
         <ul id="navbar-main-elements" class="navbar-nav">
     <li class="toctree-l1 nav-item">
- <a class="reference internal nav-link" href="notation.html">
+ <a class="reference internal nav-link" href="../notation.html">
   Notation
  </a>
 </li>
 
-<li class="toctree-l1 nav-item">
- <a class="reference internal nav-link" href="construction/synapses.html">
+<li class="toctree-l1 current active nav-item">
+ <a class="current reference internal nav-link" href="#">
   Synapses
  </a>
 </li>
 
 <li class="toctree-l1 nav-item">
- <a class="reference internal nav-link" href="simulation/stdp.html">
+ <a class="reference internal nav-link" href="../simulation/stdp.html">
   R-STDP
  </a>
 </li>
@@ -133,7 +135,7 @@
 
 <!-- Only show if we have sidebars configured, else just a small margin  -->
 <div class="bd-sidebar-primary col-12 col-md-3 bd-sidebar">
-  <div class="sidebar-start-items"><form class="bd-search d-flex align-items-center" action="search.html" method="get">
+  <div class="sidebar-start-items"><form class="bd-search d-flex align-items-center" action="../search.html" method="get">
   <i class="icon fas fa-search"></i>
   <input type="search" class="form-control" name="q" id="search-input" placeholder="Search the docs ..." aria-label="Search the docs ..." autocomplete="off" >
 </form><nav class="bd-links" id="bd-docs-nav" aria-label="Main navigation">
@@ -161,14 +163,9 @@
 
 <nav id="bd-toc-nav">
     <ul class="visible nav section-nav flex-column">
- <li class="toc-h1 nav-item toc-entry">
-  <a class="reference internal nav-link" href="#">
-   Welcome to SNN Engine’s documentation!
-  </a>
- </li>
- <li class="toc-h1 nav-item toc-entry">
-  <a class="reference internal nav-link" href="#indices-and-tables">
-   Indices and tables
+ <li class="toc-h2 nav-item toc-entry">
+  <a class="reference internal nav-link" href="#sigmoidal-connection-probability">
+   Sigmoidal Connection Probability
   </a>
  </li>
 </ul>
@@ -190,32 +187,31 @@
               
               <article class="bd-article" role="main">
                 
-  <section id="welcome-to-snn-engine-s-documentation">
-<h1>Welcome to SNN Engine’s documentation!<a class="headerlink" href="#welcome-to-snn-engine-s-documentation" title="Permalink to this heading">#</a></h1>
-<div class="toctree-wrapper compound">
-<p aria-level="2" class="caption" role="heading"><span class="caption-text">Contents:</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="notation.html">Notation</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="notation.html#network-constants">Network Constants</a></li>
-<li class="toctree-l2"><a class="reference internal" href="notation.html#variable-naming">Variable Naming</a></li>
-<li class="toctree-l2"><a class="reference internal" href="notation.html#network-arrays">Network-Arrays</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="construction/synapses.html">Synapses</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="construction/synapses.html#sigmoidal-connection-probability">Sigmoidal Connection Probability</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="simulation/stdp.html">R-STDP</a></li>
-</ul>
-</div>
+  <section id="synapses">
+<h1>Synapses<a class="headerlink" href="#synapses" title="Permalink to this heading">#</a></h1>
+<section id="sigmoidal-connection-probability">
+<h2>Sigmoidal Connection Probability<a class="headerlink" href="#sigmoidal-connection-probability" title="Permalink to this heading">#</a></h2>
+<p>Find <span class="math notranslate nohighlight">\(\alpha_{g, \tau}, \beta_{g, \tau}\)</span> and <span class="math notranslate nohighlight">\(\gamma_{g, \tau}\)</span> such that</p>
+<div class="math notranslate nohighlight">
+\[\sum_{d \in \{ 0, ..., D-1\}} \Big[P(d, \alpha_{g, \tau}, \beta_{g, \tau}, \gamma_{g, \tau}) \quad * \quad
+\text{TypedNeuronCountD}_D[d, g, \tau]\Big]
+\approx S\]</div>
+<p>for each group <span class="math notranslate nohighlight">\(g \in \{0, ..., G -1\}\)</span> and neuron-type <span class="math notranslate nohighlight">\(\tau \in \{1, 2\}\)</span>.</p>
+<p>Starting values:</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}\begin{eqnarray}
+    \alpha_{inh}  &amp;=&amp; 2, \\
+    \alpha_{exc} &amp;=&amp; 1, \\
+    \beta_{inh} &amp;=&amp; 1 + \frac{D}{3}, \\
+    \beta_{exc} &amp;=&amp; 1, \\
+    \gamma_{inh} &amp;=&amp; 0.01, \\
+    \gamma_{exc} &amp;=&amp; 0.125.
+\end{eqnarray}\end{split}\]</div>
+<div class="math notranslate nohighlight">
+\[\text{sig}(d, \alpha) = 1 - \frac{1}{1 + e^{- \alpha  d - 1}}\]</div>
+<div class="math notranslate nohighlight">
+\[P(d, \alpha, \beta) = \min \bigg(1,  \frac{\beta}{D}  \Big(\text{sig}(d, \alpha) + \gamma \big(1-\frac{d^2}{D^2}\big)\Big)\bigg)\]</div>
 </section>
-<section id="indices-and-tables">
-<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this heading">#</a></h1>
-<ul class="simple">
-<li><p><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></p></li>
-<li><p><a class="reference internal" href="py-modindex.html"><span class="std std-ref">Module Index</span></a></p></li>
-<li><p><a class="reference internal" href="search.html"><span class="std std-ref">Search Page</span></a></p></li>
-</ul>
 </section>
 
 
@@ -226,10 +222,17 @@
               <footer class="bd-footer-article">
                   <!-- Previous / next buttons -->
 <div class='prev-next-area'>
-  <a class='right-next' id="next-link" href="notation.html" title="next page">
+  <a class='left-prev' id="prev-link" href="../notation.html" title="previous page">
+      <i class="fas fa-angle-left"></i>
+      <div class="prev-next-info">
+          <p class="prev-next-subtitle">previous</p>
+          <p class="prev-next-title">Notation</p>
+      </div>
+  </a>
+  <a class='right-next' id="next-link" href="../simulation/stdp.html" title="next page">
   <div class="prev-next-info">
       <p class="prev-next-subtitle">next</p>
-      <p class="prev-next-title">Notation</p>
+      <p class="prev-next-title">R-STDP</p>
   </div>
   <i class="fas fa-angle-right"></i>
   </a>
@@ -244,7 +247,7 @@
   
   
   <!-- Scripts loaded after <body> so the DOM is not blocked -->
-  <script src="_static/scripts/pydata-sphinx-theme.js?digest=92025949c220c2e29695"></script>
+  <script src="../_static/scripts/pydata-sphinx-theme.js?digest=92025949c220c2e29695"></script>
 
 <footer class="bd-footer"><div class="bd-footer__inner container">
   

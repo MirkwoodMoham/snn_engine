@@ -22,9 +22,10 @@ from app import BaseApp
 # TODO (optional) group selection via selector box
 # TODO (optional, difficult) group selection via click
 
+
 class EngineConfig:
 
-    N: int = 65 * 10 ** 3
+    N: int = 250 * 10 ** 3
     T: int = 2000  # Max simulation duration
 
     device: int = 0

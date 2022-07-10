@@ -1,0 +1,40 @@
+========
+Synapses
+========
+
+
+Sigmoidal Connection Probability
+================================
+
+Find :math:`\alpha_{g, \tau}, \beta_{g, \tau}` and :math:`\gamma_{g, \tau}` such that
+
+
+.. math::
+
+    \sum_{d \in \{ 0, ..., D-1\}} \Big[P(d, \alpha_{g, \tau}, \beta_{g, \tau}, \gamma_{g, \tau}) \quad * \quad
+    \text{TypedNeuronCountD}_D[d, g, \tau]\Big]
+    \approx S
+
+for each group :math:`g \in \{0, ..., G -1\}` and neuron-type :math:`\tau \in \{1, 2\}`.
+
+Starting values:
+
+
+..  math::
+
+    \begin{eqnarray}
+        \alpha_{inh}  &=& 2, \\
+        \alpha_{exc} &=& 1, \\
+        \beta_{inh} &=& 1 + \frac{D}{3}, \\
+        \beta_{exc} &=& 1, \\
+        \gamma_{inh} &=& 0.01, \\
+        \gamma_{exc} &=& 0.125.
+    \end{eqnarray}
+
+.. math::
+
+    \text{sig}(d, \alpha) = 1 - \frac{1}{1 + e^{- \alpha  d - 1}}
+
+.. math::
+
+    P(d, \alpha, \beta) = \min \bigg(1,  \frac{\beta}{D}  \Big(\text{sig}(d, \alpha) + \gamma \big(1-\frac{d^2}{D^2}\big)\Big)\bigg)

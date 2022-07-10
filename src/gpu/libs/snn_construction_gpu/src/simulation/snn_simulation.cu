@@ -515,10 +515,7 @@ __global__ void update_current_(
 						} else {
 							N_weights[idx] += ((stdp_config > 0) * phi_r * a_r_m + (stdp_config < 0) * phi_p * a_p_p) * w2 * (1. - w2);
 						}
-
-
-
-						
+					
 					}
 				}
 			}

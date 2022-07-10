@@ -121,10 +121,10 @@ __device__ float sigmoidal_connection_probability(
 	const float inv_max_delay = (1.f / max_delay);
 	const float normalized_delay = delay * inv_max_delay;
 	
-	const float sigmoid = 0.5f - (1 / (1 + expf(-(alpha * delay - 1.f))));
-	const float offset = inv_max_delay * (0.5f + gamma - gamma * powf(normalized_delay, 2.f));
+	const float sigmoid = 1.f - (1.f / (1.f + expf(-(alpha * delay - 1.f))));
+	const float offset = gamma * (1.f - powf(normalized_delay, 2.f));
 
-	return fminf(1.f, beta * (inv_max_delay * sigmoid + offset));
+	return fminf(1.f, beta * inv_max_delay * (sigmoid + offset));
 }
 
 
@@ -399,16 +399,16 @@ __global__ void fill_G_exp_ccsyn_per_src_type_and_delay_(
 		const int ioffs_inh = 2 * G + g;
 		const int ioffs_exc = (2 + D) * G + g;
 
-		float alpha_inh = 2.f;
-		float alpha_exc = 1.f;
+		float alpha_inh = 4.f;
+		float alpha_exc = 2.f;
 		float beta_inh = 1.f + fD / 3.f;
 		float beta_exc = 1.f;
 		float gamma_inh = .01f;
-		float gamma_exc = .125f;
+		float gamma_exc = .05f;
 
 		const float alpha_delta = 0.04f;
 		const float beta_delta = 0.04f;
-		const float gamma_delta = 0.01f;
+		const float gamma_delta = 0.001f;
 
 
 

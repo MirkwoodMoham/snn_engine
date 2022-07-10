@@ -1,0 +1,316 @@
+
+<!DOCTYPE html>
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+    <title>R-STDP &#8212; SNN Engine 0.0.0 documentation</title>
+<script>
+  document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+  document.documentElement.dataset.theme = localStorage.getItem("theme") || "light"
+</script>
+
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=92025949c220c2e29695" rel="stylesheet">
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=92025949c220c2e29695" rel="stylesheet">
+
+
+  <link rel="stylesheet"
+    href="../_static/vendor/fontawesome/5.13.0/css/all.min.css">
+  <link rel="preload" as="font" type="font/woff2" crossorigin
+    href="../_static/vendor/fontawesome/5.13.0/webfonts/fa-solid-900.woff2">
+  <link rel="preload" as="font" type="font/woff2" crossorigin
+    href="../_static/vendor/fontawesome/5.13.0/webfonts/fa-brands-400.woff2">
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/pseudocode@latest/build/pseudocode.min.css" />
+
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=92025949c220c2e29695">
+
+    <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+    <script src="../_static/jquery.js"></script>
+    <script src="../_static/underscore.js"></script>
+    <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+    <script src="../_static/doctools.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pseudocode@latest/build/pseudocode.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.11.1/katex.min.js"></script>
+    <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="../_static/katex_autorenderer_stdp.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="prev" title="Synapses" href="../construction/synapses.html" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="docsearch:language" content="en">
+  </head>
+  
+  
+  <body data-spy="scroll" data-target="#bd-toc-nav" data-offset="180" data-default-mode="">
+    <div class="bd-header-announcement container-fluid" id="banner">
+      
+
+    </div>
+
+    
+    <nav class="bd-header navbar navbar-light navbar-expand-lg bg-light fixed-top bd-navbar" id="navbar-main"><div class="bd-header__inner container-xl">
+
+  <div id="navbar-start">
+    
+    
+  
+
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    <p class="title logo__title">SNN Engine 0.0.0 documentation</p>
+  
+</a>
+    
+  </div>
+
+  <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbar-collapsible" aria-controls="navbar-collapsible" aria-expanded="false" aria-label="Toggle navigation">
+    <span class="fas fa-bars"></span>
+  </button>
+
+  
+  <div id="navbar-collapsible" class="col-lg-9 collapse navbar-collapse">
+    <div id="navbar-center" class="mr-auto">
+      
+      <div class="navbar-center-item">
+        <ul id="navbar-main-elements" class="navbar-nav">
+    <li class="toctree-l1 nav-item">
+ <a class="reference internal nav-link" href="../notation.html">
+  Notation
+ </a>
+</li>
+
+<li class="toctree-l1 nav-item">
+ <a class="reference internal nav-link" href="../construction/synapses.html">
+  Synapses
+ </a>
+</li>
+
+<li class="toctree-l1 current active nav-item">
+ <a class="current reference internal nav-link" href="#">
+  R-STDP
+ </a>
+</li>
+
+    
+</ul>
+      </div>
+      
+    </div>
+
+    <div id="navbar-end">
+      
+      <div class="navbar-end-item">
+        <span id="theme-switch" class="btn btn-sm btn-outline-primary navbar-btn rounded-circle">
+    <a class="theme-switch" data-mode="light"><i class="fas fa-sun"></i></a>
+    <a class="theme-switch" data-mode="dark"><i class="far fa-moon"></i></a>
+    <a class="theme-switch" data-mode="auto"><i class="fas fa-adjust"></i></a>
+</span>
+      </div>
+      
+      <div class="navbar-end-item">
+        <ul id="navbar-icon-links" class="navbar-nav" aria-label="Icon Links">
+      </ul>
+      </div>
+      
+    </div>
+  </div>
+</div>
+    </nav>
+    
+
+    <div class="bd-container container-xl">
+      <div class="bd-container__inner row">
+          
+
+<!-- Only show if we have sidebars configured, else just a small margin  -->
+<div class="bd-sidebar-primary col-12 col-md-3 bd-sidebar">
+  <div class="sidebar-start-items"><form class="bd-search d-flex align-items-center" action="../search.html" method="get">
+  <i class="icon fas fa-search"></i>
+  <input type="search" class="form-control" name="q" id="search-input" placeholder="Search the docs ..." aria-label="Search the docs ..." autocomplete="off" >
+</form><nav class="bd-links" id="bd-docs-nav" aria-label="Main navigation">
+  <div class="bd-toc-item active">
+    
+  </div>
+</nav>
+  </div>
+  <div class="sidebar-end-items">
+  </div>
+</div>
+
+
+          
+
+
+<div class="bd-sidebar-secondary d-none d-xl-block col-xl-2 bd-toc">
+  
+    
+    <div class="toc-item">
+      
+
+<nav id="bd-toc-nav">
+    
+</nav>
+    </div>
+    
+    <div class="toc-item">
+      
+    </div>
+    
+  
+</div>
+
+
+          
+          
+          <div class="bd-content col-12 col-md-9 col-xl-7">
+              
+              <article class="bd-article" role="main">
+                
+  <section id="r-stdp">
+<h1>R-STDP<a class="headerlink" href="#r-stdp" title="Permalink to this heading">#</a></h1>
+<p>R-STDP constants</p>
+<p>See [TODO:source].</p>
+<div class="math notranslate nohighlight">
+\[\begin{split}\begin{eqnarray}
+    \Phi_r &amp;=&amp; 1 \\
+    \Phi_p &amp;=&amp; 1 \\
+    a_{rp} &amp;=&amp; 0.95 \\
+    a_{pm} &amp;=&amp; -0.95 \\
+    a_{rm} &amp;=&amp; -0.95 \\
+    a_{pp} &amp;=&amp; 0.95 \\
+\end{eqnarray}\end{split}\]</div>
+<div class="pseudocode" id="id1">
+<div class="pseudocode-caption">
+</div><div class="pseudocode-content">
+<pre id="qq" style="display:hidden;">
+            \begin{algorithm}
+\caption{Localized R-STDP}
+\begin{algorithmic}
+
+\PROCEDURE{Downstream-STDP}{$N_{src}, d, t$}
+
+    \STATE $G_{src} = \text{Group}_N[N_{src}]$
+    \STATE $\text{syn}_{\text{start}} = \text{SynDelayIndices}_N(N_{src}, d)$
+    \STATE $\text{syn}_{\text{end}} = \text{SynDelayIndices}_N(N_{src}, d + 1) - 1$
+
+    \FOR{$s$ = $\text{syn}_{\text{start}}$ to $\text{syn}_{\text{end}}$ }
+
+        \STATE $N_{snk} = \text{Rep}_{\text{}N, S}[N_{src}, s]$
+        \STATE $G_{snk} = \text{Group}_N[N_{snk}]$
+
+        \IF{$(t - \text{LastFiringTime}_N[N_{snk}]) &lt; d$
+            \AND $\text{STDPConfig}_G[G_{src}, G_{snk}] \neq 0$}
+            \STATE $\alpha = \text{STDPConfig}_G[G_{src}, G_{snk}] &gt; 0$
+            \STATE $\beta = !\alpha$
+            \STATE $w = |\text{W}[N_{src}, N_{snk}]|$
+
+            \IF{$w &lt; 1$}
+
+                \IF{$\text{Type}_N[N_{snk}] == 2$}
+                    \STATE $\text{W}_{N,S}[N_{src}, N_{snk}]$
+                    += ($\alpha * \Phi_r * a_{rm} + \beta * \Phi_p * a_{pp}$) * w * (1 - w)
+                \ELSIF{$\text{Type}_N[N_{snk}] == 1$}
+                    \STATE $\text{W}_{N,S}[N_{src}, N_{snk}]$
+                    += ($\alpha * \Phi_r * a_{rp} + \beta * \Phi_p * a_{pm}$) * w * (1 - w)
+                \ENDIF
+
+            \ENDIF
+        \ENDIF
+
+    \ENDFOR
+\ENDPROCEDURE
+\PROCEDURE{Uptream-STDP}{$N_{src}, d, t$}
+
+\IF{$d = 0$ \AND \NOT $\text{IsSensory}(G_{src})$}
+    \STATE $\text{syn}_{\text{start}} =  \text{Idcs}_{pre, N}[N_{src}]$
+    \STATE $\text{syn}_{\text{end}} =  \text{Idcs}_{pre, N}[N_{src} + 1] - 1$
+
+    \FOR{$s$ = $\text{syn}_{\text{start}}$ to $\text{syn}_{\text{end}}$}
+        \STATE $i = \text{Rep}_{\text{}pre}[s]$
+        \STATE $w = |\text{flatten}(\text{W}_{N,S})[i]| ( = |\text{W}_{N,S}[N_{pre\text{-}src}, N_{src}]|)$
+        \IF{$w &lt; 1$}
+            \STATE $N_{pre\text{-}src} = \text{int}(i/S)$
+            \STATE $G_{pre\text{-}src} = \text{Group}_N[N_{pre\text{-}src}]$
+
+            \IF{$(t - \text{LastFiringTime}_N[N_{pre\text{-}src}]) &lt; 2 * d$
+                \AND $\text{STDPConfig}_G[G_{pre\text{-}src}, G_{src}] \neq 0$}
+
+                \STATE $\alpha = \text{STDPConfig}_G[G_{pre\text{-}src}, G_{src}] &gt; 0$
+                \STATE $\beta = !\alpha$
+
+                \IF{$\text{Type}_N(N_{src}) == 2$}
+                    \STATE $\text{W}_{N,S}[N_{pre\text{-}src}, N_{src}]$
+                    += ($\alpha * \Phi_r * a_{rp} + \beta * \Phi_p * a_{pm}$) * w * (1 - w)
+
+                \ELSIF{$\text{Type}_N[N_{src}] == 1$}
+                    \STATE $\text{W}_{N,S}[N_{pre\text{-}src}, N_{src}]$
+                    += ($\alpha * \Phi_r * a_{rm} + \beta * \Phi_p * a_{pp}$) * w * (1 - w)
+
+                \ENDIF
+            \ENDIF
+        \ENDIF
+    \ENDFOR
+
+\ENDIF
+\ENDPROCEDURE
+\end{algorithmic}
+\end{algorithm}
+        </pre></div></div></section>
+
+
+              </article>
+              
+
+              
+              <footer class="bd-footer-article">
+                  <!-- Previous / next buttons -->
+<div class='prev-next-area'>
+  <a class='left-prev' id="prev-link" href="../construction/synapses.html" title="previous page">
+      <i class="fas fa-angle-left"></i>
+      <div class="prev-next-info">
+          <p class="prev-next-subtitle">previous</p>
+          <p class="prev-next-title">Synapses</p>
+      </div>
+  </a>
+</div>
+              </footer>
+              
+          </div>
+          
+      </div>
+    </div>
+
+  
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../_static/scripts/pydata-sphinx-theme.js?digest=92025949c220c2e29695"></script>
+
+<footer class="bd-footer"><div class="bd-footer__inner container">
+  
+  <div class="footer-item">
+    <p class="copyright">
+    &copy; Copyright 2022, Mirkwood Moh.<br>
+</p>
+  </div>
+  
+  <div class="footer-item">
+    <p class="sphinx-version">
+Created using <a href="http://sphinx-doc.org/">Sphinx</a> 5.0.2.<br>
+</p>
+  </div>
+  
+</div>
+</footer>
+  </body>
+</html>
