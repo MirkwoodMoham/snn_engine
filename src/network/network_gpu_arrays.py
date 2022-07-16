@@ -154,7 +154,7 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.registered_buffers.append(self.G_pos)
 
         # TODO: overflow? (N=25000, t=2106)
-        a = self.izeros((1, 1))
+        # a = self.izeros((1, 1))
 
         self.G_flags = LocationGroupFlags(self._config.G, device=self.device, grid=grid,
                                           select_ibo=buffers.selected_group_boxes_ibo)
@@ -196,9 +196,9 @@ class NetworkGPUArrays(GPUArrayCollection):
 
         self.Fired = self.fzeros(self._config.N)
         self.last_Fired = self.izeros(self._config.N) - self._config.D
-        self.Firing_times = self.fzeros((15, self._config.N))
-        self.Firing_idcs = self.izeros((15, self._config.N))
-        self.Firing_counts = self.izeros((1, T * 2))
+        self.Firing_times = self.fzeros(shapes.Firing_times)
+        self.Firing_idcs = self.izeros(shapes.Firing_idcs)
+        self.Firing_counts = self.izeros(shapes.Firing_counts)
 
         self.G_firing_count_hist = self.izeros((self._plotting_config.scatter_plot_length, self._config.G))
 
@@ -224,6 +224,8 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.Simulation.calculate_avg_group_weight()
 
         self.output_tensor = self.fzeros(6)
+
+        self.debug = False
 
     def _init_sim(self, T, plotting_config):
 
@@ -979,10 +981,20 @@ class NetworkGPUArrays(GPUArrayCollection):
 
         t_mod = self.Simulation.t % self._plotting_config.scatter_plot_length
 
-        for i in range(n_updates):
-            self.Simulation.update(False)
+        if self.debug is False:
 
-            # print(self.G_firing_count_hist.flatten()[67 + (self.Simulation.t-1) * self._config.G])
+            for i in range(n_updates):
+                if self.debug is False:
+                    self.Simulation.update(False)
+                    # if self.Simulation.t >= 2100:
+                    #     self.debug = True
+        else:
+            a = self.to_dataframe(self.Firing_idcs)
+            b = self.to_dataframe(self.Firing_times)
+            c = self.to_dataframe(self.Firing_counts)
+            self.Simulation.update(True)
+
+        # print(self.G_firing_count_hist.flatten()[67 + (self.Simulation.t-1) * self._config.G])
 
         self.plotting_arrays.group_firing_counts_plot_single1.tensor[
         t_mod: t_mod + n_updates, 1] = \

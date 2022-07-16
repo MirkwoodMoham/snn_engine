@@ -16,7 +16,6 @@ from app import BaseApp
 # TODO: better stdp G2G config
 # TODO: monitor learning
 
-# TODO: overflow? (N=25000, t=2106)
 
 # TODO (optional) gpu side group_info_mesh face color actualization
 # TODO (optional) group selection via selector box
@@ -25,8 +24,8 @@ from app import BaseApp
 
 class EngineConfig:
 
-    N: int = 250 * 10 ** 3
-    T: int = 2000  # Max simulation duration
+    N: int = 25 * 10 ** 3
+    T: int = 5000  # Max simulation record duration
 
     device: int = 0
 
@@ -34,7 +33,7 @@ class EngineConfig:
 
     network = NetworkConfig(N=N,
                             N_pos_shape=(4, 4, 1),
-                            sim_updates_per_frame=10)
+                            sim_updates_per_frame=100)
     plotting = PlottingConfig(n_voltage_plots=100, voltage_plot_length=100,
                               n_scatter_plots=1000, scatter_plot_length=1000,
                               windowed_neuron_plots=False,

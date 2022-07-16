@@ -85,6 +85,7 @@ struct SnnSimulation
 	// int firing_counts_idx_end = 1;
 
 	int reset_firing_times_ptr_threshold;
+	int reset_firing_count_idx_threshold;
 	int n_fired_m1_to_end = 0;
 
     int t = 0;
@@ -141,7 +142,7 @@ struct SnnSimulation
     );
     
     void update_plots();
-    void print_info(bool bprint_idcs = false);
+    void print_info(bool bprint_idcs = false, bool bprint_nfiring_times = false);
     void update(bool verbose);
 
     void swap_groups(
@@ -169,6 +170,8 @@ struct SnnSimulation
         int print_idx
     );
 
+    void _update_sim_pointers();
+
     void set_stdp_config(int stdp_config_id, bool activate = true);
 
     // void set_pre_synaptic_pointers(
@@ -184,12 +187,12 @@ struct SnnSimulation
 
     void calculate_avg_group_weight();
 
-    void set_pointers(
+    void set_plotting_pointers(
         float* voltage_plot_data_,
         float* scatter_plot_data_
     );
 
-    void set_pointers_python(
+    void set_plotting_pointers_python(
         const long voltage_plot_data_dp,
         const long scatter_plot_data_dp
     );

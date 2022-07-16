@@ -12,7 +12,7 @@ Welcome to SNN Engine's documentation!
 
    notation
    construction/synapses
-   simulation/stdp
+   simulation/simulation
 
 
 

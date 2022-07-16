@@ -260,6 +260,7 @@ SnnSimulation::SnnSimulation(
 	G_syn_count_exc = G_syn_count_exc_;
 
 	reset_firing_times_ptr_threshold = 13 * N;
+	reset_firing_count_idx_threshold = 2 * T;
 
     lp_update_state = LaunchParameters(N, (void *)update_N_state_);
     lp_update_voltage_plot = LaunchParameters(n_voltage_plots, (void *)update_voltage_plot_);
@@ -430,7 +431,7 @@ __global__ void update_current_(
 		
 		// float weight_delta = 0.f;
 
-
+	
 		float w;
 		for (int s = N_delays[delay_idx]; s < s_end; s++)
 		{
@@ -451,13 +452,6 @@ __global__ void update_current_(
 					if (((t - last_fired[snk_N]) < (delay)) 
 						&& (stdp_config != 0)){
 
-						//if (G_stdp_config_current[src_G + snk_G * G] > 0){
-						// 	weight_delta = alpha * phi_r * a_r_p + beta * phi_p * a_p_m;
-						// }
-						// else if (G_stdp_config_current[src_G + snk_G * G] < 0){
-							//weight_delta = alpha * phi_r * a_r_m + beta * phi_p * a_p_p;
-						//}
-						// weight_delta *= w * (1. - w);
 						w = fabsf(w);
 
 						if ((w < .98) && (w > 0.02)){
@@ -502,11 +496,9 @@ __global__ void update_current_(
 					if (((t - last_fired[pre_src_N]) < (2 * D)) 
 						&& (stdp_config != 0)){
 							
-						// idx = pre_src_N + N * N_rep_pre_synaptic_idx[s2];
 						
 						if (N_G[2 * n] == 2){
 							N_weights[idx] += ((stdp_config > 0) * phi_r * a_r_p + (stdp_config < 0) * phi_p * a_p_m) * w2 * (1. - w2);
-													// if (src_G==115){
 							if (false){
 								printf("\nn=%d (t: %d) g=%d, idx=%d, pre-synaptic=%d [%d] (last fired: %d), w=%f (+%f)",
 									n, t, src_G,idx, pre_src_N, N_G[pre_src_N * 2 + 1],last_fired[pre_src_N], w2, 
@@ -570,7 +562,7 @@ void SnnSimulation::update_plots()
 
 // void print_array()
 
-void SnnSimulation::print_info(bool bprint_idcs){
+void SnnSimulation::print_info(bool bprint_idcs, bool bprint_firing_times){
 	std::cout << "\n\n  ------------------------------------ ";
 	printf("\nt=%d", t);
 	printf("\nn_fired=%d", n_fired);
@@ -579,7 +571,12 @@ void SnnSimulation::print_info(bool bprint_idcs){
 	printf("\nn_fired_m1=%d", n_fired_m1);
 	printf("\nn_fired_total=%d", n_fired_total);
 	printf("\nn_fired_total_m1=%d", n_fired_total_m1);
-	printf("\nfiring_counts_write=%p", (void * )firing_counts_write);
+	// printf("\nfiring_counts_write=%p", (void * )firing_counts_write);
+	printf("\nfiring_counts_write=%ld", firing_counts_write - firing_counts);
+	printf("\n\nfiring_idcs_read=%ld", firing_idcs_read - firing_idcs);
+	printf("\nfiring_idcs_write=%ld", firing_idcs_write - firing_idcs);
+	printf("\n\nfiring_times_read=%ld", firing_times_read - firing_times);
+	printf("\nfiring_times_write=%ld", firing_times_write - firing_times);
 	printf("\n");
 	
 	if (bprint_idcs){
@@ -595,15 +592,16 @@ void SnnSimulation::print_info(bool bprint_idcs){
 		}
 		printf("\n");
 	}
-
-	printf("\nfiring_times:");
-	for (int i = 0; i < 15; i++) {
-		printf("\n");
-		for (int j = 0; j < N; j++) {
-			float firing_time;
-			cudaMemcpy(&firing_time, firing_times + i * N + j, 
-				sizeof(float), cudaMemcpyDeviceToHost);
-			printf("%.0f, ", firing_time);
+	if (bprint_firing_times){
+		printf("\nfiring_times:");
+		for (int i = 0; i < 15; i++) {
+			printf("\n");
+			for (int j = 0; j < N; j++) {
+				float firing_time;
+				cudaMemcpy(&firing_time, firing_times + i * N + j, 
+					sizeof(float), cudaMemcpyDeviceToHost);
+				printf("%.0f, ", firing_time);
+			}
 		}
 	}
 	printf("\n");
@@ -611,92 +609,7 @@ void SnnSimulation::print_info(bool bprint_idcs){
 
 }
 
-void SnnSimulation::update(const bool verbose)
-{	
-	t0 = std::chrono::steady_clock::now();
-	
-	// if (verbose)
-	// {
-	// 	std::cout << "\n\n  ------------------------------------ ";
-	// 	std::cout << "( " << t << " ) ------------------------------------\n";
-	// }
-
-	// renderer->neurons_bodies.pos_colors.map_buffer();
-
-	update_N_state_ KERNEL_ARGS2(lp_update_state.grid3, lp_update_state.block3 )(
-		N,
-		G,
-		static_cast<float>(t),
-		rand_states,
-		N_pos,
-		N_G,
-		G_flags,
-		G_props,
-		N_states,
-		fired,
-		last_fired,
-		G_firing_count_hist,
-		t % scatter_plot_length
-		// debug_i.get_dp(),
-		// debug_v.get_dp()
-    );
-
-	// renderer->neurons_bodies.pos_colors.unmap_buffer();
-
-	// if (verbose)
-	// {
-	// 	std::cout << "\n" << t << "\n";
-	// 	neuron_states.print_d_m();
-	// 	fired.print_d_m();
-	// 	neuron_groups.print_d_m();
-	// }
-
-	if (b_update_voltage_plot)
-	{
-		update_plots();
-	}
-
-	checkCudaErrors(cudaDeviceSynchronize());
-
-	// fired
-	checkCusparseErrors(cusparseDenseToSparse_analysis(
-		fired_handle, firing_times_dense, firing_times_sparse,
-		CUSPARSE_DENSETOSPARSE_ALG_DEFAULT, fired_buffer));
-	
-	checkCudaErrors(cudaDeviceSynchronize());
-
-	checkCusparseErrors(cusparseDenseToSparse_convert(
-		fired_handle, firing_times_dense, firing_times_sparse,
-		CUSPARSE_DENSETOSPARSE_ALG_DEFAULT, fired_buffer));
-
-	// if (verbose)
-	// {
-		
-	// 	// debug_i.print_d_m();
-	// 	// debug_v.print_d_m();
-	// 	printf("\n");
-	// 	printf("\nn_fired_m1=%d", n_fired_m1);
-	// 	printf("\nn_fired_total=%d", n_fired_total);
-	// 	printf("\nn_fired_0=%d", n_fired_0);
-	// 	printf("\nn_fired_total_m1=%d", n_fired_total_m1);
-	// 	printf("\nfiring_counts_write=%p", (void * )firing_counts_write);
-	// 	printf("\n");
-	// 	// firing_idcs_write.print_d_m();
-	// }
-
-	checkCudaErrors(cudaDeviceSynchronize());
-
-    checkCudaErrors(cudaMemcpy(
-		&n_fired_0, firing_counts + firing_counts_idx, sizeof(int), cudaMemcpyDeviceToHost));
-	// n_fired_0 = firing_counts.d_M[firing_counts_idx];
-
-	// bool print_cond = (t==15);
-	// bool print_cond = resetting;
-	// bool print_cond = false;
-	
-	// if (print_cond){
-	// 	print_info();
-	// }
+void SnnSimulation::_update_sim_pointers(){
 
 	n_fired_total += n_fired_0;
 	n_fired += n_fired_0;
@@ -705,6 +618,7 @@ void SnnSimulation::update(const bool verbose)
 	if (n_fired_total > n_fired_total_m1) {
 		n_fired_m1_to_end += n_fired_0;
 	}
+
 
 	if (t >= D)
 	{
@@ -728,12 +642,26 @@ void SnnSimulation::update(const bool verbose)
 	{
 		firing_times_write = firing_times;
 		firing_idcs_write = firing_idcs;
-		firing_counts_write = firing_counts;
-		firing_counts_idx = 1;
+		// firing_counts_write = firing_counts;
+		// firing_counts_idx = 1;
 		n_fired_total = 0;
 		// printf("\nt: %d (reset)\n", t);
 		resetting = true;
 	}
+
+	printf("\n %d %d (%d/ %d)", n_fired_0, n_fired_m1, firing_counts_idx, reset_firing_count_idx_threshold);
+
+	if (firing_counts_idx > reset_firing_count_idx_threshold){
+		// printf("\nxxxxxxxxxxxxxxxxxx");
+		firing_counts_idx = 1;
+		firing_counts_write = firing_counts;
+	} 
+	
+	if (firing_counts_idx_m1 > reset_firing_count_idx_threshold){
+		// printf("\nyyyyyyyyyyyyyyyyyyyyyy");
+		firing_counts_idx_m1 = 1;	
+	} 
+
 
 	if (n_fired_total_m1 <= reset_firing_times_ptr_threshold)
 	{
@@ -744,18 +672,73 @@ void SnnSimulation::update(const bool verbose)
 	{
 		firing_times_read = firing_times;
 		firing_idcs_read = firing_idcs;
-
+		// firing_counts_idx_m1 = 1;
 		n_fired_m1_to_end = n_fired_total;
-		firing_counts_idx_m1 = 1;
 		n_fired_total_m1 = 0;
 		// printf("\nt: %d (m1-reset)\n", t);
 		resetting = false;
 		// print_info();
 	}
+}
 
-	// if (print_cond){
-	// 	print_info();
-	// }
+void SnnSimulation::update(const bool verbose)
+{	
+	t0 = std::chrono::steady_clock::now();
+
+	// renderer->neurons_bodies.pos_colors.map_buffer();
+
+	update_N_state_ KERNEL_ARGS2(lp_update_state.grid3, lp_update_state.block3 )(
+		N,
+		G,
+		static_cast<float>(t),
+		rand_states,
+		N_pos,
+		N_G,
+		G_flags,
+		G_props,
+		N_states,
+		fired,
+		last_fired,
+		G_firing_count_hist,
+		t % scatter_plot_length
+		// debug_i.get_dp(),
+		// debug_v.get_dp()
+    );
+
+	// renderer->neurons_bodies.pos_colors.unmap_buffer();
+
+	if (verbose)
+	{
+	 	std::cout << "\nt = " << t;
+	}
+
+	if (b_update_voltage_plot)
+	{
+		update_plots();
+	}
+
+	checkCudaErrors(cudaDeviceSynchronize());
+
+	// fired
+	checkCusparseErrors(cusparseDenseToSparse_analysis(
+		fired_handle, firing_times_dense, firing_times_sparse,
+		CUSPARSE_DENSETOSPARSE_ALG_DEFAULT, fired_buffer));
+	
+	checkCudaErrors(cudaDeviceSynchronize());
+
+	checkCusparseErrors(cusparseDenseToSparse_convert(
+		fired_handle, firing_times_dense, firing_times_sparse,
+		CUSPARSE_DENSETOSPARSE_ALG_DEFAULT, fired_buffer));
+
+
+	checkCudaErrors(cudaDeviceSynchronize());
+
+    checkCudaErrors(cudaMemcpy(
+		&n_fired_0, firing_counts + firing_counts_idx, sizeof(int), cudaMemcpyDeviceToHost));
+	
+	if (verbose) print_info(false, false);
+	
+	_update_sim_pointers();
 
 	
 	int block_dim_x = 32;
@@ -793,6 +776,7 @@ void SnnSimulation::update(const bool verbose)
 	checkCudaErrors(cudaDeviceSynchronize());
 
 	t++;
+
 
 	cusparseCsrSetPointers(firing_times_sparse,
                            firing_counts_write,
@@ -1923,17 +1907,17 @@ void SnnSimulation::calculate_avg_group_weight(){
 }
 
 
-void SnnSimulation::set_pointers(
+void SnnSimulation::set_plotting_pointers(
 	float* voltage_plot_data_,
 	float* scatter_plot_data_
 ){
 	voltage_plot_data = voltage_plot_data_;
 	scatter_plot_data = scatter_plot_data_;
 }
-void SnnSimulation::set_pointers_python(
+void SnnSimulation::set_plotting_pointers_python(
 	const long voltage_plot_data_dp,
 	const long scatter_plot_data_dp
 ){
-	set_pointers(reinterpret_cast<float*> (voltage_plot_data_dp),
+	set_plotting_pointers(reinterpret_cast<float*> (voltage_plot_data_dp),
 			     reinterpret_cast<float*> (scatter_plot_data_dp));
 }

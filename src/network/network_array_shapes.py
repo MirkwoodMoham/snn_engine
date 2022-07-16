@@ -20,9 +20,9 @@ class NetworkArrayShapes:
         self.N_weights = self.N_rep  # np.float32
         self.N_delays = (config.D + 1, config.N)  # int
         self.N_fired = (1, config.N)  # int
-        self.firing_times = (15, config.N)  # float
-        self.firing_idcs = self.firing_times  # dtype=np.int32
-        self.firing_counts = 2 * T  # dtype=np.int32
+        self.Firing_times = (15, config.N)  # float
+        self.Firing_idcs = self.Firing_times  # dtype=np.int32
+        self.Firing_counts = (1, T * 2)  # dtype=np.int32
 
         # pt, u, v, a, b, c, d, I
         # self.N_states = (n_N_states, config.N)  # dtype=np.float32
