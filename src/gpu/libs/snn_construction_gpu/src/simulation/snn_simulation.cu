@@ -611,6 +611,9 @@ void SnnSimulation::print_info(bool bprint_idcs, bool bprint_firing_times){
 
 void SnnSimulation::_update_sim_pointers(){
 
+	checkCudaErrors(cudaMemcpy(
+		&n_fired_0, firing_counts + firing_counts_idx, sizeof(int), cudaMemcpyDeviceToHost));
+
 	n_fired_total += n_fired_0;
 	n_fired += n_fired_0;
 	firing_counts_idx += 2;
@@ -636,29 +639,23 @@ void SnnSimulation::_update_sim_pointers(){
 	{
 		firing_times_write += n_fired_0;
 		firing_idcs_write += n_fired_0;
-		firing_counts_write += 2;
 	}
 	else
 	{
 		firing_times_write = firing_times;
 		firing_idcs_write = firing_idcs;
-		// firing_counts_write = firing_counts;
-		// firing_counts_idx = 1;
 		n_fired_total = 0;
-		// printf("\nt: %d (reset)\n", t);
 		resetting = true;
 	}
 
-	printf("\n %d %d (%d/ %d)", n_fired_0, n_fired_m1, firing_counts_idx, reset_firing_count_idx_threshold);
-
 	if (firing_counts_idx > reset_firing_count_idx_threshold){
-		// printf("\nxxxxxxxxxxxxxxxxxx");
 		firing_counts_idx = 1;
 		firing_counts_write = firing_counts;
-	} 
+	} else {
+		firing_counts_write += 2;
+	}
 	
 	if (firing_counts_idx_m1 > reset_firing_count_idx_threshold){
-		// printf("\nyyyyyyyyyyyyyyyyyyyyyy");
 		firing_counts_idx_m1 = 1;	
 	} 
 
@@ -672,12 +669,9 @@ void SnnSimulation::_update_sim_pointers(){
 	{
 		firing_times_read = firing_times;
 		firing_idcs_read = firing_idcs;
-		// firing_counts_idx_m1 = 1;
 		n_fired_m1_to_end = n_fired_total;
 		n_fired_total_m1 = 0;
-		// printf("\nt: %d (m1-reset)\n", t);
 		resetting = false;
-		// print_info();
 	}
 }
 
@@ -732,9 +726,6 @@ void SnnSimulation::update(const bool verbose)
 
 
 	checkCudaErrors(cudaDeviceSynchronize());
-
-    checkCudaErrors(cudaMemcpy(
-		&n_fired_0, firing_counts + firing_counts_idx, sizeof(int), cudaMemcpyDeviceToHost));
 	
 	if (verbose) print_info(false, false);
 	
@@ -768,7 +759,8 @@ void SnnSimulation::update(const bool verbose)
 		n_fired,
 		t,
 		N_delays,
-		stdp_active && (t > 100),
+		// stdp_active && (t > 100),
+		false,
 		G_stdp_config_current,
 		last_fired
     );
@@ -1907,17 +1899,17 @@ void SnnSimulation::calculate_avg_group_weight(){
 }
 
 
-void SnnSimulation::set_plotting_pointers(
-	float* voltage_plot_data_,
-	float* scatter_plot_data_
-){
-	voltage_plot_data = voltage_plot_data_;
-	scatter_plot_data = scatter_plot_data_;
-}
-void SnnSimulation::set_plotting_pointers_python(
-	const long voltage_plot_data_dp,
-	const long scatter_plot_data_dp
-){
-	set_plotting_pointers(reinterpret_cast<float*> (voltage_plot_data_dp),
-			     reinterpret_cast<float*> (scatter_plot_data_dp));
-}
+// void SnnSimulation::set_plotting_pointers(
+// 	float* voltage_plot_data_,
+// 	float* scatter_plot_data_
+// ){
+// 	voltage_plot_data = voltage_plot_data_;
+// 	scatter_plot_data = scatter_plot_data_;
+// }
+// void SnnSimulation::set_plotting_pointers_python(
+// 	const long voltage_plot_data_dp,
+// 	const long scatter_plot_data_dp
+// ){
+// 	set_plotting_pointers(reinterpret_cast<float*> (voltage_plot_data_dp),
+// 			     reinterpret_cast<float*> (scatter_plot_data_dp));
+// }

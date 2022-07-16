@@ -153,9 +153,6 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.G_pos: RegisteredVBO = RegisteredVBO(buffers.selected_group_boxes_vbo, shapes.G_pos, self.device)
         self.registered_buffers.append(self.G_pos)
 
-        # TODO: overflow? (N=25000, t=2106)
-        # a = self.izeros((1, 1))
-
         self.G_flags = LocationGroupFlags(self._config.G, device=self.device, grid=grid,
                                           select_ibo=buffers.selected_group_boxes_ibo)
         self.registered_buffers.append(self.G_flags.selected_array)

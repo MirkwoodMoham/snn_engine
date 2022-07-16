@@ -150,9 +150,9 @@ PYBIND11_MODULE(snn_simulation_gpu, m)
     //     py::arg("Buffer"),
     //     py::arg("N_rep_pre_synaptic_idx"),
     //     py::arg("N_rep_pre_synaptic_counts"))
-    .def("set_plotting_pointers", &SnnSimulation::set_plotting_pointers_python,
-        py::arg("voltage_plot_data"),
-        py::arg("scatter_plot_data"))
+    // .def("set_plotting_pointers", &SnnSimulation::set_plotting_pointers_python,
+    //     py::arg("voltage_plot_data"),
+    //     py::arg("scatter_plot_data"))
     .def("set_stdp_config", &SnnSimulation::set_stdp_config, 
         py::arg("stdp_config_id"), 
         py::arg("activate") = true)
