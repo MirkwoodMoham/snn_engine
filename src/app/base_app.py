@@ -12,6 +12,8 @@ class BaseApp(Application):
 
         native_app = QApplication([''])
 
+        screens = native_app.screens()
+
         super().__init__(backend_name='pyqt6')
 
         self.network: SpikingNeuronNetwork = network
@@ -21,7 +23,10 @@ class BaseApp(Application):
 
         native_app.setStyleSheet(qdarktheme.load_stylesheet())
 
-        self.main_window: MainWindow = self._init_main_window()
+        self.main_window: MainWindow = self._init_main_window(screens)
+        # print(self.main_window.scene_3d.canvas_backend)
+
+        self.main_window.setGeometry(screens[0].availableGeometry())
 
         # keep order for vbo numbers (2/3)
 
@@ -67,9 +72,9 @@ class BaseApp(Application):
         else:
             pass
 
-    def _init_main_window(self) -> MainWindow:
+    def _init_main_window(self, screens) -> MainWindow:
         main_window = MainWindow(name="SNN Engine", app=self, plotting_config=self._plotting_config)
-
+        main_window.setScreen(screens[0])
         main_window.scene_3d.set_current()
         for o in self.network.rendered_3d_objs:
             main_window.scene_3d.network_view.add(o)

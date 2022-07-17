@@ -177,7 +177,8 @@ class NetworkGPUArrays(GPUArrayCollection):
         (self.N_rep,
          self.N_delays) = self._N_rep_and_N_delays(shapes=shapes, curand_states=self.curand_states)
 
-        self.N_rep_pre_synaptic_idx = self.izeros(shapes.N_rep_inv)
+        self.N_rep_pre_synaptic = self.izeros(shapes.N_rep_inv)
+        self.N_rep_pre_synaptic_idcs = self.izeros(shapes.N_rep_inv)
         self.N_rep_pre_synaptic_counts = self.izeros(self._config.N + 1)
         self.print_allocated_memory('N_rep_inv')
 
@@ -222,8 +223,6 @@ class NetworkGPUArrays(GPUArrayCollection):
 
         self.output_tensor = self.fzeros(6)
 
-        self.debug = False
-
     def _init_sim(self, T, plotting_config):
 
         sim = snn_simulation_gpu.SnnSimulation(
@@ -248,7 +247,8 @@ class NetworkGPUArrays(GPUArrayCollection):
             G_props=self.G_props.data_ptr(),
             N_rep=self.N_rep.data_ptr(),
             N_rep_buffer=self.N_rep_buffer.data_ptr(),
-            N_rep_pre_synaptic_idx=self.N_rep_pre_synaptic_idx.data_ptr(),
+            N_rep_pre_synaptic=self.N_rep_pre_synaptic.data_ptr(),
+            N_rep_pre_synaptic_idcs=self.N_rep_pre_synaptic_idcs.data_ptr(),
             N_rep_pre_synaptic_counts=self.N_rep_pre_synaptic_counts.data_ptr(),
             N_delays=self.N_delays.data_ptr(),
             N_states=self.N_states.data_ptr(),
@@ -277,14 +277,16 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.Simulation.actualize_N_rep_pre_synaptic()
 
         if self._config.N <= 2 * 10 ** 5:
-            aa = self.to_dataframe(self.N_rep_buffer)
-            ab = self.to_dataframe(self.N_rep_pre_synaptic_counts)
-            ac = self.to_dataframe(self.N_rep_pre_synaptic_idx)
-            ad = self.to_dataframe(self.N_rep)
+
+            a = self.to_dataframe(self.N_rep_buffer)
+            b = self.to_dataframe(self.N_rep_pre_synaptic)
+            c = self.to_dataframe(self.N_rep_pre_synaptic_idcs)
+            d = self.to_dataframe(self.N_rep_pre_synaptic_counts)
+            e = self.to_dataframe(self.N_rep)
 
             # noinspection PyTypeChecker
-            assert len(self.N_rep_pre_synaptic_idx[self.N_rep.flatten()[
-                self.N_rep_pre_synaptic_idx.type(torch.int64)] != self.N_rep_buffer]) == 0
+            assert len(self.N_rep_pre_synaptic_idcs[self.N_rep.flatten()[
+                self.N_rep_pre_synaptic_idcs.type(torch.int64)] != self.N_rep_buffer]) == 0
 
         self.N_rep_buffer[:] = -1
 
@@ -978,30 +980,30 @@ class NetworkGPUArrays(GPUArrayCollection):
 
         t_mod = self.Simulation.t % self._plotting_config.scatter_plot_length
 
-        if self.debug is False:
+        if self._config.debug is False:
 
             for i in range(n_updates):
-                if self.debug is False:
-                    self.Simulation.update(False)
-                    # if self.Simulation.t >= 2100:
-                    #     self.debug = True
+                # if self._config.debug is False:
+                self.Simulation.update(self._config.stdp_active, self._config.debug)
+                # if self.Simulation.t >= 2100:
+                #     self.debug = True
         else:
             a = self.to_dataframe(self.Firing_idcs)
             b = self.to_dataframe(self.Firing_times)
             c = self.to_dataframe(self.Firing_counts)
-            self.Simulation.update(True)
+            self.Simulation.update(self._config.stdp_active,False)
 
         # print(self.G_firing_count_hist.flatten()[67 + (self.Simulation.t-1) * self._config.G])
 
         self.plotting_arrays.group_firing_counts_plot_single1.tensor[
         t_mod: t_mod + n_updates, 1] = \
-            self.G_firing_count_hist[t_mod: t_mod + n_updates, 123] / 100
+            self.G_firing_count_hist[t_mod: t_mod + n_updates, 123] / self.G_neuron_counts[1, 123]
 
         offset1 = self._plotting_config.scatter_plot_length
 
         self.plotting_arrays.group_firing_counts_plot_single1.tensor[
         offset1 + t_mod: offset1 + t_mod + n_updates, 1] = \
-            self.G_firing_count_hist[t_mod: t_mod + n_updates, 125] / 100
+            self.G_firing_count_hist[t_mod: t_mod + n_updates, 125] / self.G_neuron_counts[1, 125]
 
         if t_mod + n_updates + 1 >= self._plotting_config.scatter_plot_length:
             self.G_firing_count_hist[:] = 0

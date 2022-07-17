@@ -30,7 +30,8 @@ struct SnnSimulation
     float* G_props; 
     int* N_rep; 
     int* N_rep_buffer; 
-    int* N_rep_pre_synaptic_idx; 
+    int* N_rep_pre_synaptic; 
+    int* N_rep_pre_synaptic_idcs; 
     int* N_rep_pre_synaptic_counts; 
     int* N_delays; 
     float* N_states; 
@@ -90,6 +91,8 @@ struct SnnSimulation
 
     int t = 0;
 
+    int no_stdp_time_threshold = 20;
+
     bool resetting = false;
 
     std::chrono::steady_clock::time_point t0;
@@ -121,7 +124,8 @@ struct SnnSimulation
         float* G_props_, 
         int* N_rep_, 
         int* N_rep_buffer_,
-        int* N_rep_pre_synaptic_idx_, 
+        int* N_rep_pre_synaptic_, 
+        int* N_rep_pre_synaptic_idcs_, 
         int* N_rep_pre_synaptic_counts_, 
         int* N_delays_, 
         float* N_states_,
@@ -143,7 +147,7 @@ struct SnnSimulation
     
     void update_plots();
     void print_info(bool bprint_idcs = false, bool bprint_nfiring_times = false);
-    void update(bool verbose);
+    void update(bool b_stdp, bool verbose);
 
     void swap_groups(
         long* neurons, int n_neurons, 

@@ -30,7 +30,8 @@ SnnSimulation make_SnnSimulation(
     const long G_props_dp, 
     const long N_rep_dp, 
     const long N_rep_buffer_dp,
-    const long N_rep_pre_synaptic_idx_dp,
+    const long N_rep_pre_synaptic_dp,
+    const long N_rep_pre_synaptic_idcs_dp,
     const long N_rep_pre_synaptic_counts_dp,
     const long N_delays_dp, 
     const long N_states_dp,
@@ -61,7 +62,8 @@ SnnSimulation make_SnnSimulation(
     int* N_rep = reinterpret_cast<int*> (N_rep_dp);
 
     int* N_rep_buffer = reinterpret_cast<int*> (N_rep_buffer_dp);
-    int* N_rep_pre_synaptic_idx = reinterpret_cast<int*> (N_rep_pre_synaptic_idx_dp);
+    int* N_rep_pre_synaptic = reinterpret_cast<int*> (N_rep_pre_synaptic_dp);
+    int* N_rep_pre_synaptic_idcs = reinterpret_cast<int*> (N_rep_pre_synaptic_idcs_dp);
     int* N_rep_pre_synaptic_counts = reinterpret_cast<int*> (N_rep_pre_synaptic_counts_dp);
     // int* N_rep_pre_synaptic_counts = reinterpret_cast<int*> (N_rep_dp);
     
@@ -107,7 +109,8 @@ SnnSimulation make_SnnSimulation(
         G_props, 
         N_rep, 
         N_rep_buffer,
-        N_rep_pre_synaptic_idx, 
+        N_rep_pre_synaptic, 
+        N_rep_pre_synaptic_idcs, 
         N_rep_pre_synaptic_counts, 
         N_delays, 
         N_states,
@@ -184,7 +187,8 @@ PYBIND11_MODULE(snn_simulation_gpu, m)
         py::arg("G_props"),
         py::arg("N_rep"),
         py::arg("N_rep_buffer"),
-        py::arg("N_rep_pre_synaptic_idx"),
+        py::arg("N_rep_pre_synaptic"),
+        py::arg("N_rep_pre_synaptic_idcs"),
         py::arg("N_rep_pre_synaptic_counts"),
         py::arg("N_delays"),
         py::arg("N_states"),

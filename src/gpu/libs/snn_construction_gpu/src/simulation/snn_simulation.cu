@@ -183,7 +183,8 @@ SnnSimulation::SnnSimulation(
     float* G_props_, 
     int* N_rep_, 
     int* N_rep_buffer_, 
-    int* N_rep_pre_synaptic_idx_, 
+    int* N_rep_pre_synaptic_, 
+    int* N_rep_pre_synaptic_idcs_, 
     int* N_rep_pre_synaptic_counts_, 
     int* N_delays_, 
     float* N_states_,
@@ -228,7 +229,8 @@ SnnSimulation::SnnSimulation(
     N_rep = N_rep_;
 
 	N_rep_buffer = N_rep_buffer_;
-    N_rep_pre_synaptic_idx = N_rep_pre_synaptic_idx_; 
+    N_rep_pre_synaptic = N_rep_pre_synaptic_; 
+    N_rep_pre_synaptic_idcs = N_rep_pre_synaptic_idcs_; 
     N_rep_pre_synaptic_counts = N_rep_pre_synaptic_counts_;
 
     N_delays = N_delays_;
@@ -304,7 +306,8 @@ __global__ void update_current_(
 	const float* G_props,
 	const int* N_rep, 
 	// const int* Buffer,
-	const int* N_rep_pre_synaptic_idx,
+	const int* N_rep_pre_synaptic,
+	const int* N_rep_pre_synaptic_idcs,
 	const int* N_rep_pre_synaptic_counts,
 	float* N_weights, 
 	float* N_states,
@@ -478,38 +481,59 @@ __global__ void update_current_(
 			}
 		}
 
-		if (r_stdp && (delay == 0) && (!(G_flags[src_G + row_b_sensory_input * G] == 1))){
+		if (r_stdp && (delay == 0) && (!(G_flags[src_G + row_b_sensory_input * G] == 1)))
+		{
 			int pre_src_N;
 			float w2;
 			s_end2 = N_rep_pre_synaptic_counts[n + 1];
 			for (int s2 = N_rep_pre_synaptic_counts[n]; s2 < s_end2; s2++){
-
-				idx = N_rep_pre_synaptic_idx[s2];
-
-				w2 = fabsf(N_weights[idx]);
-				if ((w2 < .98) && (w2 > 0.02))
-				{				
-					pre_src_N = idx - N * __float2int_rd(__int2float_rn(idx) / __int2float_rn(N));
-
-					int stdp_config = G_stdp_config_current[N_G[pre_src_N * 2 + 1] + src_G * G];
-
-					if (((t - last_fired[pre_src_N]) < (2 * D)) 
-						&& (stdp_config != 0)){
+				// if ((s2 < 0) || (s2 >= (N * S))){
+				// 	printf("\ns2=%d", s2);
+				// } else {
+					idx = N_rep_pre_synaptic_idcs[s2];
+					// if ((idx >= 0) && (idx < (N * S)))
+					// {
+						w2 = fabsf(N_weights[idx]);
+						if ((w2 < .98) && (w2 > 0.02))
+						{				
 							
-						
-						if (N_G[2 * n] == 2){
-							N_weights[idx] += ((stdp_config > 0) * phi_r * a_r_p + (stdp_config < 0) * phi_p * a_p_m) * w2 * (1. - w2);
-							if (false){
-								printf("\nn=%d (t: %d) g=%d, idx=%d, pre-synaptic=%d [%d] (last fired: %d), w=%f (+%f)",
-									n, t, src_G,idx, pre_src_N, N_G[pre_src_N * 2 + 1],last_fired[pre_src_N], w2, 
-									(alpha * phi_r * a_r_p + beta * phi_p * a_p_m) * w2 * (1. - w2));
+							pre_src_N = N_rep_pre_synaptic[idx];
+							// pre_src_N = idx - N * __float2int_rd(__int2float_rn(idx) / __int2float_rn(N));
+
+							if ((pre_src_N >= N) || (pre_src_N < 0)){
+								printf("\npre_src_N=%d\n", pre_src_N);  
+								// printf("\npre_src_N=%d - %d * (%f/%f) = %d - %d * %d = %d\n",  
+								// 	   idx, N, __int2float_rn(idx), __int2float_rn(N), 
+								// 	   idx, N, __float2int_rd(__int2float_rn(idx) / __int2float_rn(N)), 
+								// 	   pre_src_N);
 							}
-						} else {
-							N_weights[idx] += ((stdp_config > 0) * phi_r * a_r_m + (stdp_config < 0) * phi_p * a_p_p) * w2 * (1. - w2);
+	
+							int stdp_config = G_stdp_config_current[N_G[pre_src_N * 2 + 1] + src_G * G];
+	
+							if (((t - last_fired[pre_src_N]) < (2 * D)) 
+								&& (stdp_config != 0)){
+									
+								
+								if (N_G[2 * n] == 2){
+									N_weights[idx] += ((stdp_config > 0) * phi_r * a_r_p + (stdp_config < 0) * phi_p * a_p_m) * w2 * (1. - w2);
+									if (false){
+										printf("\nn=%d (t: %d) g=%d, idx=%d, pre-synaptic=%d [%d] (last fired: %d), w=%f (+%f)",
+											n, t, src_G,idx, pre_src_N, N_G[pre_src_N * 2 + 1],last_fired[pre_src_N], w2, 
+											(alpha * phi_r * a_r_p + beta * phi_p * a_p_m) * w2 * (1. - w2));
+									}
+								} else {
+									N_weights[idx] += ((stdp_config > 0) * phi_r * a_r_m + (stdp_config < 0) * phi_p * a_p_p) * w2 * (1. - w2);
+								}
+							
+							}
 						}
-					
-					}
-				}
+					// }
+
+					// else {
+					// 	printf("\nidx=%d", idx);
+					// }
+				//}
+
 			}
 		}
 	}
@@ -675,7 +699,7 @@ void SnnSimulation::_update_sim_pointers(){
 	}
 }
 
-void SnnSimulation::update(const bool verbose)
+void SnnSimulation::update(const bool b_stdp, const bool verbose)
 {	
 	t0 = std::chrono::steady_clock::now();
 
@@ -701,10 +725,7 @@ void SnnSimulation::update(const bool verbose)
 
 	// renderer->neurons_bodies.pos_colors.unmap_buffer();
 
-	if (verbose)
-	{
-	 	std::cout << "\nt = " << t;
-	}
+	if (verbose) std::cout << "\nt = " << t;
 
 	if (b_update_voltage_plot)
 	{
@@ -751,7 +772,8 @@ void SnnSimulation::update(const bool verbose)
 		G_props,
 		N_rep,
 		// N_rep_buffer,
-		N_rep_pre_synaptic_idx,
+		N_rep_pre_synaptic,
+		N_rep_pre_synaptic_idcs,
 		N_rep_pre_synaptic_counts,
 		N_weights,
 		N_states,
@@ -760,7 +782,7 @@ void SnnSimulation::update(const bool verbose)
 		t,
 		N_delays,
 		// stdp_active && (t > 100),
-		false,
+		b_stdp && (t > no_stdp_time_threshold),
 		G_stdp_config_current,
 		last_fired
     );
@@ -1451,18 +1473,20 @@ void SnnSimulation::set_stdp_config(int stdp_config_id, bool activate){
 }
 
 
-__global__ void reset_N_rep_pre_synaptic(
+__global__ void reset_N_rep_pre_synaptic_arrays(
 	const int N,
 	const int S,
 	int* Buffer,
-	int* N_rep_pre_synaptic_idx,
+	int* N_rep_pre_synaptic,
+	int* N_rep_pre_synaptic_idcs,
 	int* N_rep_pre_synaptic_counts
 ){
 	const int src_N = blockIdx.x * blockDim.x + threadIdx.x; 
 	if (src_N < N){
 		for (int s = 0; s < S; s++){
 			Buffer[src_N + s * N] = -1;
-			N_rep_pre_synaptic_idx[src_N + s * N] = -1;
+			N_rep_pre_synaptic[src_N + s * N] = -1;
+			N_rep_pre_synaptic_idcs[src_N + s * N] = -1;
 		}
 
 		if (src_N == 0){
@@ -1516,20 +1540,14 @@ __global__ void fill_N_rep_snk_counts(
 }
 
 
-__global__ void fill_N_rep_pre_synaptic_buffer(
+__global__ void fill_unsorted_N_rep_pre_synaptic_idcs(
 	const int N,
 	const int S,
 	int* N_rep,
-	int* Buffer,
-	int* N_rep_pre_synaptic_idx,
+	int* SortBuffer,
+	int* N_rep_pre_synaptic_idcs,
 	int* N_rep_pre_synaptic_counts
 ){
-	
-	// Fill Buffer with the indices of the sysnapses in N_rep.
-	//  "N_rep-synapse-index" - int("N_rep-synapse-index" / N) * N yields the pre-Synaptic Neuron. 
-	// The write indices (for the Buffer-array) are given by N_rep_pre_synaptic_counts.
-	// The values in Buffer will be copied to N_rep_pre_synaptic_idx in the 
-	// fill_N_rep_pre_synaptic_idx-kernel.
 
 	const int src_N = blockIdx.x * blockDim.x + threadIdx.x; 
 
@@ -1549,8 +1567,8 @@ __global__ void fill_N_rep_pre_synaptic_buffer(
 			
 			while (synapse_idx != -1){
 				
-				synapse_idx = atomicExch(&Buffer[write_idx], synapse_idx);
-				N_rep_pre_synaptic_idx[write_idx] = snk_N;
+				synapse_idx = atomicExch(&N_rep_pre_synaptic_idcs[write_idx], synapse_idx);
+				SortBuffer[write_idx] = snk_N;
 				write_idx++;
 			}
 
@@ -1562,17 +1580,54 @@ __global__ void fill_N_rep_pre_synaptic_buffer(
 }
 
 
+__global__ void fill_N_rep_pre_synaptic(
+	const int N,
+	const int S,
+	int* N_rep,
+	int* N_rep_pre_synaptic,
+	int* N_rep_pre_synaptic_idcs,
+	int* N_rep_pre_synaptic_counts
+){
+
+	const int src_N = blockIdx.x * blockDim.x + threadIdx.x; 
+
+	if (src_N < N){
+
+		int snk_N;
+		int write_idx;
+	
+		int synapse_idx;
+
+		for (int s = 0; s < S; s++){
+			
+			synapse_idx = src_N + s * N;
+
+			snk_N = N_rep[synapse_idx];
+			write_idx = N_rep_pre_synaptic_counts[snk_N];
+			
+			while (N_rep_pre_synaptic_idcs[write_idx] != synapse_idx){
+				write_idx++;
+			}
+
+			N_rep_pre_synaptic[write_idx] = src_N;
+
+		}
+	}
+
+}
+
+
 void sort_N_rep_sysnaptic(
 	const int N,
 	const int S,
-	int* sort_keys,
-	int* Buffer,
+	int* sort_keys_buffer,
+	int* N_rep_pre_synaptic_idcs,
 	int* N_rep_pre_synaptic_counts,
 	const bool verbose = true
 ){
 
-	auto sort_keys_dp = thrust::device_pointer_cast(sort_keys);
-	auto N_rep_dp = thrust::device_pointer_cast(Buffer);
+	auto sort_keys_buffer_dp = thrust::device_pointer_cast(sort_keys_buffer);
+	auto N_rep_dp = thrust::device_pointer_cast(N_rep_pre_synaptic_idcs);
 	auto N_rep_counts_dp = thrust::device_pointer_cast(N_rep_pre_synaptic_counts);
 
 	int n_sorted = 0;
@@ -1597,11 +1652,11 @@ void sort_N_rep_sysnaptic(
 
 		// printf("\nS_batch_size=%d\n", S_batch_size);
 
-	 	thrust::stable_sort_by_key(N_rep_dp, N_rep_dp + S_batch_size, sort_keys_dp);
-	 	thrust::stable_sort_by_key(sort_keys_dp, sort_keys_dp + S_batch_size, N_rep_dp);
+	 	thrust::stable_sort_by_key(N_rep_dp, N_rep_dp + S_batch_size, sort_keys_buffer_dp);
+	 	thrust::stable_sort_by_key(sort_keys_buffer_dp, sort_keys_buffer_dp + S_batch_size, N_rep_dp);
 		
 	 	n_sorted += N_batch_size;
-	 	sort_keys_dp += S_batch_size;
+	 	sort_keys_buffer_dp += S_batch_size;
 	 	N_rep_dp += S_batch_size;
 
 	 	if (verbose) { 
@@ -1616,68 +1671,18 @@ void sort_N_rep_sysnaptic(
 }
 
 
-__device__ int v = 0;
-
-__global__ void write_pre_synaptic_idx(
-	int s,
-	int src_N,
-	int start,
-	int end,
-	const int* Buffer,
-	int* N_rep_pre_synaptic_idx
-) 
-{
-	const int write_idx = start + blockIdx.x * blockDim.x + threadIdx.x; 
-
-	if ((write_idx < end) && (Buffer[write_idx] == src_N)){
-
-		N_rep_pre_synaptic_idx[write_idx] = s;
-
-	}
-}
-
-
-
-__global__ void fill_N_rep_pre_synaptic_idx(
-	const int N,
-	const int S,
-	int* Buffer,
-	int* N_rep_pre_synaptic_idx
-){
-	const int n = blockIdx.x * blockDim.x + threadIdx.x; 
-
-	if (n < N){
-
-		int snk_N;
-		int idx;
-
-
-		for (int j=0; j < S; j++){
-
-			idx = n + j * N; 
-
-			snk_N = N_rep_pre_synaptic_idx[idx];
-
-			N_rep_pre_synaptic_idx[idx] = Buffer[idx]; //(Buffer[idx] - snk_N) / N;
-
-			Buffer[idx] = snk_N;
-
-		}
-	}
-}
-
-
 void SnnSimulation::actualize_N_rep_pre_synaptic(){
 
-	LaunchParameters launch_pars = LaunchParameters(N, (void *)reset_N_rep_pre_synaptic);
+	LaunchParameters launch_pars = LaunchParameters(N, (void *)reset_N_rep_pre_synaptic_arrays);
 
 	checkCudaErrors(cudaDeviceSynchronize());
 
-	reset_N_rep_pre_synaptic KERNEL_ARGS2(launch_pars.grid3, launch_pars.block3)(
+	reset_N_rep_pre_synaptic_arrays KERNEL_ARGS2(launch_pars.grid3, launch_pars.block3)(
 		N,
 		S,
 		N_rep_buffer,
-		N_rep_pre_synaptic_idx,
+		N_rep_pre_synaptic,
+		N_rep_pre_synaptic_idcs,
 		N_rep_pre_synaptic_counts
 	);
 
@@ -1697,13 +1702,14 @@ void SnnSimulation::actualize_N_rep_pre_synaptic(){
 	thrust::inclusive_scan(thrust::device, count_dp, count_dp + N + 1, count_dp);
 
 	checkCudaErrors(cudaDeviceSynchronize());
+	printf("\nfill (unsorted) N_rep_pre_synaptic_idcs...");
 
-	fill_N_rep_pre_synaptic_buffer KERNEL_ARGS2(launch_pars.grid3, launch_pars.block3)(
+	fill_unsorted_N_rep_pre_synaptic_idcs KERNEL_ARGS2(launch_pars.grid3, launch_pars.block3)(
 		N,
 		S,
 		N_rep,
 		N_rep_buffer,
-		N_rep_pre_synaptic_idx,
+		N_rep_pre_synaptic_idcs,
 		N_rep_pre_synaptic_counts
 	);
 
@@ -1729,26 +1735,28 @@ void SnnSimulation::actualize_N_rep_pre_synaptic(){
 
 	checkCudaErrors(cudaDeviceSynchronize());
 
-	sort_N_rep_sysnaptic(N, S, N_rep_pre_synaptic_idx, N_rep_buffer, N_rep_pre_synaptic_counts);
+	sort_N_rep_sysnaptic(N, S, N_rep_buffer, N_rep_pre_synaptic_idcs, N_rep_pre_synaptic_counts);
 
 	checkCudaErrors(cudaDeviceSynchronize());
 
-	printf("\nfill_N_rep_pre_synaptic_idx...");
+	printf("\nfill N_rep_pre_synaptic...");
 
-	std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-
-	fill_N_rep_pre_synaptic_idx KERNEL_ARGS2(launch_pars.grid3, launch_pars.block3)(
-		N, S, 
-		N_rep_buffer, 
-		N_rep_pre_synaptic_idx
+	fill_N_rep_pre_synaptic KERNEL_ARGS2(launch_pars.grid3, launch_pars.block3)(
+		N,
+		S,
+		N_rep,
+		N_rep_pre_synaptic,
+		N_rep_pre_synaptic_idcs,
+		N_rep_pre_synaptic_counts
 	);
-	
+
 	checkCudaErrors(cudaDeviceSynchronize());
 
-	std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+
+	// std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+	// std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
 
 	printf(" done.\n");
-
 	//std::cout << "Time difference = " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << "[ms]" << std::endl;
 }
 

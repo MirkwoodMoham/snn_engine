@@ -29,6 +29,10 @@ class NetworkConfig:
 
     sim_updates_per_frame: Optional[int] = None
 
+    debug: bool = False
+
+    stdp_active: bool = False
+
     class InitValues:
         class ThalamicInput:
             inh_current: float = 25.

@@ -85,7 +85,7 @@ class VoltagePlotWidget(PlotWidget):
                  width_min=200, width_max=None,
                  height_min=100, height_max=None):
 
-        super().__init__(title_str="Voltage Plot",
+        super().__init__(title_str="Voltage [V]",
                          n_plots=plotting_confing.n_voltage_plots,
                          plot_length=plotting_confing.voltage_plot_length,
                          width_min=width_min, width_max=width_max,
@@ -97,7 +97,7 @@ class ScatterPlotWidget(PlotWidget):
     def __init__(self, plotting_confing: PlottingConfig,
                  width_min=200, width_max=None, height_min=100, height_max=None):
 
-        super().__init__(title_str="Scatter Plot",
+        super().__init__(title_str="Firings",
                          n_plots=plotting_confing.n_scatter_plots,
                          plot_length=plotting_confing.scatter_plot_length,
                          width_min=width_min, width_max=width_max,

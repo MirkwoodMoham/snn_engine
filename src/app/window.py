@@ -49,7 +49,7 @@ class MainWindow(BaseWindow):
 
     def __init__(self,
                  name: str,
-                 app, # : Optional[Application],
+                 app,  # : Optional[Application],
                  plotting_config: PlottingConfig,
                  keys=None
                  ):
@@ -100,7 +100,7 @@ class MainWindow(BaseWindow):
             self.splitter.addWidget(self.frame_canvas(self.group_info_scene))
             self.splitter.setStretchFactor(2, 2)
             self.splitter.addWidget(self.ui_right)
-            self.splitter.setStretchFactor(3, 6)
+            self.splitter.setStretchFactor(3, 10)
 
 
 class NeuronPlotWindow(BaseWindow):
