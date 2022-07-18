@@ -12,7 +12,7 @@ from vispy.visuals.transforms import STTransform
 from network.network_config import NetworkConfig
 from network.network_states import (
     G2GInfoArrays,
-    PropertyTensor,
+    StateTensor,
     LocationGroupProperties,
     LocationGroupFlags
 )
@@ -270,10 +270,10 @@ class GroupInfo(GroupBoxesBase):
         self.freeze()
 
     @staticmethod
-    def _init_txt_visual(property_tensor: PropertyTensor, cache: dict, text_collection: dict, visual: TextVisual):
+    def _init_txt_visual(state_tensor: StateTensor, cache: dict, text_collection: dict, visual: TextVisual):
         b_visual_set: bool = False
-        for k in asdict(property_tensor._rows).keys():
-            tensor_row: torch.Tensor = getattr(property_tensor, k)
+        for k in asdict(state_tensor._rows).keys():
+            tensor_row: torch.Tensor = getattr(state_tensor, k)
             cache[k] = tensor_row.clone()
             # noinspection PyTypeChecker
             text_collection[k] = [str(v) for v in list(tensor_row.cpu().numpy())]
@@ -355,13 +355,13 @@ class GroupInfo(GroupBoxesBase):
         self.group_id_text_visual.text = self.group_id_texts[key]
         return i0, i1
 
-    def _set_text(self, key, property_tensor: PropertyTensor, cache: dict, text_collection: dict, visual: TextVisual):
+    def _set_text(self, key, state_tensor: StateTensor, cache: dict, text_collection: dict, visual: TextVisual):
         if key != 'None':
             cached = cache[key]
             # noinspection PyTypeChecker
-            current: torch.Tensor = getattr(property_tensor, key)
+            current: torch.Tensor = getattr(state_tensor, key)
             current_cpu = current.cpu().numpy()
-            if property_tensor is self.G_props:
+            if state_tensor is self.G_props:
                 interval = [np.min(current_cpu), np.max(current_cpu)]
             else:
                 interval = None

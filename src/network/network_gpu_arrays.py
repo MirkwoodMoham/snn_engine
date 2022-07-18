@@ -208,7 +208,9 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.N_relative_G_indices = self._N_relative_G_indices()
         self.G_swap_tensor = self._G_swap_tensor()
         self.print_allocated_memory('G_swap_tensor')
-        self.swap_group_synapses(torch.from_numpy(grid.forward_groups).to(device=self.device).type(torch.int64))
+
+        if self._config.N >= 8000:
+            self.swap_group_synapses(torch.from_numpy(grid.forward_groups).to(device=self.device).type(torch.int64))
 
         self.actualize_N_rep_pre_synaptic_idx(shapes)
 

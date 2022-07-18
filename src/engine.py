@@ -9,22 +9,29 @@ from network import (
 )
 from app import BaseApp
 
+# TODO: gui; change neuron properties
+# TODO: plot single neurons, reset plot cam
 # TODO: pre-synaptic delays
 # TODO: better sensory weights,
 # TODO: resonant cells,
 # TODO: group_info_mesh face sizes
 # TODO: better stdp G2G config
 # TODO: monitor learning
-
+# TODO: weird synapse counts
+# TODO: low neuron count swaps
+# TODO: performace hit above 300K neurons
 
 # TODO (optional) gpu side group_info_mesh face color actualization
 # TODO (optional) group selection via selector box
 # TODO (optional, difficult) group selection via click
 
 
+# TODO: configurable segmentation
+# tODO: subgroups
+
 class EngineConfig:
 
-    N: int = 300 * 10 ** 3
+    N: int = 5 * 10 ** 3
     T: int = 5000  # Max simulation record duration
 
     device: int = 0

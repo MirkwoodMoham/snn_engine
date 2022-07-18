@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 import os
 from pathlib import Path
 from typing import Any, Callable, Optional, Union
@@ -462,5 +462,9 @@ class RenderedObjectSliders(CollapsibleWidget):
         self.add(self.scale)
         self.add(self.translate)
 
-    def connect(self):
-        pass
+
+class NetworkStateSliders(CollapsibleWidget):
+
+    def __init__(self, state_tensor):
+        for k in asdict(state_tensor._rows).keys():
+            pass

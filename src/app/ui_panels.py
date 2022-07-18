@@ -257,11 +257,11 @@ class MainUILeft(UIPanel):
 
         self.addWidget(play_pause_widget)
         self.addWidget(self.buttons.toggle_outergrid)
-        self.addWidget(self.weights_collapsible, 1)
-        self.addWidget(self.sensory_input_collapsible, 1)
-        self.addWidget(self.thalamic_input_collapsible, 1)
+        self.addWidget(self.weights_collapsible)
+        self.addWidget(self.sensory_input_collapsible)
+        self.addWidget(self.thalamic_input_collapsible)
 
-        self.addWidget(self.objects_collapsible, 1)
+        self.addWidget(self.objects_collapsible)
 
         self.addWidget(self.buttons.exit)
 

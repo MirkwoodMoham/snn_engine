@@ -15,7 +15,7 @@ from network.network_config import NetworkConfig
 from .network_grid import NetworkGrid
 
 
-class PropertyTensor:
+class StateTensor:
 
     @dataclass(frozen=True)
     class Rows:
@@ -70,27 +70,34 @@ class PropertyTensor:
         return pd.DataFrame(self._tensor.cpu().numpy())
 
 
-@dataclass(frozen=True)
-class StateRows:
+class StateRow:
 
-    pt: int = 0
-    v: int = 1
-    i: int = 2
+    def __init__(self, index, value_interval=None):
+        self.index = index
+        self.interval = value_interval
+
+
+@dataclass(frozen=True)
+class StateRowCollection:
+
+    pt: StateRow = StateRow(0, [0, 1])
+    v: StateRow = StateRow(0)
+    i: StateRow = StateRow(0)
 
     def __post_init__(self):
-        vs = np.array(list(asdict(self).values()))
-        if not np.max(vs) == self.i:
+        vs = np.array([x.index for x in list(asdict(self).values())])
+        if not np.max(vs) == self.i.index:
             raise AttributeError
 
-        if not np.math.factorial(self.i) == np.cumprod(vs[vs > 0])[-1]:
+        if not np.math.factorial(self.i.index) == np.cumprod(vs[vs > 0])[-1]:
             raise AttributeError
 
     def __len__(self):
-        return self.i + 1
+        return self.i.index + 1
 
 
 # noinspection PyPep8Naming
-class IzhikevichPresets(PropertyTensor):
+class IzhikevichPresets(StateTensor):
 
     @dataclass(frozen=True)
     class Preset:
@@ -129,19 +136,19 @@ class IzhikevichPresets(PropertyTensor):
         self.lts = self.Preset(a=0.02, b=0.25, c=-65., d=2.)
 
 
-class IzhikevichModel(PropertyTensor):
+class IzhikevichModel(StateTensor):
 
     @dataclass(frozen=True)
-    class Rows(StateRows):
+    class Rows(StateRowCollection):
 
-        pt: int = 0
-        u: int = 1
-        v: int = 2
-        a: int = 3
-        b: int = 4
-        c: int = 5
-        d: int = 6
-        i: int = 7
+        pt: StateRow = StateRow(0, [0, 1])
+        u: StateRow = StateRow(1)
+        v: StateRow = StateRow(2)
+        a: StateRow = StateRow(3, [.02, .1])
+        b: StateRow = StateRow(4, [.2, .25])
+        c: StateRow = StateRow(5, [-65, -50])
+        d: StateRow = StateRow(6, [2, 8])
+        i: StateRow = StateRow(7)
 
     def __init__(self, n_neurons, device, types_tensor):
         self._rows = self.Rows()
@@ -185,67 +192,67 @@ class IzhikevichModel(PropertyTensor):
 
     @property
     def pt(self):
-        return self._tensor[self._rows.pt, :]
+        return self._tensor[self._rows.pt.index, :]
 
     @pt.setter
     def pt(self, v):
-        self._tensor[self._rows.pt, :] = v
+        self._tensor[self._rows.pt.index, :] = v
 
     @property
     def u(self):
-        return self._tensor[self._rows.u, :]
+        return self._tensor[self._rows.u.index, :]
 
     @u.setter
     def u(self, v):
-        self._tensor[self._rows.u, :] = v
+        self._tensor[self._rows.u.index, :] = v
 
     @property
     def v(self):
-        return self._tensor[self._rows.u, :]
+        return self._tensor[self._rows.u.index, :]
 
     @v.setter
     def v(self, v):
-        self._tensor[self._rows.v, :] = v
+        self._tensor[self._rows.v.index, :] = v
 
     @property
     def a(self):
-        return self._tensor[self._rows.a, :]
+        return self._tensor[self._rows.a.index, :]
 
     @a.setter
     def a(self, v):
-        self._tensor[self._rows.a, :] = v
+        self._tensor[self._rows.a.index, :] = v
 
     @property
     def b(self):
-        return self._tensor[self._rows.b, :]
+        return self._tensor[self._rows.b.index, :]
 
     @b.setter
     def b(self, v):
-        self._tensor[self._rows.b, :] = v
+        self._tensor[self._rows.b.index, :] = v
 
     @property
     def c(self):
-        return self._tensor[self._rows.c, :]
+        return self._tensor[self._rows.c.index, :]
 
     @c.setter
     def c(self, v):
-        self._tensor[self._rows.c, :] = v
+        self._tensor[self._rows.c.index, :] = v
 
     @property
     def d(self):
-        return self._tensor[self._rows.d, :]
+        return self._tensor[self._rows.d.index, :]
 
     @d.setter
     def d(self, v):
-        self._tensor[self._rows.d, :] = v
+        self._tensor[self._rows.d.index, :] = v
 
     @property
     def i(self):
-        return self._tensor[self._rows.i, :]
+        return self._tensor[self._rows.i.index, :]
 
     @i.setter
     def i(self, v):
-        self._tensor[self._rows.i, :] = v
+        self._tensor[self._rows.i.index, :] = v
 
 
 class Sliders:
@@ -254,25 +261,18 @@ class Sliders:
             setattr(self, k, None)
 
 
-class Row:
-
-    def __init__(self, index, value_interval):
-        self.index = index
-        self.interval = value_interval
-
-
-class LocationGroupFlags(PropertyTensor):
+class LocationGroupFlags(StateTensor):
 
     @dataclass(frozen=True)
     class Rows:
 
-        sensory_input_type: Row = Row(0, [-1, 1])
-        b_thalamic_input: Row = Row(1, [0, 1])
-        b_sensory_group: Row = Row(2, [0, 1])
-        b_sensory_input: Row = Row(3, [0, 1])
-        b_output_group: Row = Row(4, [0, 1])
-        output_type: Row = Row(5, [-1, 1])
-        b_monitor_group_firing_count: Row = Row(6, [0, 1])
+        sensory_input_type: StateRow = StateRow(0, [-1, 1])
+        b_thalamic_input: StateRow = StateRow(1, [0, 1])
+        b_sensory_group: StateRow = StateRow(2, [0, 1])
+        b_sensory_input: StateRow = StateRow(3, [0, 1])
+        b_output_group: StateRow = StateRow(4, [0, 1])
+        output_type: StateRow = StateRow(5, [-1, 1])
+        b_monitor_group_firing_count: StateRow = StateRow(6, [0, 1])
 
         def __len__(self):
             return 7
@@ -381,7 +381,7 @@ class LocationGroupFlags(PropertyTensor):
         self._tensor[self._rows.b_monitor_group_firing_count.index, :] = v
 
 
-class LocationGroupProperties(PropertyTensor):
+class LocationGroupProperties(StateTensor):
 
     @dataclass(frozen=True)
     class Rows:
