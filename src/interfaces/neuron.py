@@ -1,4 +1,7 @@
-from network import SpikingNeuronNetwork
+from typing import Optional
+
+from network import SingleNeuronPlot, SpikingNeuronNetwork
+from gpu import RegisteredVBO
 
 
 class NeuronInterface:
@@ -8,6 +11,9 @@ class NeuronInterface:
         self.id = neuron_id
         self.network = network
 
+        self.plot = SingleNeuronPlot(network.plotting_config.voltage_plot_length)
+        self.vbo_array: Optional[RegisteredVBO] = None
+
     @property
     def group(self):
         return self.network.GPU.N_G[self.id, self.network.network_config.N_G_group_id_col]
@@ -15,6 +21,10 @@ class NeuronInterface:
     @property
     def type(self):
         return self.network.GPU.N_G[self.id, self.network.network_config.N_G_neuron_type_col]
+
+    def register_vbo(self):
+        self.vbo_array = RegisteredVBO(self.plot.vbo, shape=self.plot.plot_data.pos.shape,
+                                       device=self.network.GPU.device)
 
 
 class IzhikevichNeuronsInterface(NeuronInterface):
@@ -28,9 +38,7 @@ class IzhikevichNeuronsInterface(NeuronInterface):
 
     @pt.setter
     def pt(self, v):
-        print(self.network.GPU.N_states._tensor[:, self.id])
         self.network.GPU.N_states.pt[self.id] = v
-        print(self.network.GPU.N_states._tensor[:, self.id])
 
     @property
     def v(self):
@@ -46,9 +54,8 @@ class IzhikevichNeuronsInterface(NeuronInterface):
 
     @a.setter
     def a(self, v):
-        print(self.network.GPU.N_states._tensor[:, self.id])
+        print(self.network.GPU.N_states.tensor[:, self.id])
         self.network.GPU.N_states.a[self.id] = v
-        print(self.network.GPU.N_states._tensor[:, self.id])
 
     @property
     def b(self):
@@ -73,3 +80,15 @@ class IzhikevichNeuronsInterface(NeuronInterface):
     @d.setter
     def d(self, v):
         self.network.GPU.N_states.d[self.id] = v
+
+    @property
+    def i(self):
+        return self.network.GPU.N_states.i[self.id]
+
+    @i.setter
+    def i(self, v):
+        self.network.GPU.N_states.i[self.id] = v
+
+    def update_plot(self, t):
+        self.vbo_array.tensor[t, 1] = self.v/100
+        self.vbo_array.tensor[t + self.network.plotting_config.voltage_plot_length, 1] = self.i

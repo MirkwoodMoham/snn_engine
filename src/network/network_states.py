@@ -209,7 +209,7 @@ class IzhikevichModel(StateTensor):
 
     @property
     def v(self):
-        return self._tensor[self._rows.u.index, :]
+        return self._tensor[self._rows.v.index, :]
 
     @v.setter
     def v(self, v):

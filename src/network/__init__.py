@@ -9,3 +9,4 @@ from .network_states import (
     StateRow
 )
 from .network_grid import NetworkGrid
+from .plots import SingleNeuronPlot

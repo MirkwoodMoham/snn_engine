@@ -1,6 +1,7 @@
 __author__ = 'Caroline Beyne'
 
 from PyQt6 import QtGui, QtCore, QtWidgets
+from vispy.scene import SceneCanvas
 
 
 class CollapsibleWidget(QtWidgets.QWidget):
@@ -96,30 +97,42 @@ class CollapsibleWidget(QtWidgets.QWidget):
         sp.setHorizontalPolicy(QtWidgets.QSizePolicy.Policy.Expanding)
         self.setSizePolicy(sp)
 
-    def toggle_collapsed(self):
-        add = - 2
-        self._content.setVisible(self._is_collapsed)
-        self._is_collapsed = not self._is_collapsed
-        if self._is_collapsed:
-            if self.parent_collapsible is not None:
-                self.parent_collapsible.setFixedHeight(
-                    self.parent_collapsible.height() - self._content.height() + add)
-                self.parent_collapsible._content.setFixedHeight(
-                    self.parent_collapsible._content.height() - self._content.height() + add)
-                # print('parent:', self.parent_collapsible.height())
-            self.setFixedHeight(self.min_collapsed_height)
-            # print('self:', self.height())
-        else:
-            self.setFixedHeight(self.min_collapsed_height + self._content.height() - add)
-            if self.parent_collapsible is not None:
-                self.parent_collapsible.setFixedHeight(
-                    self.parent_collapsible.height() + self._content.height() - add)
-                self.parent_collapsible._content.setFixedHeight(
-                    self.parent_collapsible._content.height() + self._content.height() - add)
-                # - self.min_collapsed_height)
+    def children_height(self):
+        height = 0
+        for child in self.children_collapsibles:
+            height += child.height()
+        return height
 
-                # print('parent:', self.parent_collapsible.height())
-            # print('self:', self.height())
+    def _resize_parent_collapsible(self, expanding, content_height, height_additive):
+        if expanding:
+            factor = 1
+        else:
+            factor = -1
+        self.parent_collapsible.setFixedHeight(
+            self.parent_collapsible.height() + factor * (content_height - height_additive))
+        self.parent_collapsible._content.setFixedHeight(
+            self.parent_collapsible._content.height() + factor * (content_height - height_additive))
+        if self.parent_collapsible.parent_collapsible is not None:
+            self.parent_collapsible._resize_parent_collapsible(
+                self._is_collapsed, content_height=content_height, height_additive=height_additive)
+
+    def toggle_collapsed(self):
+        self._content.setVisible(self._is_collapsed)
+
+        height_additive = - 2
+        content_height = self._content.height()
+
+        if self._is_collapsed:
+            self.setFixedHeight(self.min_collapsed_height + content_height - height_additive)
+
+        if self.parent_collapsible is not None:
+            self._resize_parent_collapsible(
+                self._is_collapsed, content_height=content_height, height_additive=height_additive)
+
+        if not self._is_collapsed:
+            self.setFixedHeight(self.min_collapsed_height)
+
+        self._is_collapsed = not self._is_collapsed
         self._title_frame._arrow.set_arrow(int(self._is_collapsed))
 
     def add(self, o):
@@ -133,6 +146,17 @@ class CollapsibleWidget(QtWidgets.QWidget):
             o.min_collapsed_height += add
             o.setFixedHeight(o.min_collapsed_height)
             self.children_collapsibles.append(o)
+            o.toggle_collapsed()
+            self.toggle_collapsed()
+            self.toggle_collapsed()
+
+    def _canvas_frame(self, canvas: SceneCanvas):
+        frame = QtWidgets.QFrame(self)
+        frame.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
+        frame.setFrameShadow(QtWidgets.QFrame.Shadow.Raised)
+        frame_layout = QtWidgets.QVBoxLayout(frame)
+        frame_layout.addWidget(canvas.native)
+        return frame
 
 
 if __name__ == '__main__':

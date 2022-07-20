@@ -25,7 +25,7 @@ from .neuron_properties_collapsible import IzhikevichNeuronCollapsible
 from .collapsible_widget.collapsible_widget import CollapsibleWidget
 from .gui_element import SpinBoxSlider
 from network import IzhikevichModel, NetworkConfig, SpikingNeuronNetwork
-
+from interfaces import IzhikevichNeuronsInterface
 
 @dataclass
 class ButtonMenuActions:
@@ -247,21 +247,21 @@ class MainUILeft(UIPanel):
         play_pause_hbox.addWidget(self.buttons.start)
         play_pause_hbox.addWidget(self.buttons.pause)
 
-        self.neuron0 = None
+        self.neuron0: Optional[IzhikevichNeuronCollapsible] = None
         self.neuron1 = None
-        self.neurons_collapsible = CollapsibleWidget(title='Neuron Info')
-        self.sensory_input_collapsible = CollapsibleWidget(title='Sensory Input')
+        self.neurons_collapsible = CollapsibleWidget(self, title='Neuron Info')
+        self.sensory_input_collapsible = CollapsibleWidget(self, title='Sensory Input')
         self.sensory_input_collapsible.add(self.sliders.sensory_input_current0.widget)
         self.sensory_input_collapsible.add(self.sliders.sensory_input_current1.widget)
 
-        self.thalamic_input_collapsible = CollapsibleWidget(title='Thalamic Input')
+        self.thalamic_input_collapsible = CollapsibleWidget(self, title='Thalamic Input')
         self.thalamic_input_collapsible.add(self.sliders.thalamic_inh_input_current.widget)
         self.thalamic_input_collapsible.add(self.sliders.thalamic_exc_input_current.widget)
 
-        self.weights_collapsible = CollapsibleWidget(title='Weights')
+        self.weights_collapsible = CollapsibleWidget(self, title='Weights')
         self.weights_collapsible.add(self.sliders.sensory_weight.widget)
 
-        self.objects_collapsible = CollapsibleWidget(title='Objects')
+        self.objects_collapsible = CollapsibleWidget(self, title='Objects')
 
         self.addWidget(play_pause_widget)
         self.addWidget(self.buttons.toggle_outergrid)
@@ -274,22 +274,42 @@ class MainUILeft(UIPanel):
 
         self.addWidget(self.buttons.exit)
 
+        self.active_neurons: list[IzhikevichNeuronCollapsible] = []
+        self.single_neuron_plot_length: Optional[int] = None
+
     def add_3d_object_sliders(self, obj):
 
         collapsible = RenderedObjectCollapsible(obj, self)
         self.objects_collapsible.add(collapsible)
-        collapsible.toggle_collapsed()
-        self.objects_collapsible.toggle_collapsed()
-        self.objects_collapsible.toggle_collapsed()
+        # collapsible.toggle_collapsed()
+        # self.objects_collapsible.toggle_collapsed()
+        # self.objects_collapsible.toggle_collapsed()
 
-    def add_neurons_slider(self, network: SpikingNeuronNetwork, model=IzhikevichModel):
-        self.neuron0 = IzhikevichNeuronCollapsible(network, title='Neuron0', model=model, window=self.window)
-        self.neuron1 = IzhikevichNeuronCollapsible(network, title='Neuron1', model=model, window=self.window)
+    def add_neurons_slider(self, network: SpikingNeuronNetwork, app, model=IzhikevichModel):
+
+        self.single_neuron_plot_length = network.plotting_config.voltage_plot_length
+
+        self.neuron0 = IzhikevichNeuronCollapsible(
+            self, network, title='Neuron0', model=model, window=self.window, app=app)
+
+        self.neuron1 = IzhikevichNeuronCollapsible(
+            self, network, title='Neuron1', model=model, window=self.window, app=app)
+
         self.neurons_collapsible.add(self.neuron0)
+        self.active_neurons.append(self.neuron0)
         self.neurons_collapsible.add(self.neuron1)
-        # noinspection PyUnresolvedReferences
-        # self.widget().layout().insertWidget(2, self.neurons_collapsible)
+        self.active_neurons.append(self.neuron1)
+
+        self.neuron0.plot_canvas.plot_widget.view.camera.zoom(1)
+        self.neuron0.plot_canvas.plot_widget.view.camera.reset()
+        self.neuron1.plot_canvas.plot_widget.view.camera.zoom(1)
+        self.neuron1.plot_canvas.plot_widget.view.camera.reset()
         self.neurons_collapsible.toggle_collapsed()
+
+    def update_interfaced_neuron_plots(self, t):
+        t = t % self.single_neuron_plot_length
+        for n in self.active_neurons:
+            n.update_plots(t)
 
 
 class GroupInfoComboBox(QComboBox):

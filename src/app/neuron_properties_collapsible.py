@@ -12,8 +12,9 @@ from typing import Type
 
 from app.collapsible_widget.collapsible_widget import CollapsibleWidget
 from app.gui_element import SpinBoxSlider, SubCollapsibleFrame
-from network import IzhikevichModel, NetworkConfig, SpikingNeuronNetwork, StateRow
+from .engine_scene_canvas import SingleNeuronPlotCanvas, CanvasConfig
 from interfaces import IzhikevichNeuronsInterface
+from network import IzhikevichModel, NetworkConfig, SpikingNeuronNetwork, StateRow
 
 
 class IzhikevichNeuronPropertiesFrame(SubCollapsibleFrame):
@@ -33,10 +34,8 @@ class IzhikevichNeuronPropertiesFrame(SubCollapsibleFrame):
                  fixed_width=300):
 
         super().__init__(parent, fixed_width=fixed_width)
-        self.layout().addWidget(QLabel('Model'))
-
+        # self.layout().addWidget(QLabel('Model'))
         self.sliders = self.Sliders()
-
         sliders_widget = QWidget()
         sliders_layout = QVBoxLayout(sliders_widget)
         sliders_layout.setContentsMargins(0, 0, 0, 0)
@@ -78,6 +77,7 @@ class NeuronIDFrame(SubCollapsibleFrame):
         self.layout().addWidget(self.spinbox)
         self.spinbox.setMinimum(0)
         self.spinbox.setMaximum(N-1)
+        self.setFixedHeight(28)
 
 
 class SingleNeuronPlotFrame:
@@ -86,20 +86,46 @@ class SingleNeuronPlotFrame:
 
 class IzhikevichNeuronCollapsible(CollapsibleWidget):
 
-    def __init__(self, network: SpikingNeuronNetwork, model: Type[IzhikevichModel], title, window, parent=None):
+    def __init__(self, parent, network: SpikingNeuronNetwork,
+                 model: Type[IzhikevichModel], title, window, app):
 
         super().__init__(parent=parent, title=title)
+
         self.neuron_interface = IzhikevichNeuronsInterface(0, network)
 
         self.id = NeuronIDFrame(self, network.network_config.N)
-        self.model = IzhikevichNeuronPropertiesFrame(self, window, model, interface=self.neuron_interface)
-
+        self.model_collapsible = CollapsibleWidget(self, title='model')
+        self.model = IzhikevichNeuronPropertiesFrame(self.model_collapsible, window, model,
+                                                     interface=self.neuron_interface)
         self.add(self.id)
-        self.add(self.model)
+        self.model_collapsible.add(self.model)
+        self.add(self.model_collapsible)
 
         self.id.spinbox.valueChanged.connect(self.actualize_values)
+
+        self.plot_collapsible = CollapsibleWidget(self, title='plot')
+        width_min = 300
+        width_max = 300
+        height_min = 150
+        height_max = 150
+        self.plot_canvas = SingleNeuronPlotCanvas(
+            conf=CanvasConfig(), app=app, plotting_config=network.plotting_config,
+            width_min=width_min, width_max=width_max,
+            height_min=height_min, height_max=height_max
+        )
+        self.plot_canvas.plot_widget.view.add(self.neuron_interface.plot)
+        plot_frame: QFrame = self._canvas_frame(self.plot_canvas)
+        plot_frame.setFixedSize(width_max+60, height_max+40)
+
+        self.plot_collapsible.add(plot_frame)
+        self.add(self.plot_collapsible)
+        self.plot_canvas.set_current()
+        self.neuron_interface.register_vbo()
 
     def actualize_values(self):
         self.neuron_interface.id = self.id.spinbox.value()
         self.model.actualize_values()
 
+    def update_plots(self, t) -> None:
+        self.neuron_interface.update_plot(t)
+        self.plot_canvas.update()

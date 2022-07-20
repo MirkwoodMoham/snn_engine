@@ -8,7 +8,7 @@ from vispy.gloo.context import get_current_canvas
 
 class PlotData:
 
-    def __init__(self, n_plots, plot_length, n_group_seperator_lines, group_separator_line_offset_left):
+    def __init__(self, n_plots, plot_length, n_group_seperator_lines=0, group_separator_line_offset_left=0):
 
         self._n_plots = n_plots
         self._plot_length = plot_length
@@ -23,14 +23,16 @@ class PlotData:
         self.color[:, 0] = np.linspace(0, 1, size)
         self.color[:, 1] = self.color[::-1, 0]
 
-        self.group_separators_pos = np.zeros((n_group_seperator_lines * 2, 2))
-        self.group_separators_color = np.ones((n_group_seperator_lines * 2, 4), dtype=np.float32)
-        self.group_separators_color[:, 3] = 0
-        self.group_separators_pos[:, 0] = (
-            np.expand_dims(np.array([-group_separator_line_offset_left, plot_length]), 0)
-            .repeat(n_group_seperator_lines, 0)).flatten()
-        self.group_separators_pos[:, 1] = np.linspace(
-            0, self._n_plots, n_group_seperator_lines).repeat(2)
+        if n_group_seperator_lines > 0:
+
+            self.group_separators_pos = np.zeros((n_group_seperator_lines * 2, 2))
+            self.group_separators_color = np.ones((n_group_seperator_lines * 2, 4), dtype=np.float32)
+            self.group_separators_color[:, 3] = 0
+            self.group_separators_pos[:, 0] = (
+                np.expand_dims(np.array([-group_separator_line_offset_left, plot_length]), 0)
+                .repeat(n_group_seperator_lines, 0)).flatten()
+            self.group_separators_pos[:, 1] = np.linspace(
+                0, self._n_plots, n_group_seperator_lines).repeat(2)
 
 
 # noinspection PyAbstractClass
@@ -135,6 +137,35 @@ class GroupFiringCountsPlot(RenderedObjectNode, BasePlot):
                                                antialias=False, width=1, parent=None)
 
         RenderedObjectNode.__init__(self, [self._obj, self.group_separator_lines])
+
+    @property
+    def vbo_glir_id(self):
+        return self._obj._line_visual._pos_vbo.id
+
+
+# noinspection PyAbstractClass
+class SingleNeuronPlot(RenderedObjectNode, BasePlot):
+
+    def __init__(self, plot_length):
+
+        self.plot_data = PlotData(2, plot_length)
+
+        colors = [[1., 1., 0., 1.], [0., 1., 1., 1.]]
+
+        for i, c in enumerate(colors):
+            color_arr = np.repeat(np.array(c).reshape(1, 4), plot_length, 0)
+            self.plot_data.color[i * plot_length: (i + 1) * plot_length, :] = color_arr
+
+        connect = np.ones(plot_length).astype(bool)
+        connect[-1] = False
+        connect = connect.reshape(1, plot_length).repeat(2, axis=0).flatten()
+
+        self._obj: visuals.Line = visuals.Line(pos=self.plot_data.pos,
+                                               color=self.plot_data.color,
+                                               connect=connect,
+                                               antialias=False, width=1, parent=None)
+
+        RenderedObjectNode.__init__(self, [self._obj])
 
     @property
     def vbo_glir_id(self):

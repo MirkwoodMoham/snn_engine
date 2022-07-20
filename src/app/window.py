@@ -36,7 +36,7 @@ class BaseWindow(QMainWindow):
         self.resize(1600, 900)
         self.setCentralWidget(QWidget(self))
 
-    def frame_canvas(self, canvas: SceneCanvas):
+    def _canvas_frame(self, canvas: SceneCanvas):
         frame = QFrame(self.centralWidget())
         frame.setFrameShape(QFrame.Shape.StyledPanel)
         frame.setFrameShadow(QFrame.Shadow.Raised)
@@ -79,8 +79,8 @@ class MainWindow(BaseWindow):
 
         self.splitter = QSplitter(QtCore.Qt.Orientation.Horizontal)
         self.splitter.addWidget(self.ui_panel_left)
-        self.splitter.addWidget(self.frame_canvas(self.scene_3d))
-        self.splitter.setStretchFactor(0, 6)
+        self.splitter.addWidget(self._canvas_frame(self.scene_3d))
+        self.splitter.setStretchFactor(0, 16)
         self.splitter.setStretchFactor(1, 3)
 
         if plotting_config.group_info_view_mode.scene is True:
@@ -97,7 +97,7 @@ class MainWindow(BaseWindow):
 
     def add_group_info_scene_to_splitter(self, plotting_config):
         if plotting_config.group_info_view_mode.split is True:
-            self.splitter.addWidget(self.frame_canvas(self.group_info_scene))
+            self.splitter.addWidget(self._canvas_frame(self.group_info_scene))
             self.splitter.setStretchFactor(2, 2)
             self.splitter.addWidget(self.ui_right)
             self.splitter.setStretchFactor(3, 10)
@@ -124,8 +124,8 @@ class NeuronPlotWindow(BaseWindow):
 
         self.splitter = QSplitter(QtCore.Qt.Orientation.Horizontal)
         self.splitter.addWidget(self.frame_left)
-        self.splitter.addWidget(self.frame_canvas(self.voltage_plot_sc))
-        self.splitter.addWidget(self.frame_canvas(self.scatter_plot_sc))
+        self.splitter.addWidget(self._canvas_frame(self.voltage_plot_sc))
+        self.splitter.addWidget(self._canvas_frame(self.scatter_plot_sc))
 
         # keep order
 
@@ -154,7 +154,7 @@ class LocationGroupInfoWindow(BaseWindow):
 
         splitter = QSplitter(QtCore.Qt.Orientation.Horizontal)
         splitter.addWidget(self.ui_panel_left)
-        splitter.addWidget(self.frame_canvas(self.scene_3d))
+        splitter.addWidget(self._canvas_frame(self.scene_3d))
         splitter.setStretchFactor(1, 3)
 
         hbox = QHBoxLayout(self.centralWidget())

@@ -40,10 +40,10 @@ class EngineConfig:
 
     network = NetworkConfig(N=N,
                             N_pos_shape=(4, 4, 1),
-                            sim_updates_per_frame=10,
+                            sim_updates_per_frame=1,
                             stdp_active=True,
                             debug=False)
-    plotting = PlottingConfig(n_voltage_plots=100, voltage_plot_length=100,
+    plotting = PlottingConfig(n_voltage_plots=10, voltage_plot_length=100,
                               n_scatter_plots=1000, scatter_plot_length=1000,
                               windowed_neuron_plots=False,
                               group_info_view_mode='split',
@@ -68,7 +68,7 @@ class Engine(BaseApp):
         # keep order for vbo id (3/4)
         self.network.initialize_GPU_arrays(self.config.device, self)
         # keep order (4/4)
-        self._bind_ui()
+        self._bind_ui(self.config.device)
 
 
 if __name__ == '__main__':

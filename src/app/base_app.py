@@ -108,6 +108,7 @@ class BaseApp(Application):
             'pagedown': self.network.selector_box.translate.mv_down,
         })
         main_window.show()
+
         return main_window
 
     def _init_neuron_plot_window(self, network: SpikingNeuronNetwork):
@@ -131,7 +132,7 @@ class BaseApp(Application):
         location_group_info_window.show()
         return location_group_info_window
 
-    def _bind_ui(self):
+    def _bind_ui(self, device):
         network_config = self.network.network_config
 
         self._connect_main_buttons_and_actions()
@@ -139,7 +140,7 @@ class BaseApp(Application):
         self.main_ui_panel.add_3d_object_sliders(self.network.selector_box)
         self.main_ui_panel.add_3d_object_sliders(self.network.input_cells)
         self.main_ui_panel.add_3d_object_sliders(self.network.output_cells)
-        self.main_ui_panel.add_neurons_slider(self.network)
+        self.main_ui_panel.add_neurons_slider(self.network, self)
 
         self._connect_g_props_sliders(network_config)
 
@@ -324,7 +325,8 @@ class BaseApp(Application):
     def update(self, event):
         if self.update_switch is True:
             self.network.GPU.update()
-            t = str(self.network.GPU.Simulation.t)
+            t = self.network.GPU.Simulation.t
+            t_str = str(t)
             if self.neuron_plot_window:
                 self.neuron_plot_window.voltage_plot_sc.update()
                 self.neuron_plot_window.scatter_plot_sc.update()
@@ -333,5 +335,8 @@ class BaseApp(Application):
             if self._group_info_view_mode.split is True:
                 self.main_window.group_info_scene.update()
                 # self.main_window.group_info_scene.table.t.text = t
-            self.main_window.scene_3d.table.t.text = t
+            self.main_window.scene_3d.table.t.text = t_str
             self.main_window.scene_3d.table.update_duration.text = str(self.network.GPU.Simulation.update_duration)
+            update_single_neuron_plots = True
+            if update_single_neuron_plots is True:
+                self.main_window.ui_panel_left.update_interfaced_neuron_plots(t)

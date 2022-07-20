@@ -16,7 +16,9 @@ from .plot_widgets import (
     GroupFiringsPlotWidget,
     PlotWidget,
     VoltagePlotWidget,
-    ScatterPlotWidget)
+    ScatterPlotWidget,
+    SingleNeuronPlotWidget
+)
 
 from network import SpikingNeuronNetwork
 from rendering import RenderedObject
@@ -127,6 +129,8 @@ class BaseEngineSceneCanvas(scene.SceneCanvas):
         conf = conf or CanvasConfig()
         super().__init__(**asdict(conf), app=app)
 
+        self.central_widget.margin = 5
+
     # def create_native(self):
     #     """Create the native widget if not already done so. If the widget
     #     is already created, this function does nothing.
@@ -169,8 +173,6 @@ class MainSceneCanvas(BaseEngineSceneCanvas):
 
         main_grid: scene.widgets.Grid = self.central_widget.add_grid()
         self.network_view = main_grid.add_view(row=0, col=0)
-
-        self.central_widget.margin = 10
 
         self.grid: scene.widgets.Grid = self.network_view.add_grid()
 
@@ -216,13 +218,13 @@ class MainSceneCanvas(BaseEngineSceneCanvas):
             self.group_firings_plot = None
 
         self.group_firings_plot_single0 = PlotWidget(
-            title_str="Group Firings: XXX",
-            n_plots=1, plot_length=self.scatter_plot_length,
+            title="Group Firings: XXX",
+            plot_height=1, plot_length=self.scatter_plot_length,
             cam_yscale=1)
 
         self.group_firings_plot_single1 = PlotWidget(
-            title_str="Group Firings: YYY",
-            n_plots=1, plot_length=self.scatter_plot_length)
+            title="Group Firings: YYY",
+            plot_height=1, plot_length=self.scatter_plot_length)
 
         self.grid.add_widget(self.group_firings_plot_single0, plot_row1, plot_col2,
                              col_span=col_span0, row_span=row_span_11)
@@ -370,6 +372,7 @@ class VoltagePlotSceneCanvas(BaseEngineSceneCanvas):
             self.table = TextTableWidget(labels=['t'], height_max_global=25)
             self.table.height_max = 25
             main_grid.add_widget(self.table, 0, 3)
+        self.freeze()
 
 
 class ScatterPlotSceneCanvas(BaseEngineSceneCanvas):
@@ -396,6 +399,7 @@ class ScatterPlotSceneCanvas(BaseEngineSceneCanvas):
         self.table = TextTableWidget(labels=['t'], height_max_global=25)
         self.table.height_max = 25
         grid.add_widget(self.table, 0, 3)
+        self.freeze()
 
 
 class LocationGroupInfoCanvas(BaseEngineSceneCanvas):
@@ -426,4 +430,24 @@ class LocationGroupInfoCanvas(BaseEngineSceneCanvas):
         self.color_bar = GroupInfoColorBar()
         self.grid.add_widget(self.color_bar, 5, 0, 6, 1)
 
+        self.freeze()
+
+
+class SingleNeuronPlotCanvas(BaseEngineSceneCanvas):
+    def __init__(self,
+                 conf: CanvasConfig,
+                 app: Optional[Application],
+                 plotting_config: PlottingConfig,
+                 width_min=300, width_max=300, height_min=190, height_max=190):
+
+        super().__init__(conf, app)
+
+        self.unfreeze()
+
+        main_grid: scene.widgets.Grid = self.central_widget.add_grid()
+
+        self.plot_widget = SingleNeuronPlotWidget(plotting_confing=plotting_config,
+                                                  width_min=width_min, width_max=width_max,
+                                                  height_min=height_min, height_max=height_max)
+        main_grid.add_widget(self.plot_widget, row=0, row_span=9, col_span=4)
         self.freeze()

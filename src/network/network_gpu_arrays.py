@@ -43,7 +43,7 @@ class PlottingGPUArrays(GPUArrayCollection):
         self.firings_group_line_colors = None
 
         if app.neuron_plot_window is not None:
-            app.neuron_plot_window.scatter_plot_sc.set_current()
+            app.neuron_plot_window.voltage_plot_sc.set_current()
         if self.buffers.voltage is not None:
             self.init_voltage_plot_arrays()
 
@@ -224,6 +224,9 @@ class NetworkGPUArrays(GPUArrayCollection):
         self.Simulation.calculate_avg_group_weight()
 
         self.output_tensor = self.fzeros(6)
+
+        print(self.G_neuron_typed_ccount[67])
+        print(self.G_neuron_typed_ccount[68])
 
     def _init_sim(self, T, plotting_config):
 
