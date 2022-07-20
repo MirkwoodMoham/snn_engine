@@ -40,7 +40,7 @@ class EngineConfig:
 
     network = NetworkConfig(N=N,
                             N_pos_shape=(4, 4, 1),
-                            sim_updates_per_frame=100,
+                            sim_updates_per_frame=10,
                             stdp_active=True,
                             debug=False)
     plotting = PlottingConfig(n_voltage_plots=100, voltage_plot_length=100,

@@ -70,11 +70,12 @@ class StateTensor:
         return pd.DataFrame(self._tensor.cpu().numpy())
 
 
+@dataclass(frozen=True)
 class StateRow:
 
-    def __init__(self, index, value_interval=None):
-        self.index = index
-        self.interval = value_interval
+    index: int
+    interval: Optional[Union[list, pd.Interval]] = None
+    step_size: Optional[Union[int, float]] = None
 
 
 @dataclass(frozen=True)
@@ -85,7 +86,7 @@ class StateRowCollection:
     i: StateRow = StateRow(0)
 
     def __post_init__(self):
-        vs = np.array([x.index for x in list(asdict(self).values())])
+        vs = np.array([x['index'] for x in list(asdict(self).values())])
         if not np.max(vs) == self.i.index:
             raise AttributeError
 
@@ -141,13 +142,13 @@ class IzhikevichModel(StateTensor):
     @dataclass(frozen=True)
     class Rows(StateRowCollection):
 
-        pt: StateRow = StateRow(0, [0, 1])
+        pt: StateRow = StateRow(0, [0, 1], 0.01)
         u: StateRow = StateRow(1)
         v: StateRow = StateRow(2)
-        a: StateRow = StateRow(3, [.02, .1])
-        b: StateRow = StateRow(4, [.2, .25])
-        c: StateRow = StateRow(5, [-65, -50])
-        d: StateRow = StateRow(6, [2, 8])
+        a: StateRow = StateRow(3, [.02, .1], 0.001)
+        b: StateRow = StateRow(4, [.2, .25], 0.001)
+        c: StateRow = StateRow(5, [-65, -50], 0.1)
+        d: StateRow = StateRow(6, [2, 8], 0.1)
         i: StateRow = StateRow(7)
 
     def __init__(self, n_neurons, device, types_tensor):

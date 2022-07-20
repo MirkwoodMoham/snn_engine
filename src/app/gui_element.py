@@ -1,4 +1,4 @@
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 import os
 from pathlib import Path
 from typing import Any, Callable, Optional, Union
@@ -18,9 +18,11 @@ from PyQt6.QtWidgets import (
     QWidget
 )
 
-from .collapsible_widget.collapsible_widget import CollapsibleWidget
-from rendering import RenderedObjectNode, Scale, Translate
-from network import LocationGroupProperties
+from rendering import Scale, Translate
+from network import (
+    LocationGroupProperties
+)
+from interfaces import NeuronInterface
 
 
 @dataclass
@@ -370,7 +372,7 @@ class SpinBoxSlider(GUIElement):
 
     # noinspection PyUnresolvedReferences
     def connect_property(self,
-                         property_container: Union[Scale, Translate, LocationGroupProperties],
+                         property_container: Union[NeuronInterface, Scale, Translate, LocationGroupProperties],
                          value=None):
         self.property_container = property_container
         self.value = getattr(property_container, self.prop_id) if value is None else value
@@ -399,72 +401,10 @@ class SpinBoxSlider(GUIElement):
         self.set_slider_value(v)
 
 
-class RenderedObjectPropertyFrame(QFrame):
+class SubCollapsibleFrame(QFrame):
 
-    class Sliders:
-        x: SpinBoxSlider = None
-        y: SpinBoxSlider = None
-        z: SpinBoxSlider = None
-
-    def __init__(self, parent, window, obj: RenderedObjectNode,
-                 prop_id: str, label=None,
-                 min_value: Optional[int] = None,
-                 max_value=10):
-
+    def __init__(self, parent, fixed_width=450):
         super().__init__(parent)
-
-        self.sliders = self.Sliders()
-
-        self.setFixedWidth(450)
+        self.setFixedWidth(fixed_width)
         self.setLayout(QHBoxLayout(self))
         self.layout().setContentsMargins(15, 0, 0, 0)
-        sliders_widget = QWidget()
-        sliders_widget.setMaximumHeight(135)
-        sliders_layout = QVBoxLayout(sliders_widget)
-        sliders_layout.setContentsMargins(0, 0, 0, 0)
-        if label is None:
-            label = prop_id
-            label = label[0].upper() + label[1:]
-        self.layout().addWidget(QLabel(label))
-
-        sliders = []
-        for i in ('x', 'y', 'z'):
-
-            sbs = SpinBoxSlider(name=i + ':',
-                                window=window,
-                                _min_value=min_value,
-                                _max_value=max_value,
-                                boxlayout_orientation=QtCore.Qt.Orientation.Horizontal,
-                                status_tip=f"{obj.name}.{prop_id}.{i}",
-                                prop_id=i,
-                                single_step_spin_box=0.01,
-                                single_step_slider=10)
-            setattr(self.sliders, i, sbs)
-            # sbs.widget.setFixedHeight(35)
-            sliders_layout.addWidget(sbs.widget)
-            sliders.append(sbs)
-
-            sbs.connect_property(getattr(obj, prop_id))
-
-        self.setFixedHeight(25 + 35 * len(sliders))
-
-        self.layout().addWidget(sliders_widget)
-
-
-class RenderedObjectSliders(CollapsibleWidget):
-
-    def __init__(self, obj: RenderedObjectNode, window, parent=None):
-
-        super().__init__(parent=parent, title=obj.name)
-
-        self.scale = RenderedObjectPropertyFrame(parent=self, window=window, obj=obj, prop_id='scale')
-        self.translate = RenderedObjectPropertyFrame(parent=self, window=window, obj=obj, prop_id='translate')
-        self.add(self.scale)
-        self.add(self.translate)
-
-
-class NetworkStateSliders(CollapsibleWidget):
-
-    def __init__(self, state_tensor):
-        for k in asdict(state_tensor._rows).keys():
-            pass

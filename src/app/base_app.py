@@ -139,6 +139,7 @@ class BaseApp(Application):
         self.main_ui_panel.add_3d_object_sliders(self.network.selector_box)
         self.main_ui_panel.add_3d_object_sliders(self.network.input_cells)
         self.main_ui_panel.add_3d_object_sliders(self.network.output_cells)
+        self.main_ui_panel.add_neurons_slider(self.network)
 
         self._connect_g_props_sliders(network_config)
 

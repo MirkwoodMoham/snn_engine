@@ -17,9 +17,14 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from .gui_element import ButtonMenuAction, RenderedObjectSliders
+from .gui_element import (
+    ButtonMenuAction
+)
+from .rendered_object_collapsible import RenderedObjectCollapsible
+from .neuron_properties_collapsible import IzhikevichNeuronCollapsible
 from .collapsible_widget.collapsible_widget import CollapsibleWidget
 from .gui_element import SpinBoxSlider
+from network import IzhikevichModel, NetworkConfig, SpikingNeuronNetwork
 
 
 @dataclass
@@ -154,8 +159,6 @@ class UIPanel(QScrollArea):
 
     def __init__(self, window):
         super().__init__(window.centralWidget())
-        # self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
-        # self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         self.setWidgetResizable(True)
 
         self.setWidget(QWidget(self))
@@ -231,6 +234,8 @@ class MainUILeft(UIPanel):
 
         super().__init__(window)
 
+        self.window = window
+
         self.buttons = self.Buttons()
         self.sliders = self.Sliders(window)
 
@@ -242,6 +247,9 @@ class MainUILeft(UIPanel):
         play_pause_hbox.addWidget(self.buttons.start)
         play_pause_hbox.addWidget(self.buttons.pause)
 
+        self.neuron0 = None
+        self.neuron1 = None
+        self.neurons_collapsible = CollapsibleWidget(title='Neuron Info')
         self.sensory_input_collapsible = CollapsibleWidget(title='Sensory Input')
         self.sensory_input_collapsible.add(self.sliders.sensory_input_current0.widget)
         self.sensory_input_collapsible.add(self.sliders.sensory_input_current1.widget)
@@ -257,6 +265,7 @@ class MainUILeft(UIPanel):
 
         self.addWidget(play_pause_widget)
         self.addWidget(self.buttons.toggle_outergrid)
+        self.addWidget(self.neurons_collapsible)
         self.addWidget(self.weights_collapsible)
         self.addWidget(self.sensory_input_collapsible)
         self.addWidget(self.thalamic_input_collapsible)
@@ -267,11 +276,20 @@ class MainUILeft(UIPanel):
 
     def add_3d_object_sliders(self, obj):
 
-        collapsible = RenderedObjectSliders(obj, self)
+        collapsible = RenderedObjectCollapsible(obj, self)
         self.objects_collapsible.add(collapsible)
         collapsible.toggle_collapsed()
         self.objects_collapsible.toggle_collapsed()
         self.objects_collapsible.toggle_collapsed()
+
+    def add_neurons_slider(self, network: SpikingNeuronNetwork, model=IzhikevichModel):
+        self.neuron0 = IzhikevichNeuronCollapsible(network, title='Neuron0', model=model, window=self.window)
+        self.neuron1 = IzhikevichNeuronCollapsible(network, title='Neuron1', model=model, window=self.window)
+        self.neurons_collapsible.add(self.neuron0)
+        self.neurons_collapsible.add(self.neuron1)
+        # noinspection PyUnresolvedReferences
+        # self.widget().layout().insertWidget(2, self.neurons_collapsible)
+        self.neurons_collapsible.toggle_collapsed()
 
 
 class GroupInfoComboBox(QComboBox):
