@@ -1,8 +1,10 @@
+from dataclasses import dataclass
 import numba.cuda
 from vispy import gloo
 import sys
 
 from network import (
+    NetworkInitValues,
     NetworkConfig,
     PlottingConfig,
     SpikingNeuronNetwork
@@ -31,6 +33,25 @@ from app import BaseApp
 
 class EngineConfig:
 
+    class InitValues(NetworkInitValues):
+
+        @dataclass
+        class ThalamicInput:
+            inh_current: float = 25.
+            exc_current: float = 15.
+
+        @dataclass
+        class SensoryInput:
+            input_current0: float = 0.
+            input_current1: float = 0.
+
+        @dataclass
+        class Weights:
+            Inh2Exc: float = -.49
+            Exc2Inh: float = .75
+            Exc2Exc: float = .75
+            SensorySource: float = .75
+
     N: int = 5 * 10 ** 3
     T: int = 5000  # Max simulation record duration
 
@@ -42,7 +63,7 @@ class EngineConfig:
                             N_pos_shape=(4, 4, 1),
                             sim_updates_per_frame=1,
                             stdp_active=True,
-                            debug=False)
+                            debug=False, InitValues=InitValues())
     plotting = PlottingConfig(n_voltage_plots=10, voltage_plot_length=100,
                               n_scatter_plots=1000, scatter_plot_length=1000,
                               windowed_neuron_plots=False,
@@ -68,7 +89,7 @@ class Engine(BaseApp):
         # keep order for vbo id (3/4)
         self.network.initialize_GPU_arrays(self.config.device, self)
         # keep order (4/4)
-        self._bind_ui(self.config.device)
+        self._bind_ui()
 
 
 if __name__ == '__main__':

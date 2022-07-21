@@ -3,6 +3,30 @@ import numpy as np
 from typing import Optional, Union
 
 
+class NetworkInitValues:
+    @dataclass
+    class ThalamicInput:
+        inh_current: float = 25.
+        exc_current: float = 15.
+
+    @dataclass
+    class SensoryInput:
+        input_current0: float = 65.
+        input_current1: float = 25.
+
+    @dataclass
+    class Weights:
+        Inh2Exc: float = -.49
+        Exc2Inh: float = .75
+        Exc2Exc: float = .75
+        SensorySource: float = .75
+
+    def __init__(self):
+        self.ThalamicInput = self.ThalamicInput()
+        self.SensoryInput = self.SensoryInput()
+        self.Weights = self.Weights()
+
+
 @dataclass
 class NetworkConfig:
 
@@ -33,20 +57,7 @@ class NetworkConfig:
 
     stdp_active: bool = False
 
-    class InitValues:
-        class ThalamicInput:
-            inh_current: float = 25.
-            exc_current: float = 15.
-
-        class SensoryInput:
-            input_current0: float = 65.
-            input_current1: float = 25.
-
-        class Weights:
-            Inh2Exc: float = -.49
-            Exc2Inh: float = .75
-            Exc2Exc: float = .75
-            SensorySource: float = .75
+    InitValues: NetworkInitValues = NetworkInitValues()
 
     def __str__(self):
         name = self.__class__.__name__

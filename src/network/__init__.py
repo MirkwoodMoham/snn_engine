@@ -1,5 +1,5 @@
 from .spiking_neural_network import SpikingNeuronNetwork
-from .network_config import NetworkConfig, PlottingConfig
+from .network_config import NetworkConfig, PlottingConfig, NetworkInitValues
 from .boxes import SelectorBox
 from .network_states import (
     IzhikevichModel,

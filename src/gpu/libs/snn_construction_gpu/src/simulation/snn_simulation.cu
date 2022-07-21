@@ -93,6 +93,7 @@ __global__ void update_N_state_(
 		// debug_i[n]  = i;
 		// debug_v[n]  = v;
 		N_states[n + 7 * N] = 0.f;
+		N_states[n + 8 * N] = i;
 		
 		randstate[n] = local_state;
 	}

@@ -104,8 +104,8 @@ class IzhikevichNeuronCollapsible(CollapsibleWidget):
         self.id.spinbox.valueChanged.connect(self.actualize_values)
 
         self.plot_collapsible = CollapsibleWidget(self, title='plot')
-        width_min = 300
-        width_max = 300
+        width_min = 250
+        width_max = 600
         height_min = 150
         height_max = 150
         self.plot_canvas = SingleNeuronPlotCanvas(
@@ -113,7 +113,7 @@ class IzhikevichNeuronCollapsible(CollapsibleWidget):
             width_min=width_min, width_max=width_max,
             height_min=height_min, height_max=height_max
         )
-        self.plot_canvas.plot_widget.view.add(self.neuron_interface.plot)
+        self.neuron_interface.link_plot_widget(self.plot_canvas.plot_widget)
         plot_frame: QFrame = self._canvas_frame(self.plot_canvas)
         plot_frame.setFixedSize(width_max+60, height_max+40)
 
@@ -126,6 +126,9 @@ class IzhikevichNeuronCollapsible(CollapsibleWidget):
         self.neuron_interface.id = self.id.spinbox.value()
         self.model.actualize_values()
 
-    def update_plots(self, t) -> None:
-        self.neuron_interface.update_plot(t)
+    def update_plots(self, t, t_mod) -> None:
+        self.neuron_interface.update_plot(t, t_mod)
         self.plot_canvas.update()
+
+    def set_id(self, neuron_id):
+        self.id.spinbox.setValue(neuron_id)

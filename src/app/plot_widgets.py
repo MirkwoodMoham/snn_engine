@@ -144,6 +144,12 @@ class PlotWidget(Widget):
     def add(self, widget):
         self.view.add(widget)
 
+    def cam_reset(self):
+        self.view.camera.zoom(1)
+        self.view.camera.reset()
+        self.y_axis._view_changed()
+        self.update()
+
 
 class VoltagePlotWidget(PlotWidget):
 
@@ -188,8 +194,8 @@ class SingleNeuronPlotWidget(PlotWidget):
                  width_min=300, width_max=300, height_min=190, height_max=190):
 
         x_axis_config = AxisVisualConfig(tick_label_margin=12)
-        y_axis_config = AxisVisualConfig(tick_label_margin=6)
-        y_axis_right_config = AxisVisualConfig(scale=100, tick_label_margin=6)
+        y_axis_config = AxisVisualConfig(scale=20, tick_label_margin=6)
+        y_axis_right_config = AxisVisualConfig(scale=200, tick_label_margin=6)
 
         y_axis_width = 10
 
@@ -212,8 +218,19 @@ class SingleNeuronPlotWidget(PlotWidget):
         self.y_axis_right.width_max = y_axis_width
         self.grid.add_widget(self.y_axis_right, row=0, col=2, row_span=1)
         self.y_axis_right.link_view(self.view)
+        self.view.camera.rect = (
+            self.view.camera.rect.pos[0],
+            -.5,
+            self.view.camera.rect.size[0],
+            self.view.camera.rect.size[1] + .5
+        )
+        self.view.camera.set_default_state()
+        self.cam_reset()
         self.freeze()
 
+    def cam_reset(self):
+        super().cam_reset()
+        self.y_axis_right._view_changed()
 
 class GroupInfoColorBar(ColorBarWidget):
 

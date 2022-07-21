@@ -82,19 +82,20 @@ class StateRow:
 class StateRowCollection:
 
     pt: StateRow = StateRow(0, [0, 1])
-    v: StateRow = StateRow(0)
-    i: StateRow = StateRow(0)
+    v: StateRow = StateRow(1)
+    i: StateRow = StateRow(2)
+    i_prev: StateRow = StateRow(3)
 
     def __post_init__(self):
         vs = np.array([x['index'] for x in list(asdict(self).values())])
-        if not np.max(vs) == self.i.index:
+        if not np.max(vs) == self.i_prev.index:
             raise AttributeError
 
-        if not np.math.factorial(self.i.index) == np.cumprod(vs[vs > 0])[-1]:
+        if not np.math.factorial(self.i_prev.index) == np.cumprod(vs[vs > 0])[-1]:
             raise AttributeError
 
     def __len__(self):
-        return self.i.index + 1
+        return self.i_prev.index + 1
 
 
 # noinspection PyPep8Naming
@@ -150,6 +151,7 @@ class IzhikevichModel(StateTensor):
         c: StateRow = StateRow(5, [-65, -50], 0.1)
         d: StateRow = StateRow(6, [2, 8], 0.1)
         i: StateRow = StateRow(7)
+        i_prev: StateRow = StateRow(8)
 
     def __init__(self, n_neurons, device, types_tensor):
         self._rows = self.Rows()
@@ -254,6 +256,14 @@ class IzhikevichModel(StateTensor):
     @i.setter
     def i(self, v):
         self._tensor[self._rows.i.index, :] = v
+
+    @property
+    def i_prev(self):
+        return self._tensor[self._rows.i_prev.index, :]
+
+    @i_prev.setter
+    def i_prev(self, v):
+        self._tensor[self._rows.i_prev.index, :] = v
 
 
 class Sliders:

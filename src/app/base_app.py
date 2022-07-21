@@ -132,7 +132,7 @@ class BaseApp(Application):
         location_group_info_window.show()
         return location_group_info_window
 
-    def _bind_ui(self, device):
+    def _bind_ui(self):
         network_config = self.network.network_config
 
         self._connect_main_buttons_and_actions()
@@ -149,6 +149,9 @@ class BaseApp(Application):
             self.network.input_cells.src_weight)
 
         self.connect_group_info_combo_box()
+
+        self.main_ui_panel.interface_neuron(0, self.network.GPU.G_neuron_typed_ccount[67].item())
+
 
     def connect_group_info_combo_box(self):
         self.group_info_panel.group_ids_combobox().add_items(self.network.group_info_mesh.group_id_texts.keys())

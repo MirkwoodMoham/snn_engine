@@ -274,7 +274,7 @@ class MainUILeft(UIPanel):
 
         self.addWidget(self.buttons.exit)
 
-        self.active_neurons: list[IzhikevichNeuronCollapsible] = []
+        self.interfaced_neurons: list[IzhikevichNeuronCollapsible] = []
         self.single_neuron_plot_length: Optional[int] = None
 
     def add_3d_object_sliders(self, obj):
@@ -296,20 +296,21 @@ class MainUILeft(UIPanel):
             self, network, title='Neuron1', model=model, window=self.window, app=app)
 
         self.neurons_collapsible.add(self.neuron0)
-        self.active_neurons.append(self.neuron0)
+        self.interfaced_neurons.append(self.neuron0)
         self.neurons_collapsible.add(self.neuron1)
-        self.active_neurons.append(self.neuron1)
+        self.interfaced_neurons.append(self.neuron1)
 
-        self.neuron0.plot_canvas.plot_widget.view.camera.zoom(1)
-        self.neuron0.plot_canvas.plot_widget.view.camera.reset()
-        self.neuron1.plot_canvas.plot_widget.view.camera.zoom(1)
-        self.neuron1.plot_canvas.plot_widget.view.camera.reset()
+        self.neuron0.plot_canvas.plot_widget.cam_reset()
+        self.neuron1.plot_canvas.plot_widget.cam_reset()
         self.neurons_collapsible.toggle_collapsed()
 
     def update_interfaced_neuron_plots(self, t):
-        t = t % self.single_neuron_plot_length
-        for n in self.active_neurons:
-            n.update_plots(t)
+        t_mod = t % self.single_neuron_plot_length
+        for n in self.interfaced_neurons:
+            n.update_plots(t, t_mod)
+
+    def interface_neuron(self, interfaced_neuron_index, neuron_id):
+        self.interfaced_neurons[interfaced_neuron_index].set_id(neuron_id)
 
 
 class GroupInfoComboBox(QComboBox):
