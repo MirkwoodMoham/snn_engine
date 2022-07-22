@@ -8,12 +8,12 @@ Because if there is no widget collapsable in PyQt (until Qt5). But the Maya cmds
 **Here you can see the result in a standard Python application**
 
 [//]: # (![PyQt Collapsable Widget in Python standalone]&#40;https://github.com/By0ute/pyqt-collapsable-widget/blob/master/images/pyqt_collapsable_widget.gif&#41;)
-![PyQt Collapsable Widget in Python standalone](./images/pyqt_collapsable_widget.gif)
+![PyQt Collapsable Widget in Python standalone](images/pyqt_collapsable_widget.gif)
 
 **Here you can see the result from a Maya window**
 
 [//]: # (![PyQt Collapsable Widget in Maya]&#40;https://github.com/By0ute/pyqt-collapsable-widget/blob/master/images/pyqt_collapsable_widget_maya.gif&#41;)
-![PyQt Collapsable Widget in Maya](./images/pyqt_collapsable_widget_maya.gif)
+![PyQt Collapsable Widget in Maya](images/pyqt_collapsable_widget_maya.gif)
 
 ###### *Hope you'll enjoy it!*, :kissing_cat:
 [**By0ute**](https://github.com/By0ute) :princess:

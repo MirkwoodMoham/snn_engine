@@ -5,23 +5,28 @@ from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QSplitter,
-    QVBoxLayout,
     QWidget,
     QMainWindow,
     QStatusBar
 )
 
 from vispy.app import Application
-from vispy.scene import SceneCanvas
 
-from .engine_scene_canvas import (
+from app.content.scenes import (
     MainSceneCanvas,
-    CanvasConfig,
     LocationGroupInfoCanvas,
     ScatterPlotSceneCanvas,
-    VoltagePlotSceneCanvas)
+    VoltagePlotSceneCanvas
+)
 
-from .ui_panels import MainUILeft, MenuBar, ButtonMenuActions, GroupInfoPanel
+from .content import (
+    CanvasConfig,
+    MainUILeft,
+    MenuBar,
+    ButtonMenuActions,
+    GroupInfoPanel,
+    SceneCanvasFrame
+)
 from network import PlottingConfig
 
 
@@ -35,14 +40,6 @@ class BaseWindow(QMainWindow):
         self.setObjectName(name)
         self.resize(1600, 900)
         self.setCentralWidget(QWidget(self))
-
-    def _canvas_frame(self, canvas: SceneCanvas):
-        frame = QFrame(self.centralWidget())
-        frame.setFrameShape(QFrame.Shape.StyledPanel)
-        frame.setFrameShadow(QFrame.Shadow.Raised)
-        frame_layout = QVBoxLayout(frame)
-        frame_layout.addWidget(canvas.native)
-        return frame
 
 
 class MainWindow(BaseWindow):
@@ -79,7 +76,7 @@ class MainWindow(BaseWindow):
 
         self.splitter = QSplitter(QtCore.Qt.Orientation.Horizontal)
         self.splitter.addWidget(self.ui_panel_left)
-        self.splitter.addWidget(self._canvas_frame(self.scene_3d))
+        self.splitter.addWidget(SceneCanvasFrame(self, self.scene_3d))
         self.splitter.setStretchFactor(0, 16)
         self.splitter.setStretchFactor(1, 3)
 
@@ -97,7 +94,7 @@ class MainWindow(BaseWindow):
 
     def add_group_info_scene_to_splitter(self, plotting_config):
         if plotting_config.group_info_view_mode.split is True:
-            self.splitter.addWidget(self._canvas_frame(self.group_info_scene))
+            self.splitter.addWidget(SceneCanvasFrame(self, self.group_info_scene))
             self.splitter.setStretchFactor(2, 2)
             self.splitter.addWidget(self.ui_right)
             self.splitter.setStretchFactor(3, 10)
@@ -124,8 +121,8 @@ class NeuronPlotWindow(BaseWindow):
 
         self.splitter = QSplitter(QtCore.Qt.Orientation.Horizontal)
         self.splitter.addWidget(self.frame_left)
-        self.splitter.addWidget(self._canvas_frame(self.voltage_plot_sc))
-        self.splitter.addWidget(self._canvas_frame(self.scatter_plot_sc))
+        self.splitter.addWidget(SceneCanvasFrame(self, self.voltage_plot_sc))
+        self.splitter.addWidget(SceneCanvasFrame(self, self.scatter_plot_sc))
 
         # keep order
 
@@ -154,7 +151,7 @@ class LocationGroupInfoWindow(BaseWindow):
 
         splitter = QSplitter(QtCore.Qt.Orientation.Horizontal)
         splitter.addWidget(self.ui_panel_left)
-        splitter.addWidget(self._canvas_frame(self.scene_3d))
+        splitter.addWidget(SceneCanvasFrame(self, self.scene_3d))
         splitter.setStretchFactor(1, 3)
 
         hbox = QHBoxLayout(self.centralWidget())

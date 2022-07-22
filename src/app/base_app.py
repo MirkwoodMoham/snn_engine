@@ -2,7 +2,7 @@ import qdarktheme
 from PyQt6.QtWidgets import QApplication
 from vispy.app import Application, Timer
 
-from .window import MainWindow, NeuronPlotWindow, LocationGroupInfoWindow
+from .windows import MainWindow, NeuronPlotWindow, LocationGroupInfoWindow
 from network import SpikingNeuronNetwork
 
 
@@ -152,7 +152,6 @@ class BaseApp(Application):
 
         self.main_ui_panel.interface_neuron(0, self.network.GPU.G_neuron_typed_ccount[67].item())
 
-
     def connect_group_info_combo_box(self):
         self.group_info_panel.group_ids_combobox().add_items(self.network.group_info_mesh.group_id_texts.keys())
         self.group_info_panel.g_flags_combobox().add_items(self.network.group_info_mesh.G_flags_texts.keys())
@@ -268,7 +267,7 @@ class BaseApp(Application):
         self._set_g2g_color_bar_clim(clim)
 
     def g2g_info_combo_box_text_changed(self, s):
-        g = self.group_info_panel.g2g_info_combo_box.src_group_combo_box.currentText()
+        g = self.group_info_panel.g2g_info_combo_box.combo_box0.currentText()
         t = self.group_info_panel.g2g_info_combo_box().currentText()
         if t != 'None':
             self.actions.toggle_g_props.setChecked(True)

@@ -98,44 +98,34 @@ class StateRowCollection:
         return self.i_prev.index + 1
 
 
-# noinspection PyPep8Naming
-class IzhikevichPresets(StateTensor):
+@dataclass(frozen=True)
+class IzhikevichPreset:
+    """
+    Simple Model of Spiking Neurons (2003), Eugene M. Izhikevich
+    V.
 
-    @dataclass(frozen=True)
-    class Preset:
-        a: float
-        b: float
-        c: float
-        d: float
+    The parameter a describes the timescale of the recovery variable u.
+    Smaller values result in slower recovery. A typical value is
+    a = 0.02
 
-    @dataclass(frozen=True)
-    class Rows:
+    """
+    a: float
+    b: float
+    c: float
+    d: float
 
-        rs: int = 0
-        ib: int = 1
-        ch: int = 2
-        fs: int = 3
-        tc: int = 4
-        rz: int = 5
-        lts: int = 6
 
-        def __len__(self):
-            return 7
+@dataclass
+class IzhikevichPresets:
 
-    def __init__(self, shape=(7, 4), device=None):
-        self._rows = self.Rows()
-        super().__init__(shape)
-
-        # self.tensor = torch.zeros(shape, dtype=torch.float32, device=device)
-
-        self.rs = self.Preset(a=0.02, b=0.2, c=-65., d=8.)
-        self.ib = self.Preset(a=0.02, b=0.2, c=-55., d=4.)
-        self.ch = self.Preset(a=0.02, b=0.2, c=-50., d=2.)
-        self.fs = self.Preset(a=0.1, b=0.2, c=-65., d=2.)
-        self.fs25 = self.Preset(a=0.09, b=0.24, c=-65., d=2.)
-        self.tc = self.Preset(a=0.02, b=0.25, c=-65., d=0.05)
-        self.rz = self.Preset(a=0.1, b=0.26, c=-65., d=2.)
-        self.lts = self.Preset(a=0.02, b=0.25, c=-65., d=2.)
+    RS: IzhikevichPreset = IzhikevichPreset(a=0.02, b=0.2, c=-65., d=8.)
+    IB: IzhikevichPreset = IzhikevichPreset(a=0.02, b=0.2, c=-55., d=4.)
+    CH: IzhikevichPreset = IzhikevichPreset(a=0.02, b=0.2, c=-50., d=2.)
+    FS: IzhikevichPreset = IzhikevichPreset(a=0.1, b=0.2, c=-65., d=2.)
+    FS25: IzhikevichPreset = IzhikevichPreset(a=0.09, b=0.24, c=-65., d=2.)
+    TC: IzhikevichPreset = IzhikevichPreset(a=0.02, b=0.25, c=-65., d=0.05)
+    RZ: IzhikevichPreset = IzhikevichPreset(a=0.1, b=0.26, c=-65., d=2.)
+    LTS: IzhikevichPreset = IzhikevichPreset(a=0.02, b=0.25, c=-65., d=2.)
 
 
 class IzhikevichModel(StateTensor):
@@ -146,8 +136,8 @@ class IzhikevichModel(StateTensor):
         pt: StateRow = StateRow(0, [0, 1], 0.01)
         u: StateRow = StateRow(1)
         v: StateRow = StateRow(2)
-        a: StateRow = StateRow(3, [.02, .1], 0.001)
-        b: StateRow = StateRow(4, [.2, .25], 0.001)
+        a: StateRow = StateRow(3, [.02, .1], 0.01)
+        b: StateRow = StateRow(4, [.2, .25], 0.01)
         c: StateRow = StateRow(5, [-65, -50], 0.1)
         d: StateRow = StateRow(6, [2, 8], 0.1)
         i: StateRow = StateRow(7)
@@ -161,6 +151,7 @@ class IzhikevichModel(StateTensor):
         self.selected = None
         self.set_tensor(shape, device, types_tensor)
         self.presets = IzhikevichPresets()
+        self.preset_model = type(self.presets.RZ)
 
     def set_tensor(self, shape, device, types_tensor):
 
@@ -180,7 +171,7 @@ class IzhikevichModel(StateTensor):
 
         self.selected = torch.zeros(self._N, dtype=torch.int32, device=device)
 
-    def use_preset(self, preset: Union[IzhikevichPresets.Preset, str], mask=None):
+    def use_preset(self, preset: Union[IzhikevichPreset, str], mask=None):
 
         if isinstance(preset, str):
             preset = getattr(self.presets, preset)

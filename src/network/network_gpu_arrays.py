@@ -214,7 +214,7 @@ class NetworkGPUArrays(GPUArrayCollection):
 
         self.actualize_N_rep_pre_synaptic_idx(shapes)
 
-        self.N_states.use_preset('rs', self.selected_neuron_mask(self._config.sensory_groups))
+        self.N_states.use_preset('RS', self.selected_neuron_mask(self._config.sensory_groups))
 
         self.Simulation.set_stdp_config(0)
 

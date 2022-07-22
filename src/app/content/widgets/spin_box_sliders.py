@@ -1,118 +1,15 @@
-from dataclasses import dataclass
-import os
-from pathlib import Path
-from typing import Any, Callable, Optional, Union
+from dataclasses import dataclass, asdict
+from typing import Optional, Any, Callable, Union
 
 import pandas as pd
-from PyQt6 import QtWidgets, QtCore, QtGui
-from PyQt6.QtGui import QIcon, QAction
-from PyQt6.QtWidgets import (
-    QFrame,
-    QHBoxLayout,
-    QLabel,
-    QDoubleSpinBox,
-    QPushButton,
-    QSlider,
-    QStyle,
-    QVBoxLayout,
-    QWidget
-)
+from PyQt6 import QtGui, QtCore
+from PyQt6.QtWidgets import QSlider, QDoubleSpinBox, QStyleOptionSpinBox, QStyle, QWidget, QVBoxLayout, QHBoxLayout, \
+    QLabel, QFrame
 
-from rendering import Scale, Translate
-from network import (
-    LocationGroupProperties
-)
+from app.content.widgets.gui_element import GUIElement
 from interfaces import NeuronInterface
-
-
-@dataclass
-class GUIElement:
-    name: Optional[str] = None
-    icon_name: Optional[str] = None
-    status_tip: Optional[str] = None
-    checkable: bool = False
-    # parent: Optional[QtWidgets.QMainWindow] = None
-    connects: Optional[Union[Callable, list[Callable]]] = None
-    disabled: bool = False
-    window: Optional[QtWidgets.QMainWindow] = None
-
-    def _set_checkable(self, obj: Union[QAction, QPushButton]):
-        if self.checkable is True:
-            obj.setCheckable(True)
-
-    def _set_disabled(self, obj: Union[QAction, QPushButton]):
-        if self.disabled is True:
-            obj.setDisabled(True)
-
-    def _set_png_icon(self, obj: Union[QAction, QPushButton]):
-        if self.icon_name is not None:
-            name = self.icon_name
-            if (not name.endswith('.png')) and (not name.endswith('.PNG')):
-                name += '.png'
-            path = str(Path(__file__).parent) + f'/icons/{name}'
-            if not os.path.exists(path):
-                raise FileNotFoundError(path)
-            obj.setIcon(QIcon(path))
-
-    def _set_status_tip(self, obj: Union[QAction, QPushButton]):
-        if self.status_tip is not None:
-            obj.setStatusTip(self.status_tip)
-
-    def set_std_icon(self, obj: Union[QAction, QPushButton]):
-        pixmapi = getattr(QStyle.StandardPixmap, self.icon_name)
-        icon = self.window.style().standardIcon(pixmapi)
-        obj.setIcon(icon)
-
-    def _init(self, obj):
-        self._set_png_icon(obj)
-        self._set_status_tip(obj)
-        self._set_checkable(obj)
-        self._set_disabled(obj)
-
-
-@dataclass
-class ButtonMenuAction(GUIElement):
-    menu_name: Optional[str] = None
-    menu_short_cut: Optional[str] = None
-    _action = None
-    _button = None
-
-    def __post_init__(self):
-        if (self.connects is not None) and (not isinstance(self.connects, list)):
-            self.connects = [self.connects]
-
-    def _set_menu_short_cut(self, obj: Union[QAction, QPushButton]):
-        if self.menu_short_cut is not None:
-            obj.setShortcut(self.menu_short_cut)
-
-    def action(self):
-        if self._action is None:
-            self._action = QAction(self.menu_name, self.window)
-            self._set_menu_short_cut(self._action)
-            self._init(self._action)
-            if self.connects is not None:
-                for callable_ in self.connects:
-                    self._action.triggered.connect(callable_)
-        return self._action
-
-    def button(self):
-        if self._button is None:
-            self._button = QPushButton(self.name, self.window)
-            self._button.setFixedHeight(28)
-            if self.name is None:
-                self._button.setFixedWidth(28)
-            self._init(self._button)
-            if self.connects is not None:
-                for callable_ in self.connects:
-                    self._button.clicked.connect(callable_)
-            self._button.clicked.connect(self.button_clicked)
-        return self._button
-
-    def button_clicked(self):
-        sender = self.window.sender()
-        # noinspection PyUnresolvedReferences
-        msg = f'Clicked: {sender.text()}'
-        self.window.statusBar().showMessage(msg)
+from network import LocationGroupProperties
+from rendering import Scale, Translate
 
 
 class CustomQSlider(QSlider):
@@ -162,20 +59,20 @@ class CustomQDoubleSpinBox(QDoubleSpinBox):
 
     def mousePressEvent(self, e: QtGui.QMouseEvent) -> None:
         super().mousePressEvent(e)
-        opt = QtWidgets.QStyleOptionSpinBox()
+        opt = QStyleOptionSpinBox()
         self.initStyleOption(opt)
         rect_up = self.style().subControlRect(
-            QtWidgets.QStyle.ComplexControl.CC_SpinBox,
+            QStyle.ComplexControl.CC_SpinBox,
             opt,
-            QtWidgets.QStyle.SubControl.SC_SpinBoxUp)
+            QStyle.SubControl.SC_SpinBoxUp)
         if rect_up.contains(e.pos()):
             # print('UP')
             self.set_value()
         else:
             rect_down = self.style().subControlRect(
-                QtWidgets.QStyle.ComplexControl.CC_SpinBox,
+                QStyle.ComplexControl.CC_SpinBox,
                 opt,
-                QtWidgets.QStyle.SubControl.SC_SpinBoxDown)
+                QStyle.SubControl.SC_SpinBoxDown)
             if rect_down.contains(e.pos()):
                 # print('DOWN')
                 self.set_value()
@@ -220,10 +117,10 @@ class SpinBoxSlider(GUIElement):
             self.widget.setFixedWidth(self.fixed_width)
 
         if self.boxlayout_orientation == QtCore.Qt.Orientation.Vertical:
-            self.layout_box = QVBoxLayout(self.widget)
+            self.widget.setLayout(QVBoxLayout(self.widget))
             self.widget.setFixedHeight(84)
         else:
-            self.layout_box = QHBoxLayout(self.widget)
+            self.widget.setLayout(QHBoxLayout(self.widget))
             self.widget.setFixedHeight(35)
 
         self.label = QLabel(self.name)
@@ -239,9 +136,9 @@ class SpinBoxSlider(GUIElement):
         self.min_value = self._min_value
         self.max_value = self._max_value
 
-        self.layout_box.addWidget(self.label)
-        self.layout_box.addWidget(self.spin_box)
-        self.layout_box.addWidget(self.slider)
+        self.widget.layout().addWidget(self.label)
+        self.widget.layout().addWidget(self.spin_box)
+        self.widget.layout().addWidget(self.slider)
 
         self.change_from_text = False
         self.change_from_slider = False
@@ -259,8 +156,10 @@ class SpinBoxSlider(GUIElement):
 
         if v is not None:
             self._min_value = v
+            # noinspection PyArgumentList
             self.slider.setMinimum(self.func_inv_(v))
         else:
+            # noinspection PyArgumentList
             self._min_value = self.func_(self.slider.minimum())
         self.spin_box.setMinimum(self._min_value)
 
@@ -273,8 +172,10 @@ class SpinBoxSlider(GUIElement):
 
         if v is not None:
             self._max_value = v
+            # noinspection PyArgumentList
             self.slider.setMaximum(self.func_inv_(v))
         else:
+            # noinspection PyArgumentList
             self._max_value = self.func_(self.slider.maximum())
         self.spin_box.setMaximum(self._max_value)
 
@@ -408,3 +309,45 @@ class SubCollapsibleFrame(QFrame):
         self.setFixedWidth(fixed_width)
         self.setLayout(QHBoxLayout(self))
         self.layout().setContentsMargins(15, 0, 0, 0)
+
+
+class SliderCollectionWidget(QWidget):
+
+    def __init__(self, parent):
+        super().__init__(parent)
+
+        self.setLayout(QVBoxLayout(self))
+        self.layout().setContentsMargins(0, 0, 0, 0)
+        self.setMaximumHeight(20)
+
+    def add(self, slider_widget):
+        self.layout().addWidget(slider_widget)
+        self.setMaximumHeight(self.maximumHeight() + 35)
+
+
+@dataclass
+class SliderCollection:
+
+    parent: Any
+
+    def __post_init__(self):
+        parent = self.parent
+        self.parent = None
+        self._keys = list(asdict(self).keys())
+        self._keys.remove('parent')
+        self.parent = parent
+        self.widget = SliderCollectionWidget(self.parent)
+
+    def add(self, slider_widget):
+        self.widget.add(slider_widget)
+
+    def add_slider(self, key, property_to_connect=None, **kwargs):
+        sbs = SpinBoxSlider(**kwargs)
+        setattr(self, key, sbs)
+        if property_to_connect is not None:
+            sbs.connect_property(property_to_connect)
+        self.add(sbs.widget)
+
+    @property
+    def keys(self):
+        return self._keys

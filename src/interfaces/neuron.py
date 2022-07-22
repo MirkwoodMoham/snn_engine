@@ -1,37 +1,13 @@
-import numpy as np
-from scipy import signal
+from copy import copy
+from dataclasses import asdict
 import torch
-from typing import Callable, Optional
+from typing import Callable, Optional, Union
 
-from network import SingleNeuronPlot, SpikingNeuronNetwork
+from .signaling import SignalModel, StepSignal, PulseSignal
+
+from network import IzhikevichPresets, SingleNeuronPlot, SpikingNeuronNetwork
 from gpu import RegisteredVBO
-from app.plot_widgets import SingleNeuronPlotWidget
-from vispy.scene import ViewBox
-
-
-class StepSignal:
-
-    def __init__(self, t_start, amplitude, phase):
-
-        self.amplitude = amplitude
-        self.step_time = t_start + phase
-
-    def __call__(self, t, t_mod):
-        if t < self.step_time:
-            return 0
-        else:
-            return self.amplitude
-
-
-class PulseSignal:
-    def __init__(self, amplitude, phase, frequency, pulse_length):
-        self.amplitude = amplitude
-        self.period = 1000 / frequency
-        self.duty = round(pulse_length/self.period, 2)
-        self.phase = phase
-
-    def __call__(self, t, t_mod):
-        return signal.square(((t + self.phase) * 2 * np.pi)/self.period, self.duty) * self.amplitude
+from app.content.plots import SingleNeuronPlotWidget
 
 
 class NeuronInterface:
@@ -39,7 +15,7 @@ class NeuronInterface:
     def __init__(self, neuron_id, network: SpikingNeuronNetwork,
                  plot_widget: Optional[SingleNeuronPlotWidget] = None):
 
-        self.id = neuron_id
+        self._id = neuron_id
         self.network = network
 
         self.plot = SingleNeuronPlot(self.plot_length)
@@ -53,14 +29,52 @@ class NeuronInterface:
         self.first_plot_run = True
 
         self.b_current_injection = False
-        self.current_injection_function: Optional[Callable] = None
+        self.current_injection_function: Optional[Union[SignalModel, Callable]] = None
 
         self.current_scale_reset_threshold_up = 0.8
         self.current_scale_reset_threshold_down = 0
         self.voltage_scale_reset_threshold_up = 5
         self.voltage_scale_reset_threshold_down = 0
 
+        self.preset_dct = {'initial': None}
+        self.preset_dct.update(asdict(self.presets))
+        initial_preset = self.current_model
+        self.preset_dct['initial'] = initial_preset
+        self.preset_dct['custom'] = copy(initial_preset)
+
+        self.network.GPU.N_states.preset_model(**self.preset_dct['initial'])
+
         self.set_current_injection(0, activate=True, mode='pulse_current', phase=50)
+
+        self.custom_presets = []
+
+    @property
+    def id(self):
+        return self._id
+
+    @id.setter
+    def id(self, i):
+        self._id = i
+        initial_preset = self.current_model
+        if i in self.custom_presets:
+            self.preset_dct['initial'] = initial_preset
+            self.preset_dct['custom'] = copy(initial_preset)
+
+    @property
+    def current_model(self):
+        model = {}
+        for k in list(self.preset_dct.values())[1]:
+            model[k] = getattr(self, k).item()
+        return model
+
+    def use_preset(self, key):
+        print(self.preset_dct[key])
+        for k, v in self.preset_dct[key].items():
+            setattr(self, k, v)
+
+    @property
+    def presets(self):
+        return self.network.GPU.N_states.presets
 
     @property
     def group(self):
@@ -104,8 +118,7 @@ class NeuronInterface:
                 t_start=t, amplitude=amplitude, phase=phase)
         elif mode == 'pulse_current':
             self.current_injection_function = PulseSignal(
-                amplitude, phase, frequency, pulse_length=effective_injection_period
-            )
+                amplitude, phase, frequency, pulse_length=effective_injection_period)
 
     @property
     def i_prev(self):
@@ -168,7 +181,8 @@ class IzhikevichNeuronsInterface(NeuronInterface):
 
     @a.setter
     def a(self, v):
-        print(self.network.GPU.N_states.tensor[:, self.id])
+        self.preset_dct['custom']['a'] = v
+        # print(self.network.GPU.N_states.tensor[:, self.id])
         self.network.GPU.N_states.a[self.id] = v
 
     @property
@@ -177,6 +191,7 @@ class IzhikevichNeuronsInterface(NeuronInterface):
 
     @b.setter
     def b(self, v):
+        self.preset_dct['custom']['b'] = v
         self.network.GPU.N_states.b[self.id] = v
 
     @property
@@ -185,6 +200,7 @@ class IzhikevichNeuronsInterface(NeuronInterface):
 
     @c.setter
     def c(self, v):
+        self.preset_dct['custom']['c'] = v
         self.network.GPU.N_states.c[self.id] = v
 
     @property
@@ -193,6 +209,5 @@ class IzhikevichNeuronsInterface(NeuronInterface):
 
     @d.setter
     def d(self, v):
+        self.preset_dct['custom']['d'] = v
         self.network.GPU.N_states.d[self.id] = v
-
-

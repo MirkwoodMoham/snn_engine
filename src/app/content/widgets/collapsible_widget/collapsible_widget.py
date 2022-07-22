@@ -1,7 +1,6 @@
 __author__ = 'Caroline Beyne'
 
 from PyQt6 import QtGui, QtCore, QtWidgets
-from vispy.scene import SceneCanvas
 
 
 class CollapsibleWidget(QtWidgets.QWidget):
@@ -46,8 +45,8 @@ class CollapsibleWidget(QtWidgets.QWidget):
             self.move(QtCore.QPoint(20, 0))
             self.setStyleSheet("border:1px solid rgb(71, 71, 71); ")
 
-            self._hlayout = QtWidgets.QHBoxLayout(self)
-            self._hlayout.setContentsMargins(0, 0, 0, 0)
+            self.setLayout(QtWidgets.QHBoxLayout(self))
+            self.layout().setContentsMargins(0, 0, 0, 0)
             # self._hlayout.setSpacing(0)
 
             self._arrow = CollapsibleWidget.Arrow(collapsed=collapsed)
@@ -60,8 +59,8 @@ class CollapsibleWidget(QtWidgets.QWidget):
             self._title.setMinimumWidth(100)
             self._title.setStyleSheet("border:0px")
 
-            self._hlayout.addWidget(self._arrow)
-            self._hlayout.addWidget(self._title)
+            self.layout().addWidget(self._arrow)
+            self.layout().addWidget(self._title)
 
             self.body = body
 
@@ -149,14 +148,6 @@ class CollapsibleWidget(QtWidgets.QWidget):
             o.toggle_collapsed()
             self.toggle_collapsed()
             self.toggle_collapsed()
-
-    def _canvas_frame(self, canvas: SceneCanvas):
-        frame = QtWidgets.QFrame(self)
-        frame.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
-        frame.setFrameShadow(QtWidgets.QFrame.Shadow.Raised)
-        frame_layout = QtWidgets.QVBoxLayout(frame)
-        frame_layout.addWidget(canvas.native)
-        return frame
 
 
 if __name__ == '__main__':

@@ -1,13 +1,9 @@
 from dataclasses import dataclass, asdict
-from typing import Optional, Tuple
+from typing import Optional
 
 from PyQt6.QtCore import Qt, QRect
-from PyQt6.QtGui import QValidator
 from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import (
-    QComboBox,
-    QFrame,
-    QLabel,
     QHBoxLayout,
     QMainWindow,
     QMenuBar,
@@ -17,15 +13,16 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from .gui_element import (
+from app.content.widgets.combobox_frame import ComboBoxFrame, G2GInfoDualComboBoxFrame
+from app.content.widgets.gui_element import (
     ButtonMenuAction
 )
-from .rendered_object_collapsible import RenderedObjectCollapsible
-from .neuron_properties_collapsible import IzhikevichNeuronCollapsible
-from .collapsible_widget.collapsible_widget import CollapsibleWidget
-from .gui_element import SpinBoxSlider
-from network import IzhikevichModel, NetworkConfig, SpikingNeuronNetwork
-from interfaces import IzhikevichNeuronsInterface
+from app.content.widgets.rendered_object_collapsible import RenderedObjectCollapsible
+from .neuron_properties_collapsible import SingleNeuronCollapsible
+from app.content.widgets.collapsible_widget.collapsible_widget import CollapsibleWidget
+from .widgets.spin_box_sliders import SpinBoxSlider
+from network import IzhikevichModel, SpikingNeuronNetwork
+
 
 @dataclass
 class ButtonMenuActions:
@@ -247,7 +244,7 @@ class MainUILeft(UIPanel):
         play_pause_hbox.addWidget(self.buttons.start)
         play_pause_hbox.addWidget(self.buttons.pause)
 
-        self.neuron0: Optional[IzhikevichNeuronCollapsible] = None
+        self.neuron0: Optional[SingleNeuronCollapsible] = None
         self.neuron1 = None
         self.neurons_collapsible = CollapsibleWidget(self, title='Neuron Info')
         self.sensory_input_collapsible = CollapsibleWidget(self, title='Sensory Input')
@@ -274,7 +271,7 @@ class MainUILeft(UIPanel):
 
         self.addWidget(self.buttons.exit)
 
-        self.interfaced_neurons: list[IzhikevichNeuronCollapsible] = []
+        self.interfaced_neurons: list[SingleNeuronCollapsible] = []
         self.single_neuron_plot_length: Optional[int] = None
 
     def add_3d_object_sliders(self, obj):
@@ -289,10 +286,10 @@ class MainUILeft(UIPanel):
 
         self.single_neuron_plot_length = network.plotting_config.voltage_plot_length
 
-        self.neuron0 = IzhikevichNeuronCollapsible(
+        self.neuron0 = SingleNeuronCollapsible(
             self, network, title='Neuron0', model=model, window=self.window, app=app)
 
-        self.neuron1 = IzhikevichNeuronCollapsible(
+        self.neuron1 = SingleNeuronCollapsible(
             self, network, title='Neuron1', model=model, window=self.window, app=app)
 
         self.neurons_collapsible.add(self.neuron0)
@@ -300,8 +297,8 @@ class MainUILeft(UIPanel):
         self.neurons_collapsible.add(self.neuron1)
         self.interfaced_neurons.append(self.neuron1)
 
-        self.neuron0.plot_canvas.plot_widget.cam_reset()
-        self.neuron1.plot_canvas.plot_widget.cam_reset()
+        self.neuron0.plot.canvas.plot_widget.cam_reset()
+        self.neuron1.plot.canvas.plot_widget.cam_reset()
         self.neurons_collapsible.toggle_collapsed()
 
     def update_interfaced_neuron_plots(self, t):
@@ -311,114 +308,6 @@ class MainUILeft(UIPanel):
 
     def interface_neuron(self, interfaced_neuron_index, neuron_id):
         self.interfaced_neurons[interfaced_neuron_index].set_id(neuron_id)
-
-
-class GroupInfoComboBox(QComboBox):
-
-    def __init__(self, item_list=None):
-
-        super().__init__()
-
-        if item_list is not None:
-            self.add_items(item_list)
-
-        self.setFixedHeight(28)
-
-    def add_items(self, item_list, set_current=1):
-        for item in item_list:
-            self.addItem(item)
-        if set_current is not None:
-            self.setCurrentIndex(set_current)
-
-
-class GroupInfoComboBoxFrame(QFrame):
-
-    def __init__(self, name, actualize_button=None, parent=None):
-        super().__init__(parent)
-        self.setLayout(QHBoxLayout())
-        self.layout().setContentsMargins(0, 0, 0, 0)
-        self.combo_box = GroupInfoComboBox()
-        self.label = QLabel(name)
-        self.label.setMaximumWidth(80)
-        self.layout().addWidget(self.label)
-        self.layout().addWidget(self.combo_box)
-        if actualize_button is not None:
-            self.actualize_button = actualize_button
-            self.layout().addWidget(self.actualize_button)
-        else:
-            self.actualize_button = None
-
-        # self.setBaseSize(32, 100)
-        self.setFixedHeight(32)
-        # self.setMaximumWidth(220)
-        # self.setFra
-
-    def __call__(self):
-        return self.combo_box
-
-    def connect(self, func):
-        # noinspection PyUnresolvedReferences
-        self.combo_box.currentTextChanged.connect(func)
-        if self.actualize_button is not None:
-            self.actualize_button.clicked.connect(func)
-
-
-class GroupValidator(QValidator):
-
-    def __init__(self, parent, group_ids):
-        self.group_ids = group_ids
-        super().__init__(parent)
-
-    def validate(self, a0: str, a1: int) -> Tuple['QValidator.State', str, int]:
-        if a0 in self.group_ids:
-            state = QValidator.State.Acceptable
-        else:
-            state = QValidator.State.Invalid
-        return (state, a0, a1)
-
-
-class G2GInfoComboBoxFrame(QFrame):
-
-    def __init__(self, name, actualize_button=None, parent=None):
-        super().__init__(parent)
-        self.setLayout(QHBoxLayout())
-        self.layout().setContentsMargins(0, 0, 0, 0)
-        self.src_group_combo_box = GroupInfoComboBox()
-        self.src_group_combo_box.setMaximumWidth(50)
-        self.src_group_combo_box.setMaxVisibleItems(10)
-        self.src_group_combo_box.setEditable(True)
-        self.value_combo_box = GroupInfoComboBox()
-        self.label = QLabel(name)
-        self.label.setMaximumWidth(80)
-        self.layout().addWidget(self.label)
-        self.layout().addWidget(self.src_group_combo_box)
-        self.layout().addWidget(self.value_combo_box)
-        if actualize_button is not None:
-            self.actualize_button = actualize_button
-            self.layout().addWidget(self.actualize_button)
-        else:
-            self.actualize_button = None
-
-        self.setFixedHeight(32)
-
-    def __call__(self):
-        return self.value_combo_box
-
-    def connect(self, func):
-        # noinspection PyUnresolvedReferences
-        self.src_group_combo_box.currentTextChanged.connect(func)
-        # noinspection PyUnresolvedReferences
-        self.value_combo_box.currentTextChanged.connect(func)
-        if self.actualize_button is not None:
-            self.actualize_button.clicked.connect(func)
-
-    def set_src_group_validator(self, groups_ids):
-        v = GroupValidator(self, groups_ids)
-        self.src_group_combo_box.setValidator(v)
-
-    def init_src_group_combo_box(self, group_ids):
-        self.src_group_combo_box.add_items(group_ids, 0)
-        self.set_src_group_validator(group_ids)
 
 
 class GroupInfoPanel(UIPanel):
@@ -431,19 +320,19 @@ class GroupInfoPanel(UIPanel):
 
         self.combo_boxes = []
 
-        self.group_ids_combobox = GroupInfoComboBoxFrame('Group IDs')
+        self.group_ids_combobox = ComboBoxFrame('Group IDs')
         self.add_combo_box(self.group_ids_combobox)
 
-        self.g_flags_combobox = GroupInfoComboBoxFrame(
+        self.g_flags_combobox = ComboBoxFrame(
             'G_flags', ButtonMenuActions.ACTUALIZE_G_FLAGS_TEXT.button())
         self.add_combo_box(self.g_flags_combobox)
 
-        self.g_props_combobox = GroupInfoComboBoxFrame(
+        self.g_props_combobox = ComboBoxFrame(
             'G_props', ButtonMenuActions.ACTUALIZE_G_PROPS_TEXT.button())
         self.add_combo_box(self.g_props_combobox)
 
         self.combo_boxes_collapsible1 = CollapsibleWidget(title='Group Info Display 1')
-        self.g2g_info_combo_box = G2GInfoComboBoxFrame(
+        self.g2g_info_combo_box = G2GInfoDualComboBoxFrame(
             'G2G_info', ButtonMenuActions.ACTUALIZE_G2G_INFO_TEXT.button())
         self.combo_boxes_collapsible1.add(self.g2g_info_combo_box)
 
