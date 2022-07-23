@@ -1,4 +1,5 @@
 from dataclasses import dataclass, asdict
+import numpy as np
 from typing import Optional, Any, Callable, Union
 
 import pandas as pd
@@ -32,6 +33,7 @@ class CustomQSlider(QSlider):
     def wheelEvent(self, e: QtGui.QWheelEvent) -> None:
         if self.wheel_func is not None:
             new_value = self.value() + (1 if e.angleDelta().y() > 0 else -1) * self.scroll_step
+            new_value = min(max(new_value, self.minimum()), self.maximum())
             # self.ui_element.change_from_scroll = True
             self.setValue(new_value)
             self.wheel_func(new_value, from_scroll=True)
@@ -46,15 +48,22 @@ class CustomQDoubleSpinBox(QDoubleSpinBox):
     def __init__(self,
                  parent=None,
                  ui_element: Optional[GUIElement] = None,
-                 precision=2):
+                 precision=2,
+                 prefix: Optional[str] = None, suffix: Optional[str] = None):
         super().__init__(parent)
         self.ui_element = ui_element
         self.wheel_func = None
-        self.precision = precision
+        # self.precision = precision
+        self.setDecimals(precision)
+        if prefix is not None:
+            self.setPrefix(prefix)
+        if suffix is not None:
+            self.setSuffix(suffix)
 
     def set_value(self):
         if self.wheel_func is not None:
-            self.setValue(round(self.value(), self.precision))
+            self.setValue(self.value())
+            # self.setValue(round(self.value(), self.precision))
             self.wheel_func(self.value(), from_scroll=True)
 
     def mousePressEvent(self, e: QtGui.QMouseEvent) -> None:
@@ -104,6 +113,8 @@ class SpinBoxSlider(GUIElement):
     fixed_width: Optional[int] = None
     single_step_spin_box: float = 0.1
     single_step_slider: Optional[int] = 100
+    prefix: Optional[str] = None
+    suffix: Optional[str] = None
 
     def __post_init__(self):
         self.property_container = None
@@ -124,7 +135,11 @@ class SpinBoxSlider(GUIElement):
             self.widget.setFixedHeight(35)
 
         self.label = QLabel(self.name)
-        self.spin_box = CustomQDoubleSpinBox(ui_element=self)
+
+        self.spin_box = CustomQDoubleSpinBox(ui_element=self,
+                                             precision=int(np.ceil(np.log10(1/self.single_step_spin_box))),
+                                             prefix=self.prefix,
+                                             suffix=self.suffix)
         self.spin_box.setSingleStep(self.single_step_spin_box)
 
         # noinspection PyTypeChecker

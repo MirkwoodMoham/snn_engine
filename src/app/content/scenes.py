@@ -313,8 +313,9 @@ class SingleNeuronPlotCanvas(BaseEngineSceneCanvas):
         self.unfreeze()
 
         self.plot_widget = SingleNeuronPlotWidget(plotting_confing=plotting_config,
-                                                  width_min=width_min, width_max=width_max,
+                                                  width_min=width_min,
+                                                  width_max=width_max,
                                                   height_min=height_min, height_max=height_max)
-        self.central_widget.add_widget(self.plot_widget)
-
+        grid = self.central_widget.add_grid()
+        grid.add_widget(self.plot_widget)
         self.freeze()

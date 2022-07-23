@@ -309,6 +309,10 @@ class MainUILeft(UIPanel):
     def interface_neuron(self, interfaced_neuron_index, neuron_id):
         self.interfaced_neurons[interfaced_neuron_index].set_id(neuron_id)
 
+    def unregister_registered_buffers(self):
+        for n in self.interfaced_neurons:
+            n.neuron_interface.plot.unregister_registered_buffers()
+
 
 class GroupInfoPanel(UIPanel):
 

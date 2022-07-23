@@ -64,10 +64,10 @@ class EngineConfig:
                             sim_updates_per_frame=1,
                             stdp_active=True,
                             debug=False, InitValues=InitValues())
-    plotting = PlottingConfig(n_voltage_plots=10, voltage_plot_length=100,
+    plotting = PlottingConfig(n_voltage_plots=3, voltage_plot_length=100,
                               n_scatter_plots=1000, scatter_plot_length=1000,
-                              windowed_neuron_plots=False,
-                              group_info_view_mode='split',
+                              windowed_neuron_plots=True,
+                              group_info_view_mode='scene',
                               network_config=network)
 
 

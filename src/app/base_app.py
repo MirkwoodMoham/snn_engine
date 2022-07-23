@@ -60,6 +60,8 @@ class BaseApp(Application):
 
         # noinspection PyUnresolvedReferences
         native_app.aboutToQuit.connect(self.network.unregister_registered_buffers)
+        # noinspection PyUnresolvedReferences
+        native_app.aboutToQuit.connect(self.main_window.ui_panel_left.unregister_registered_buffers)
 
     def set_main_context_as_current(self):
         self.main_window.scene_3d.set_current()
@@ -151,6 +153,7 @@ class BaseApp(Application):
         self.connect_group_info_combo_box()
 
         self.main_ui_panel.interface_neuron(0, self.network.GPU.G_neuron_typed_ccount[67].item())
+        self.main_ui_panel.interface_neuron(1, self.network.GPU.G_neuron_typed_ccount[67].item()+1)
 
     def connect_group_info_combo_box(self):
         self.group_info_panel.group_ids_combobox().add_items(self.network.group_info_mesh.group_id_texts.keys())

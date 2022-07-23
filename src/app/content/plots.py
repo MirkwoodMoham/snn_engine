@@ -73,6 +73,7 @@ class SingleNeuronPlotWidget(PlotWidget):
         self.y_axis_right.width_max = y_axis_width
         self.grid.add_widget(self.y_axis_right, row=0, col=2, row_span=1)
         self.y_axis_right.link_view(self.view)
+        # noinspection PyUnresolvedReferences
         self.view.camera.rect = (
             self.view.camera.rect.pos[0],
             -.5,

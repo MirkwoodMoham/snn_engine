@@ -13,6 +13,10 @@ from geometry import XYZ
 from network.network_grid import NetworkGrid
 
 
+def get_buffer_id(glir_id):
+    return int(get_current_canvas().context.shared.parser._objects[glir_id].handle)
+
+
 class RenderedObject:
     def __init__(self, select_parent=None, selectable=False, draggable=False):
 

@@ -3,7 +3,7 @@ from dataclasses import asdict
 import torch
 from typing import Callable, Optional, Union
 
-from .signaling import SignalModel, StepSignal, PulseSignal
+from .signaling import SignalModel, StepSignal, DiscretePulseSignal
 
 from network import IzhikevichPresets, SingleNeuronPlot, SpikingNeuronNetwork
 from gpu import RegisteredVBO
@@ -19,7 +19,6 @@ class NeuronInterface:
         self.network = network
 
         self.plot = SingleNeuronPlot(self.plot_length)
-        self.vbo_array: Optional[RegisteredVBO] = None
 
         self.plot_widget = plot_widget
 
@@ -44,7 +43,7 @@ class NeuronInterface:
 
         self.network.GPU.N_states.preset_model(**self.preset_dct['initial'])
 
-        self.set_current_injection(0, activate=True, mode='pulse_current', phase=50)
+        self.set_current_injection(0, activate=True, mode='pulse_current', phase=0)
 
         self.custom_presets = []
 
@@ -84,9 +83,9 @@ class NeuronInterface:
     def type(self):
         return self.network.GPU.N_G[self.id, self.network.network_config.N_G_neuron_type_col]
 
-    def register_vbo(self):
-        self.vbo_array = RegisteredVBO(self.plot.vbo, shape=self.plot.plot_data.pos.shape,
-                                       device=self.network.GPU.device)
+    def register_vbos(self):
+        self.plot.init_cuda_attributes(self.network.GPU.device)
+        self.plot.line.colors_gpu.tensor[:, 3] = 0
 
     def link_plot_widget(self, plot_widget: SingleNeuronPlotWidget):
         self.plot_widget = plot_widget
@@ -109,15 +108,15 @@ class NeuronInterface:
         self.network.GPU.N_states.i[self.id] = v
 
     def set_current_injection(self, t, activate: bool, mode='step_current',
-                              amplitude=25, frequency=100, effective_injection_period=5,
-                              phase=0):
+                              amplitude=15, frequency=100, effective_injection_period=1,
+                              phase=10):
 
         self.b_current_injection = activate
         if mode == 'step_current':
             self.current_injection_function = StepSignal(
                 t_start=t, amplitude=amplitude, phase=phase)
         elif mode == 'pulse_current':
-            self.current_injection_function = PulseSignal(
+            self.current_injection_function = DiscretePulseSignal(
                 amplitude, phase, frequency, pulse_length=effective_injection_period)
 
     @property
@@ -137,11 +136,11 @@ class NeuronInterface:
         if self.first_plot_run is True:
             self.first_plot_run = False
 
-        max_v = torch.max(self.vbo_array.tensor[0: self.plot_length, 1]).item()
+        max_v = torch.max(self.plot.line.pos_gpu.tensor[0: self.plot_length, 1]).item()
         if max_v > self.voltage_scale_reset_threshold_up:
             self.plot_widget.y_axis_right.scale *= (max_v / 2)
 
-        max_i = torch.max(self.vbo_array.tensor[self.plot_length:, 1]).item()
+        max_i = torch.max(self.plot.line.pos_gpu.tensor[self.plot_length:, 1]).item()
         if max_i > self.current_scale_reset_threshold_up:
             self.plot_widget.y_axis.scale *= (max_i + 1)
 
@@ -150,15 +149,22 @@ class NeuronInterface:
 
     def update_plot(self, t, t_mod):
 
+        if t_mod == 0:
+            self.plot.line.colors_gpu.tensor[:, 3] = 0
+
         if (t_mod == (self.plot_length - 1)) is True:
             self._rescale_plot()
 
-        self.vbo_array.tensor[t_mod, 1] = self.v / self.plot_widget.y_axis_right.scale
-        self.vbo_array.tensor[t_mod + self.plot_length, 1] = \
+        self.plot.line.pos_gpu.tensor[t_mod, 1] = self.v / self.plot_widget.y_axis_right.scale
+        self.plot.line.pos_gpu.tensor[t_mod + self.plot_length, 1] = \
             self.i_prev / self.plot_widget.y_axis.scale
 
         if self.b_current_injection is True:
             self.i = self.current_injection_function(t, t_mod)
+
+        if t_mod > 0:
+            self.plot.line.colors_gpu.tensor[t_mod, 3] = 1
+            self.plot.line.colors_gpu.tensor[t_mod + self.plot_length, 3] = 1
 
 
 class IzhikevichNeuronsInterface(NeuronInterface):

@@ -11,7 +11,7 @@ from app.content.widgets.collapsible_widget.collapsible_widget import Collapsibl
 from .widgets.spin_box_sliders import SpinBoxSlider, SubCollapsibleFrame, SliderCollection
 from app.content.widgets.combobox_frame import ComboBoxFrame
 from .scenes import SingleNeuronPlotCanvas
-from interfaces import IzhikevichNeuronsInterface, NeuronInterface, SignalModel
+from interfaces import IzhikevichNeuronsInterface, NeuronInterface, SignalModel, SignalVariable
 from network import IzhikevichPreset, IzhikevichModel, SpikingNeuronNetwork, StateRow
 from app.content.widgets.scene_canvas_frame import SceneCanvasFrame, CanvasConfig
 
@@ -86,6 +86,7 @@ class CurrentControlFrame(SubCollapsibleFrame):
         step_time: Optional[SpinBoxSlider] = None
         period: Optional[SpinBoxSlider] = None
         duty: Optional[SpinBoxSlider] = None
+        duty_period: Optional[SpinBoxSlider] = None
         phase: Optional[SpinBoxSlider] = None
 
     def __init__(self, parent, model: SignalModel, window, fixed_width=300):
@@ -96,7 +97,7 @@ class CurrentControlFrame(SubCollapsibleFrame):
 
         for x in self.sliders.keys:
             if hasattr(model.VariableConfig, x):
-                var_conf: StateRow = getattr(model.VariableConfig, x)
+                var_conf: SignalVariable = getattr(model.VariableConfig, x)
                 self.sliders.add_slider(
                     x, model,
                     name=x + ':',
@@ -106,7 +107,8 @@ class CurrentControlFrame(SubCollapsibleFrame):
                     boxlayout_orientation=QtCore.Qt.Orientation.Horizontal,
                     prop_id=x,
                     single_step_spin_box=var_conf.step_size,
-                    single_step_slider=var_conf.step_size * 1000)
+                    single_step_slider=var_conf.step_size * 1000,
+                    suffix=f' [{var_conf.unit}]')
 
         self.setFixedHeight(self.sliders.widget.maximumHeight() + 5)
         self.layout().addWidget(self.sliders.widget)
@@ -118,10 +120,10 @@ class SingleNeuronPlotCollapsible(CollapsibleWidget):
 
         super().__init__(parent, title=title)
 
-        width_min = 250
-        width_max = 600
+        width_min = 200
+        width_max = 800
         height_min = 150
-        height_max = 150
+        height_max = 250
         self.canvas = SingleNeuronPlotCanvas(
             conf=CanvasConfig(), app=app, plotting_config=network.plotting_config,
             width_min=width_min, width_max=width_max,
@@ -130,12 +132,12 @@ class SingleNeuronPlotCollapsible(CollapsibleWidget):
 
         interface.link_plot_widget(self.canvas.plot_widget)
         plot_frame = SceneCanvasFrame(self, self.canvas)
-        plot_frame.setFixedSize(width_max+60, height_max+40)
+        plot_frame.setFixedSize(width_max+80, height_max+50)
 
         self.add(plot_frame)
 
         self.canvas.set_current()
-        interface.register_vbo()
+        interface.register_vbos()
 
 
 class SingleNeuronCollapsible(CollapsibleWidget):

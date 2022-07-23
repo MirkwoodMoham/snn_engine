@@ -1,9 +1,10 @@
 import numpy as np
+from typing import Optional
 from vispy.scene import visuals
 # from vispy.visuals.transforms import STTransform
 
-from rendering import RenderedObjectNode
-from vispy.gloo.context import get_current_canvas
+from rendering import RenderedObjectNode, RenderedCudaObjectNode, CudaLine
+from gpu import RegisteredVBO
 
 
 class PlotData:
@@ -36,7 +37,7 @@ class PlotData:
 
 
 # noinspection PyAbstractClass
-class BasePlot:
+class BaseMultiPlot:
 
     def __init__(self, n_plots, plot_length, n_group_separator_lines, group_line_offset_left,
                  group_separator_line_width=1):
@@ -65,11 +66,11 @@ class BasePlot:
 
 
 # noinspection PyAbstractClass
-class VoltagePlot(RenderedObjectNode, BasePlot):
+class VoltagePlot(RenderedObjectNode, BaseMultiPlot):
 
     def __init__(self, n_plots, plot_length, n_group_separator_lines):
 
-        BasePlot.__init__(self, n_plots, plot_length, n_group_separator_lines, 2)
+        BaseMultiPlot.__init__(self, n_plots, plot_length, n_group_separator_lines, 2)
 
         connect = np.ones(plot_length).astype(bool)
         connect[-1] = False
@@ -88,11 +89,11 @@ class VoltagePlot(RenderedObjectNode, BasePlot):
 
 
 # noinspection PyAbstractClass
-class FiringScatterPlot(RenderedObjectNode, BasePlot):
+class FiringScatterPlot(RenderedObjectNode, BaseMultiPlot):
 
     def __init__(self, n_plots, plot_length, n_group_separator_lines):
 
-        BasePlot.__init__(self, n_plots, plot_length, n_group_separator_lines, 20)
+        BaseMultiPlot.__init__(self, n_plots, plot_length, n_group_separator_lines, 20)
 
         self.plot_data.color[:, 3] = 0
 
@@ -113,11 +114,11 @@ class FiringScatterPlot(RenderedObjectNode, BasePlot):
 
 
 # noinspection PyAbstractClass
-class GroupFiringCountsPlot(RenderedObjectNode, BasePlot):
+class GroupFiringCountsPlot(RenderedObjectNode, BaseMultiPlot):
 
     def __init__(self, n_plots, plot_length, n_groups, color=None):
 
-        BasePlot.__init__(self, n_plots, plot_length, n_groups + 1, 2)
+        BaseMultiPlot.__init__(self, n_plots, plot_length, n_groups + 1, 2)
 
         if color is not None:
             if isinstance(color, list):
@@ -144,29 +145,55 @@ class GroupFiringCountsPlot(RenderedObjectNode, BasePlot):
 
 
 # noinspection PyAbstractClass
-class SingleNeuronPlot(RenderedObjectNode, BasePlot):
+class SingleNeuronPlot(RenderedCudaObjectNode):
 
     def __init__(self, plot_length):
 
-        self.plot_data = PlotData(2, plot_length)
+        plot_data = PlotData(2, plot_length)
 
         colors = [[1., 1., 0., 1.], [0., 1., 1., 1.]]
 
         for i, c in enumerate(colors):
             color_arr = np.repeat(np.array(c).reshape(1, 4), plot_length, 0)
-            self.plot_data.color[i * plot_length: (i + 1) * plot_length, :] = color_arr
+            plot_data.color[i * plot_length: (i + 1) * plot_length, :] = color_arr
 
         connect = np.ones(plot_length).astype(bool)
         connect[-1] = False
         connect = connect.reshape(1, plot_length).repeat(2, axis=0).flatten()
 
-        self._obj: visuals.Line = visuals.Line(pos=self.plot_data.pos,
-                                               color=self.plot_data.color,
-                                               connect=connect,
-                                               antialias=False, width=1, parent=None)
+        self.line: CudaLine = CudaLine(pos=plot_data.pos,
+                                       color=plot_data.color,
+                                       connect=connect,
+                                       antialias=False, width=1, parent=None)
 
-        RenderedObjectNode.__init__(self, [self._obj])
+        RenderedCudaObjectNode.__init__(self, [self.line])
 
-    @property
-    def vbo_glir_id(self):
-        return self._obj._line_visual._pos_vbo.id
+    def init_cuda_attributes(self, device):
+        super().init_cuda_attributes(device)
+        self.registered_buffers += self.line.registered_buffers
+
+
+# noinspection PyAbstractClass
+class PhasePortrait(RenderedCudaObjectNode):
+
+    def __init__(self, plot_length):
+
+        self.plot_data = PlotData(1, plot_length)
+
+        self.line: CudaLine = CudaLine(pos=self.plot_data.pos,
+                                       color=self.plot_data.color,
+                                       antialias=False, width=1, parent=None)
+        self._v_null_cline_data = PlotData(1, plot_length)
+        self._v_null_cline: CudaLine = CudaLine(pos=self._v_null_cline_data.pos,
+                                                color=self._v_null_cline_data.color,
+                                                connect='segments',
+                                                antialias=False, width=1, parent=None)
+
+        self._u_null_cline_data = PlotData(1, plot_length)
+        self._u_null_cline: CudaLine = CudaLine(pos=self._u_null_cline_data.pos,
+                                                color=self._u_null_cline_data.color,
+                                                connect='segments',
+                                                antialias=False, width=1, parent=None)
+
+        RenderedCudaObjectNode.__init__(self, [self.line, self._v_null_cline, self._u_null_cline])
+

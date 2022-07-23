@@ -1,3 +1,3 @@
 from .neuron import IzhikevichNeuronsInterface, NeuronInterface
-from .signaling import SignalModel
+from .signaling import SignalModel, SignalVariable
 

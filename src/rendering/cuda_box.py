@@ -1,6 +1,6 @@
 from typing import Optional, Union
 
-from geometry import initial_normal_vertices
+# from geometry import initial_normal_vertices
 from .cuda_box_arrows import InteractiveBoxNormals
 from .rendered_cuda_object import CudaObject
 from .box import Box
